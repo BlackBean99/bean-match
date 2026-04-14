@@ -11,6 +11,7 @@ const NOTION_TOKEN = requiredEnv("NOTION_TOKEN");
 const MAIN_DATA_SOURCE_ID =
   process.env.NOTION_MAIN_DATA_SOURCE_ID || process.env.NOTION_USERS_DATABASE_ID;
 const INVITOR_DATA_SOURCE_ID = process.env.NOTION_INVITOR_DATA_SOURCE_ID;
+const MATCHING_HISTORY_DATA_SOURCE_ID = process.env.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID;
 const write = process.argv.includes("--write");
 const notionSources = [
   MAIN_DATA_SOURCE_ID
@@ -18,6 +19,9 @@ const notionSources = [
     : null,
   INVITOR_DATA_SOURCE_ID
     ? { id: INVITOR_DATA_SOURCE_ID, name: "소개모집인", sourceType: "invitor", defaultRoles: ["INVITOR"] }
+    : null,
+  MATCHING_HISTORY_DATA_SOURCE_ID
+    ? { id: MATCHING_HISTORY_DATA_SOURCE_ID, name: "Matching History", sourceType: "matching_history" }
     : null,
 ].filter(Boolean);
 
@@ -75,6 +79,50 @@ const userStatusMap = new Map([
   ["운영 제한", "BLOCKED"],
 ]);
 
+const introStatusValues = new Set([
+  "OFFERED",
+  "A_INTERESTED",
+  "B_OFFERED",
+  "WAITING_RESPONSE",
+  "MATCHED",
+  "CONNECTED",
+  "MEETING_DONE",
+  "RESULT_PENDING",
+  "SUCCESS",
+  "FAILED",
+  "DECLINED",
+  "EXPIRED",
+  "CANCELLED",
+]);
+
+const introStatusMap = new Map([
+  ["제안 전달", "OFFERED"],
+  ["제안", "OFFERED"],
+  ["A 관심", "A_INTERESTED"],
+  ["B 제안", "B_OFFERED"],
+  ["응답 대기", "WAITING_RESPONSE"],
+  ["양측 수락", "MATCHED"],
+  ["연락 연결", "CONNECTED"],
+  ["만남 완료", "MEETING_DONE"],
+  ["결과 확인 대기", "RESULT_PENDING"],
+  ["성사", "SUCCESS"],
+  ["불발", "FAILED"],
+  ["거절", "DECLINED"],
+  ["만료", "EXPIRED"],
+  ["취소", "CANCELLED"],
+]);
+
+const activeIntroStatusSet = new Set([
+  "OFFERED",
+  "A_INTERESTED",
+  "B_OFFERED",
+  "WAITING_RESPONSE",
+  "MATCHED",
+  "CONNECTED",
+  "MEETING_DONE",
+  "RESULT_PENDING",
+]);
+
 class NotionApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -95,7 +143,10 @@ try {
     for (const page of users) {
       let input;
       try {
-        input = mapUserPage(page, source.defaultRoles);
+        input =
+          source.sourceType === "matching_history"
+            ? await mapMatchingHistoryPage(page)
+            : mapUserPage(page, source.defaultRoles);
       } catch (error) {
         results.push({
           pageId: page.id,
@@ -119,21 +170,25 @@ try {
           pageId: page.id,
           source: source.name,
           action: existingSync ? "would_update" : "would_create",
-          name: input.user.name,
-          status: input.user.status,
-          roles: input.roles,
+          ...(source.sourceType === "matching_history"
+            ? { introStatus: input.status, participants: input.participants.map((p) => p.name).join(" / ") }
+            : { name: input.user.name, status: input.user.status, roles: input.roles }),
         });
         continue;
       }
 
-      const result = await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
+      const result =
+        source.sourceType === "matching_history"
+          ? await writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source)
+          : await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
 
       results.push({
         pageId: page.id,
         source: source.name,
         action: existingSync ? "updated" : "created",
-        userId: result.id.toString(),
-        name: result.name,
+        ...(source.sourceType === "matching_history"
+          ? { introCaseId: result.id.toString(), participants: result.participants }
+          : { userId: result.id.toString(), name: result.name }),
       });
     }
   }
@@ -161,6 +216,62 @@ async function findSyncRecord(notionPageId) {
         notionPageId: record.notion_page_id,
       }
     : null;
+}
+
+async function resolveUserIdForNotionPageId(notionPageId) {
+  if (!notionPageId) return null;
+
+  if (prisma) {
+    const record = await prisma.notionSyncRecord.findUnique({ where: { notionPageId } });
+    if (!record) return null;
+    if (record.entityType !== "User") return null;
+    return record.entityId;
+  }
+
+  const rows = await supabaseRest(
+    `/notion_sync_records?notion_page_id=eq.${encodeURIComponent(notionPageId)}&select=entity_type,entity_id&limit=1`,
+  );
+  const record = rows?.[0];
+  if (!record || record.entity_type !== "User") return null;
+  return BigInt(record.entity_id);
+}
+
+async function resolveUserIdForName(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return null;
+
+  if (prisma) {
+    const user = await prisma.user.findFirst({ where: { name: trimmed }, select: { id: true } });
+    return user?.id ?? null;
+  }
+
+  const rows = await supabaseRest(`/users?select=id&name=eq.${encodeURIComponent(trimmed)}&limit=1`);
+  return rows?.[0]?.id ? BigInt(rows[0].id) : null;
+}
+
+async function resolveUserNameForUserId(userId) {
+  if (!userId) return null;
+
+  if (prisma) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    return user?.name ?? null;
+  }
+
+  const rows = await supabaseRest(`/users?id=eq.${encodeURIComponent(userId.toString())}&select=name&limit=1`);
+  const name = rows?.[0]?.name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+function safeNumberFromBigInt(value, label) {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) throw new Error(`${label} must be a safe integer.`);
+    return value;
+  }
+  if (typeof value !== "bigint") throw new Error(`${label} must be a bigint.`);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+    throw new Error(`${label} is too large to safely send to Supabase REST as a number.`);
+  }
+  return Number(value);
 }
 
 async function writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source) {
@@ -270,6 +381,168 @@ async function writeUserFromNotion(existingSync, input, page, checksum, rawCheck
   };
 }
 
+async function writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source) {
+  const participantIds = input.participants.map((p) => p.userId).filter(Boolean);
+  if (participantIds.length !== 2) {
+    throw new Error(`Matching History page ${page.id} must resolve exactly 2 participant user IDs`);
+  }
+  const [personAId, personBId] = participantIds;
+  if (personAId === personBId) throw new Error("Intro case requires two different participants.");
+
+  if (prisma) {
+    return prisma.$transaction(async (tx) => {
+      await upsertRawNotionRecordWithPrisma(tx, page, rawChecksum, source);
+
+      if (!existingSync) {
+        const blocked = await hasActiveIntroConflictWithPrisma(tx, [personAId, personBId]);
+        if (blocked) {
+          throw new Error("Active intro already exists for one of the participants; cannot create a new active intro.");
+        }
+      }
+
+      const introCase = existingSync
+        ? await tx.introCase.update({
+            where: { id: existingSync.entityId },
+            data: {
+              status: input.status,
+              memo: input.memo ?? null,
+              invitorUserId: input.invitorUserId,
+            },
+          })
+        : await tx.introCase.create({
+            data: {
+              status: input.status,
+              memo: input.memo ?? null,
+              invitorUserId: input.invitorUserId,
+              participants: {
+                create: [
+                  { userId: personAId, participantRole: "PERSON_A", responseStatus: "PENDING" },
+                  { userId: personBId, participantRole: "PERSON_B", responseStatus: "PENDING" },
+                ],
+              },
+            },
+          });
+
+      if (existingSync) {
+        await tx.introCaseParticipant.deleteMany({ where: { introCaseId: introCase.id } });
+        await tx.introCaseParticipant.createMany({
+          data: [
+            { introCaseId: introCase.id, userId: personAId, participantRole: "PERSON_A", responseStatus: "PENDING" },
+            { introCaseId: introCase.id, userId: personBId, participantRole: "PERSON_B", responseStatus: "PENDING" },
+          ],
+        });
+      }
+
+      await tx.notionSyncRecord.upsert({
+        where: { notionPageId: page.id },
+        create: {
+          entityType: "IntroCase",
+          entityId: introCase.id,
+          notionPageId: page.id,
+          checksum,
+          notionEditedAt: page.last_edited_time ? new Date(page.last_edited_time) : null,
+        },
+        update: {
+          entityType: "IntroCase",
+          entityId: introCase.id,
+          checksum,
+          lastSyncedAt: new Date(),
+          notionEditedAt: page.last_edited_time ? new Date(page.last_edited_time) : null,
+        },
+      });
+
+      await syncUserStatusesForIntroWithPrisma(tx, [personAId, personBId]);
+
+      return {
+        id: introCase.id,
+        participants: input.participants.map((p) => p.name),
+      };
+    });
+  }
+
+  await upsertRawNotionRecordWithSupabase(page, rawChecksum, source);
+
+  if (!existingSync) {
+    const blocked = await hasActiveIntroConflictWithSupabase([
+      safeNumberFromBigInt(personAId, "personAId"),
+      safeNumberFromBigInt(personBId, "personBId"),
+    ]);
+    if (blocked) {
+      throw new Error("Active intro already exists for one of the participants; cannot create a new active intro.");
+    }
+  }
+
+  const introRows = existingSync
+    ? await supabaseRest(`/intro_cases?id=eq.${existingSync.entityId.toString()}&select=*`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          status: input.status,
+          memo: input.memo ?? null,
+          invitor_user_id: input.invitorUserId ? safeNumberFromBigInt(input.invitorUserId, "invitorUserId") : null,
+        }),
+      })
+    : await supabaseRest("/intro_cases?select=*", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          status: input.status,
+          memo: input.memo ?? null,
+          invitor_user_id: input.invitorUserId ? safeNumberFromBigInt(input.invitorUserId, "invitorUserId") : null,
+        }),
+      });
+  const introCase = introRows[0];
+
+  await supabaseRest(`/intro_case_participants?intro_case_id=eq.${introCase.id}`, { method: "DELETE" });
+  await supabaseRest("/intro_case_participants", {
+    method: "POST",
+    body: JSON.stringify([
+      {
+        intro_case_id: introCase.id,
+        user_id: safeNumberFromBigInt(personAId, "personAId"),
+        participant_role: "PERSON_A",
+        response_status: "PENDING",
+      },
+      {
+        intro_case_id: introCase.id,
+        user_id: safeNumberFromBigInt(personBId, "personBId"),
+        participant_role: "PERSON_B",
+        response_status: "PENDING",
+      },
+    ]),
+  });
+
+  const syncPayload = {
+    entity_type: "IntroCase",
+    entity_id: introCase.id,
+    notion_page_id: page.id,
+    checksum,
+    last_synced_at: new Date().toISOString(),
+    notion_edited_at: page.last_edited_time || null,
+  };
+  if (existingSync) {
+    await supabaseRest(`/notion_sync_records?notion_page_id=eq.${encodeURIComponent(page.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(syncPayload),
+    });
+  } else {
+    await supabaseRest("/notion_sync_records", {
+      method: "POST",
+      body: JSON.stringify(syncPayload),
+    });
+  }
+
+  await syncUserStatusesForIntroWithSupabase([
+    safeNumberFromBigInt(personAId, "personAId"),
+    safeNumberFromBigInt(personBId, "personBId"),
+  ]);
+
+  return {
+    id: BigInt(introCase.id),
+    participants: input.participants.map((p) => p.name),
+  };
+}
+
 function upsertRawNotionRecordWithPrisma(tx, page, checksum, source) {
   return tx.notionRawRecord.upsert({
     where: { notionPageId: page.id },
@@ -365,6 +638,74 @@ function mapUserPage(page, defaultRoles) {
   };
 }
 
+async function mapMatchingHistoryPage(page) {
+  const props = page.properties || {};
+
+  const status = enumValue(
+    selectProp(findProperty(props, ["Status", "status", "상태"])),
+    introStatusValues,
+    "OFFERED",
+    introStatusMap,
+  );
+
+  const memo =
+    textProp(findProperty(props, ["Memo", "memo", "메모", "Notes", "notes"])) ||
+    textProp(findProperty(props, ["Summary", "summary", "요약"])) ||
+    null;
+
+  const invitorUserId = await resolveUserIdFromProperty(
+    findProperty(props, ["Invitor", "invitor", "주선자", "Operator", "operator"]),
+  );
+
+  const personA = await resolveParticipantFromProperty(
+    findProperty(props, ["Person A", "A", "참여자 A", "참여자1", "남자", "user_a", "User A", "participant_a"]),
+  );
+  const personB = await resolveParticipantFromProperty(
+    findProperty(props, ["Person B", "B", "참여자 B", "참여자2", "여자", "user_b", "User B", "participant_b"]),
+  );
+
+  if (!personA?.userId || !personB?.userId) {
+    throw new Error(`Matching History page ${page.id} must reference two users (A/B)`);
+  }
+
+  return {
+    status,
+    memo,
+    invitorUserId,
+    participants: [personA, personB],
+  };
+}
+
+async function resolveUserIdFromProperty(prop) {
+  if (!prop) return null;
+  if (prop.type === "relation") {
+    const ids = (prop.relation || []).map((r) => r.id).filter(Boolean);
+    if (ids.length === 0) return null;
+    // Only first relation is used as invitor.
+    return resolveUserIdForNotionPageId(ids[0]);
+  }
+  const name = textProp(prop);
+  if (name) return resolveUserIdForName(name);
+  if (prop.type === "number" && typeof prop.number === "number") return BigInt(prop.number);
+  return null;
+}
+
+async function resolveParticipantFromProperty(prop) {
+  if (!prop) return null;
+  if (prop.type === "relation") {
+    const ids = (prop.relation || []).map((r) => r.id).filter(Boolean);
+    if (ids.length === 0) return null;
+    const notionPageId = ids[0];
+    const userId = await resolveUserIdForNotionPageId(notionPageId);
+    const resolvedName = userId ? await resolveUserNameForUserId(userId) : null;
+    return { userId, name: resolvedName ?? notionPageId };
+  }
+  const name = textProp(prop);
+  if (!name) return null;
+  const userId = await resolveUserIdForName(name);
+  return { userId, name };
+}
+
 async function collectNotionPages(dataSourceId) {
   const pages = [];
   let startCursor;
@@ -377,6 +718,67 @@ async function collectNotionPages(dataSourceId) {
   } while (startCursor);
 
   return pages;
+}
+
+async function hasActiveIntroConflictWithPrisma(tx, participantIds) {
+  const active = Array.from(activeIntroStatusSet);
+  for (const userId of participantIds) {
+    const activeCount = await tx.introCaseParticipant.count({
+      where: { userId, introCase: { status: { in: active } } },
+    });
+    if (activeCount > 0) return true;
+  }
+  return false;
+}
+
+async function hasActiveIntroConflictWithSupabase(participantIds) {
+  for (const userId of participantIds) {
+    const parts = await supabaseRest(
+      `/intro_case_participants?select=intro_case_id&user_id=eq.${userId}&limit=200`,
+    );
+    const ids = (parts || []).map((p) => p.intro_case_id).filter(Boolean);
+    if (ids.length === 0) continue;
+    const active = Array.from(activeIntroStatusSet).join(",");
+    const cases = await supabaseRest(`/intro_cases?select=id&id=in.(${ids.join(",")})&status=in.(${active})&limit=1`);
+    if (Array.isArray(cases) && cases.length > 0) return true;
+  }
+  return false;
+}
+
+async function syncUserStatusesForIntroWithPrisma(tx, participantIds) {
+  const active = Array.from(activeIntroStatusSet);
+  for (const userId of new Set(participantIds)) {
+    const activeCount = await tx.introCaseParticipant.count({
+      where: { userId, introCase: { status: { in: active } } },
+    });
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true } });
+    if (!user) continue;
+    const nextStatus = activeCount > 0 ? "PROGRESSING" : user.status === "PROGRESSING" ? "READY" : user.status;
+    if (nextStatus !== user.status) {
+      await tx.user.update({ where: { id: userId }, data: { status: nextStatus } });
+    }
+  }
+}
+
+async function syncUserStatusesForIntroWithSupabase(participantIds) {
+  const active = Array.from(activeIntroStatusSet).join(",");
+  for (const userId of new Set(participantIds)) {
+    const parts = await supabaseRest(
+      `/intro_case_participants?select=intro_case_id&user_id=eq.${userId}&limit=200`,
+    );
+    const ids = (parts || []).map((p) => p.intro_case_id).filter(Boolean);
+    const activeCases =
+      ids.length > 0
+        ? await supabaseRest(`/intro_cases?select=id,status&id=in.(${ids.join(",")})&status=in.(${active})&limit=200`)
+        : [];
+    const userRows = await supabaseRest(`/users?id=eq.${userId}&select=status&limit=1`);
+    const user = userRows?.[0];
+    if (!user) continue;
+    const nextStatus = activeCases.length > 0 ? "PROGRESSING" : user.status === "PROGRESSING" ? "READY" : user.status;
+    if (nextStatus !== user.status) {
+      await supabaseRest(`/users?id=eq.${userId}`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) });
+    }
+  }
 }
 
 async function notionFetchWithDatabaseFallback(dataSourceId, body) {

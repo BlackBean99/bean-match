@@ -7,6 +7,7 @@ The sync is one-way:
 
 1. Notion users database
 2. Supabase `users`, `user_roles`, `user_photos`, `notion_raw_records`, and `notion_sync_records`
+3. (Optional) Notion Matching History database -> Supabase `intro_cases` and `intro_case_participants`
 
 This avoids writing contact or profile data back to Notion by default.
 
@@ -39,6 +40,7 @@ Required environment variables:
 NOTION_TOKEN="secret_..."
 NOTION_MAIN_DATA_SOURCE_ID="..."
 NOTION_INVITOR_DATA_SOURCE_ID="..."
+NOTION_MATCHING_HISTORY_DATA_SOURCE_ID="..."
 NOTION_API_VERSION="2025-09-03"
 ```
 
@@ -63,6 +65,31 @@ Expected Notion user properties:
 
 Supported status values are the enum codes from the PRD, such as `READY`, and the Korean labels from the operating docs, such as `소개 가능`.
 
+## Matching History sync (optional)
+If `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` is set, `scripts/sync-notion-to-supabase.mjs` also treats that Notion data source as the source of truth for intro case history.
+
+It will create or update:
+
+- `intro_cases.status`
+- `intro_cases.memo`
+- `intro_cases.invitor_user_id` (when resolvable)
+- `intro_case_participants` (two participants, A/B)
+
+Expected Notion Matching History properties:
+
+| Property | Type | Required |
+|---|---|---|
+| `Status` / `상태` | Select or status | No (defaults to `OFFERED`) |
+| `Person A` / `참여자 A` | Relation or text | Yes |
+| `Person B` / `참여자 B` | Relation or text | Yes |
+| `Invitor` / `주선자` | Relation or text | No |
+| `Memo` / `메모` / `Notes` | Rich text | No |
+
+Notes:
+
+- If `Person A/B` are relations to the users data source, the sync resolves the user id using `notion_sync_records`.
+- If `Person A/B` are plain text, the sync resolves the user id by exact `users.name` match.
+
 ## Running sync
 Dry-run first:
 
@@ -84,5 +111,5 @@ Manual profile photo uploads in the user detail screen use Supabase Storage buck
 
 ## Privacy and safety notes
 - Contact fields stay in Supabase only after import and are not exposed by this script.
-- The sync does not create intro cases. This preserves the rule that users in `PROGRESSING` must not receive new active intros.
+- When `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` is enabled, the sync can create intro cases. It rejects creation if either participant already has an active intro (domain statuses like `OFFERED`, `MATCHED`, `CONNECTED`, etc.) so the rule "never create a new intro for a user in `PROGRESSING`" is still enforced.
 - Uploaded files are still expected to use external object storage in production, not ephemeral local disk.
