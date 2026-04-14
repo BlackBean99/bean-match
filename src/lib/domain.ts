@@ -143,6 +143,7 @@ export type ParticipantRoundData = {
   candidates: ParticipantRoundCandidate[];
   selectedCount: number;
   selectionLimit: number;
+  isTestMode: boolean;
   databaseConnected: boolean;
   loadError: string | null;
 };

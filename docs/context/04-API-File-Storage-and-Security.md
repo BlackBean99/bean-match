@@ -41,8 +41,9 @@
 ### 2.6 Round / Selection
 - `GET /rounds/{roundId}/participants/{userId}` : 참가자가 라운드 후보를 보고 최대 2명을 선택하는 공유 URL
 - `POST /rounds/{roundId}/participants/{userId}` : 라운드 선택 저장. 실제 구현은 Server Action을 사용한다.
-- `GET /invite/{invitorId}` : 모집인 초대 링크. 온보딩 폼에 `invitorId`를 전달한다.
-- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 온보딩 URL
+- `GET /invite/{invitorId}` : 모집인 초대 링크. 라운드 참여 진입 폼에 `invitorId`를 전달한다.
+- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 라운드 참여 진입 URL
+- `GET /rounds/{roundId}/test` : 관리자 테스트 참여 URL. 실제 선택 데이터는 저장하지 않는다.
 - `GET /rounds` : 관리자 라운드 운영 화면
 - `GET /users` : 관리자 사용자 풀 화면
 - `GET /matches` : 관리자 매칭 조율 화면
@@ -163,6 +164,15 @@
 4. 자기 자신 선택 금지
 5. 사용자당 라운드 선택 수가 2명을 넘지 않는지 검증
 6. 선택 기록은 직접 수정하지 않고 운영자 판단 대상으로 남김
+
+### 라운드 참여 진입
+1. 사용자가 기존 데이터 ID와 이름을 입력
+2. 서버가 ID와 이름이 같은 사용자 데이터를 조회
+3. `PROGRESSING`, `STOP_REQUESTED`, `ARCHIVED`, `BLOCKED` 상태면 거절
+4. 현재 `OPEN` 라운드가 없으면 거절
+5. 사용자를 `READY` + `FULL_OPEN` 으로 갱신
+6. `entry_queue` 의 `READY` row를 생성하거나 기존 row를 갱신
+7. `/rounds/{roundId}/participants/{userId}` 로 이동
 
 ---
 

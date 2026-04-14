@@ -1,8 +1,5 @@
 import type { ReactNode } from "react";
-import { createOnboardingUserAction } from "@/app/round-actions";
-import { openLevelLabels, type OpenLevel } from "@/lib/domain";
-
-const openLevels: OpenLevel[] = ["PRIVATE", "SEMI_OPEN", "FULL_OPEN"];
+import { joinCurrentRoundAction } from "@/app/round-actions";
 
 type OnboardingFormProps = {
   invitorId?: string;
@@ -14,54 +11,33 @@ export function OnboardingForm({ invitorId }: OnboardingFormProps) {
       <p className="text-sm font-bold text-[#E00E0E]">Blackbean Match</p>
       <h1 className="mt-2 text-3xl font-bold text-zinc-950">라운드 참여 정보 입력</h1>
       <p className="mt-2 text-sm leading-6 text-zinc-600">
-        정보 입력 후 오픈 레벨을 선택하면 운영자가 다음 라운드 또는 큐레이션 매칭으로 배치합니다.
+        모집인이 먼저 만든 사용자 데이터의 ID와 본인 이름을 입력하면 기존 정보를 바탕으로 현재 라운드 참여 상태를
+        갱신합니다.
       </p>
       {invitorId ? (
         <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-[#E00E0E]">
           모집인 초대 링크로 들어왔습니다. 가입 출처는 운영자에게만 기록됩니다.
         </p>
       ) : null}
-      <form action={createOnboardingUserAction} className="mt-6 grid gap-4">
+      <form action={joinCurrentRoundAction} className="mt-6 grid gap-4">
         {invitorId ? <input type="hidden" name="invitorUserId" value={invitorId} /> : null}
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="데이터 ID">
+            <input name="userId" inputMode="numeric" className={inputClassName} placeholder="예: 123" required />
+          </Field>
           <Field label="이름">
             <input name="name" className={inputClassName} required />
           </Field>
-          <Field label="성별">
-            <select name="gender" defaultValue="UNDISCLOSED" className={inputClassName}>
-              <option value="FEMALE">여성</option>
-              <option value="MALE">남성</option>
-              <option value="OTHER">기타</option>
-              <option value="UNDISCLOSED">비공개</option>
-            </select>
-          </Field>
-          <Field label="나이">
-            <input name="ageText" className={inputClassName} placeholder="예: 32, 1994년생" />
-          </Field>
-          <Field label="키">
-            <input name="heightCm" type="number" className={inputClassName} placeholder="cm" />
-          </Field>
-          <Field label="직업">
-            <input name="jobTitle" className={inputClassName} />
-          </Field>
-          <Field label="오픈 레벨">
-            <select name="openLevel" defaultValue="PRIVATE" className={inputClassName}>
-              {openLevels.map((level) => (
-                <option key={level} value={level}>
-                  {openLevelLabels[level]}
-                </option>
-              ))}
-            </select>
-          </Field>
         </div>
-        <Field label="자기소개">
-          <textarea name="selfIntro" rows={4} className={inputClassName} />
-        </Field>
-        <Field label="이상형">
-          <textarea name="idealTypeDescription" rows={4} className={inputClassName} />
-        </Field>
+        <label className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-zinc-700">
+          <input name="fullOpenConsent" type="checkbox" className="mt-1 h-4 w-4 accent-[#FF3131]" required />
+          <span>
+            현재 라운드 참여를 위해 전체 노출(FULL_OPEN)에 동의합니다. 제한 노출 또는 운영자 큐레이션 상태에서는
+            라운드 선택에 참여할 수 없습니다.
+          </span>
+        </label>
         <button className="rounded-lg bg-[#FF3131] px-4 py-3 text-sm font-bold text-white hover:bg-[#E00E0E]">
-          참여 신청
+          현재 라운드 참여하기
         </button>
       </form>
     </section>

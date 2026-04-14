@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   createRoundAction,
@@ -60,7 +61,7 @@ export function RoundDashboard({
 
       <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <CreateRoundPanel disabled={!databaseConnected} />
-        <RoundList rounds={rounds} />
+        <RoundList rounds={rounds} candidates={candidates} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -109,7 +110,7 @@ function CreateRoundPanel({ disabled }: { disabled: boolean }) {
   );
 }
 
-function RoundList({ rounds }: { rounds: DashboardRound[] }) {
+function RoundList({ rounds, candidates }: { rounds: DashboardRound[]; candidates: DashboardUser[] }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-zinc-950">라운드 운영</h2>
@@ -134,6 +135,17 @@ function RoundList({ rounds }: { rounds: DashboardRound[] }) {
                 <p>후보 {round.participantCount}명</p>
                 <p>선택 {round.selectionCount}건</p>
                 <p>상호 선택 {round.mutualCount}쌍</p>
+              </div>
+              <div className="mt-3 grid gap-2 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
+                <Link className="font-bold text-[#E00E0E]" href={`/rounds/${round.id}/test`}>
+                  관리자 테스트 참여 URL
+                </Link>
+                <p>참가자 URL 형식: /rounds/{round.id}/participants/{"{userId}"}</p>
+                {round.status === "OPEN" && candidates.length > 0 ? (
+                  <Link className="font-bold text-zinc-800" href={`/rounds/${round.id}/participants/${candidates[0].id}`}>
+                    샘플 참가자 URL: {candidates[0].name}
+                  </Link>
+                ) : null}
               </div>
               <form action={updateRoundStatusAction} className="mt-3 flex flex-wrap gap-2">
                 <input type="hidden" name="roundId" value={round.id} />

@@ -79,10 +79,14 @@
 - 추후 썸네일 확장 가능 구조를 유지한다.
 
 ### 3.5 URL 공유 방식
-- 사용자 온보딩: `/onboarding` 또는 모집인 초대 링크 `/invite/{invitorId}`
+- 사용자 라운드 참여 진입: `/onboarding` 또는 모집인 초대 링크 `/invite/{invitorId}`
+  - 사용자는 모집인이 먼저 생성한 데이터의 ID와 본인 이름을 입력한다.
+  - 현재 라운드 참여를 위해 `FULL_OPEN` 전체 노출에 동의해야 한다.
+  - 재진입 시 새 사용자를 만들지 않고 기존 사용자 상태와 엔트리 큐를 갱신한다.
 - 사용자 라운드 선택: `/rounds/{roundId}/participants/{userId}`
 - 모집인 초대: `/invite/{invitorId}` 만 공유하며, 모집인은 매칭 관리 URL을 공유받지 않는다.
 - 관리자 운영: `/users`, `/rounds`, `/matches`, `/users/{userId}` 를 내부 운영 URL로 사용한다.
+- 관리자 테스트 참여: `/rounds/{roundId}/test` 를 사용하며 실제 선택 데이터에는 반영하지 않는다.
 - 연락처는 어떤 공유 URL에서도 `CONNECTED` 전까지 노출하지 않는다.
 
 ---
