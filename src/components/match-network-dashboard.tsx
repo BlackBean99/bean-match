@@ -40,6 +40,8 @@ type GraphNode = SimulationNodeDatum & {
   openLevel: DashboardUser["openLevel"];
   status: DashboardUser["status"];
   degree: number;
+  z: number;
+  variant: 0 | 1 | 2;
 };
 
 type GraphEdge = SimulationLinkDatum<GraphNode> & {
@@ -85,6 +87,9 @@ function parseIsoOrNull(value: string | undefined) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
+const NODE_BASE_WIDTH = 94;
+const NODE_BASE_HEIGHT = 30;
+
 export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboardProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
@@ -101,14 +106,24 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
   const { nodes, edges, edgesByNodeId, nodesById, buckets } = useMemo(() => {
     const nodesById = new Map<number, GraphNode>();
     for (const user of users) {
+      const seed = hash(`node:${user.id}:${user.name}`);
+      const z = ((seed % 100) / 100) * 0.9 + 0.1;
+      const variant = (seed % 3) as 0 | 1 | 2;
+      const angle = ((seed % 360) / 360) * Math.PI * 2;
+      const ring = 160 + (((seed >>> 9) % 100) / 100) * 240;
+      const jitterX = ((seed >>> 3) % 21) - 10;
+      const jitterY = ((seed >>> 5) % 21) - 10;
       nodesById.set(user.id, {
         id: user.id,
         name: user.name,
         openLevel: user.openLevel,
         status: user.status,
         degree: 0,
-        x: Math.random() * 600 + 100,
-        y: Math.random() * 420 + 70,
+        z,
+        variant,
+        // Deterministic initial placement reduces “stacked nodes” at time 0.
+        x: 420 + Math.cos(angle) * ring + jitterX,
+        y: 300 + Math.sin(angle) * ring * 0.72 + jitterY,
       });
     }
 
@@ -208,8 +223,8 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
       .force(
         "collide",
         forceCollide<GraphNode>()
-          .radius((d: GraphNode) => 22 + Math.min(d.degree * 2, 12))
-          .iterations(3),
+          .radius((d: GraphNode) => nodeCollisionRadius(d) + Math.min(d.degree * 2.5, 14))
+          .iterations(4),
       )
       .force("center", forceCenter(surfaceSize.width / 2, surfaceSize.height / 2))
       .force("x", forceX(surfaceSize.width / 2).strength(0.012))
@@ -228,6 +243,8 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
 
       const cx = surfaceSize.width / 2;
       const cy = surfaceSize.height / 2;
+      // Boundaries must account for the visual node size (cards, not points).
+      const margin = 12 + nodeMaxHalfDiagonal();
       for (const node of nodes) {
         if (node.fx !== null && node.fx !== undefined) continue;
         if (node.fy !== null && node.fy !== undefined) continue;
@@ -237,6 +254,24 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
         const spin = 0.00095;
         node.vx = (node.vx ?? 0) + (-dy / dist) * spin;
         node.vy = (node.vy ?? 0) + (dx / dist) * spin;
+
+        // Keep nodes inside bounds without hard render-time clamping (which causes visual overlap).
+        const x = node.x ?? cx;
+        const y = node.y ?? cy;
+        if (x < margin) {
+          node.x = margin;
+          node.vx = Math.abs(node.vx ?? 0) * 0.6;
+        } else if (x > surfaceSize.width - margin) {
+          node.x = surfaceSize.width - margin;
+          node.vx = -Math.abs(node.vx ?? 0) * 0.6;
+        }
+        if (y < margin) {
+          node.y = margin;
+          node.vy = Math.abs(node.vy ?? 0) * 0.6;
+        } else if (y > surfaceSize.height - margin) {
+          node.y = surfaceSize.height - margin;
+          node.vy = -Math.abs(node.vy ?? 0) * 0.6;
+        }
       }
 
       rafId = requestAnimationFrame(tick);
@@ -324,10 +359,11 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
               {edges.map((edge) => {
                 const source = edge.source as GraphNode;
                 const target = edge.target as GraphNode;
-                const x1 = clamp(source.x ?? surfaceSize.width / 2, 22, surfaceSize.width - 22);
-                const y1 = clamp(source.y ?? surfaceSize.height / 2, 22, surfaceSize.height - 22);
-                const x2 = clamp(target.x ?? surfaceSize.width / 2, 22, surfaceSize.width - 22);
-                const y2 = clamp(target.y ?? surfaceSize.height / 2, 22, surfaceSize.height - 22);
+                const edgeMargin = 8 + nodeMaxHalfDiagonal();
+                const x1 = clamp(source.x ?? surfaceSize.width / 2, edgeMargin, surfaceSize.width - edgeMargin);
+                const y1 = clamp(source.y ?? surfaceSize.height / 2, edgeMargin, surfaceSize.height - edgeMargin);
+                const x2 = clamp(target.x ?? surfaceSize.width / 2, edgeMargin, surfaceSize.width - edgeMargin);
+                const y2 = clamp(target.y ?? surfaceSize.height / 2, edgeMargin, surfaceSize.height - edgeMargin);
 
                 const dimmed = highlighted ? !highlighted.connectedEdges.has(edge.id) : false;
                 const isSelected = selectedEdgeId === edge.id;
@@ -389,15 +425,17 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
               })}
             </svg>
 
-            {nodes.map((node) => {
-              const x = clamp(node.x ?? surfaceSize.width / 2, 16, surfaceSize.width - 16);
-              const y = clamp(node.y ?? surfaceSize.height / 2, 16, surfaceSize.height - 16);
-              const dimmed = highlighted ? !highlighted.connectedNodes.has(node.id) : false;
-              const isSelected = selectedNodeId === node.id;
-              const starSize = isSelected ? 18 : 14;
+	            {nodes.map((node) => {
+	              const x = node.x ?? surfaceSize.width / 2;
+	              const y = node.y ?? surfaceSize.height / 2;
+	              const dimmed = highlighted ? !highlighted.connectedNodes.has(node.id) : false;
+	              const isSelected = selectedNodeId === node.id;
+	              const { width: nodeWidth, height: nodeHeight, scale } = nodeDims(node);
+	              const iconSize = Math.round(10 + node.z * 6) + (isSelected ? 2 : 0);
+	              const shortName = compactName(node.name);
 
-              return (
-                <motion.button
+	              return (
+	                <motion.button
                   key={node.id}
                   type="button"
                   onPointerEnter={() => {
@@ -425,8 +463,9 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                     if (!dragging || dragging.nodeId !== node.id || dragging.pointerId !== event.pointerId) return;
                     const rect = surfaceRef.current?.getBoundingClientRect();
                     if (!rect) return;
-                    const nx = clamp(event.clientX - rect.left, 16, surfaceSize.width - 16);
-                    const ny = clamp(event.clientY - rect.top, 16, surfaceSize.height - 16);
+                    const margin = 10 + nodeMaxHalfDiagonal();
+                    const nx = clamp(event.clientX - rect.left, margin, surfaceSize.width - margin);
+                    const ny = clamp(event.clientY - rect.top, margin, surfaceSize.height - margin);
                     node.fx = nx;
                     node.fy = ny;
                     dragging.moved = true;
@@ -447,31 +486,60 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                     setSelectedNodeId(node.id);
                     setSelectedEdgeId(null);
                   }}
-                  className="absolute grid place-items-center rounded-full"
-                  style={{
-                    left: x - starSize / 2,
-                    top: y - starSize / 2,
-                    opacity: dimmed ? 0.28 : 1,
-                    transform: "translateZ(0)",
-                  }}
-                  initial={false}
-                  animate={{
-                    scale: dimmed ? 1 : [1, 1.05, 1],
-                    transition: {
-                      duration: 3.8,
-                      repeat: dimmed ? 0 : Infinity,
-                      ease: "easeInOut",
-                      delay: (node.id % 17) * 0.05,
-                    },
-                  }}
-                >
-                  <span
-                    className={`cosmic-star ${cosmicStarClass(node, hoveredNodeId === node.id, isSelected)}`}
-                    style={{ width: starSize, height: starSize }}
-                  />
-                </motion.button>
-              );
-            })}
+	                  className="absolute"
+	                  style={{
+	                    left: x - nodeWidth / 2,
+	                    top: y - nodeHeight / 2,
+	                    opacity: dimmed ? 0.28 : 1,
+	                    transform: "translateZ(0)",
+	                  }}
+	                  initial={false}
+	                  animate={{
+	                    scale: dimmed ? scale : [scale, scale + 0.04, scale],
+	                    transition: {
+	                      duration: 3.8,
+	                      repeat: dimmed ? 0 : Infinity,
+	                      ease: "easeInOut",
+	                      delay: (node.id % 17) * 0.05,
+	                    },
+	                  }}
+	                >
+	                  <span
+	                    className={
+	                      "pointer-events-none flex h-full w-full items-center gap-2 rounded-lg border px-2.5 " +
+	                      "backdrop-blur transition " +
+	                      (isSelected
+	                        ? "border-white/22 bg-black/55 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_0_40px_rgba(56,189,248,0.07)]"
+	                        : hoveredNodeId === node.id
+	                          ? "border-white/18 bg-black/50 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_0_32px_rgba(255,255,255,0.05)]"
+	                          : "border-white/12 bg-black/38 shadow-[0_0_0_1px_rgba(255,255,255,0.035)]")
+	                    }
+	                    style={{ width: nodeWidth, height: nodeHeight }}
+	                  >
+	                    <span className="relative grid place-items-center" style={{ width: iconSize, height: iconSize }}>
+	                      <span
+	                        className={`cosmic-star ${cosmicStarClass(node, hoveredNodeId === node.id, isSelected)}`}
+	                        style={{ width: iconSize, height: iconSize }}
+	                      />
+	                      <span
+	                        className={`absolute inset-0 rounded-full ${cosmicGlyphClass(node)}`}
+	                        style={{
+	                          transform: `rotate(${(hash(`glyph:${node.id}`) % 360).toString()}deg)`,
+	                        }}
+	                      />
+	                    </span>
+	                    <span className="min-w-0 flex-1">
+	                      <span className="block truncate text-[12px] font-bold text-white/90">{shortName}</span>
+	                    </span>
+	                    <span
+	                      aria-hidden
+	                      className={`h-2.5 w-2.5 rounded-full ${openPipClass(node.openLevel)}`}
+	                      title={openLevelLabels[node.openLevel]}
+	                    />
+	                  </span>
+	                </motion.button>
+	              );
+	            })}
 
             <AnimatePresence>
               {tooltip && tooltip.kind === "node" && hoveredNode ? (
@@ -720,6 +788,14 @@ function cosmicStarClass(node: GraphNode, isHovered: boolean, isSelected: boolea
   return `${base} cosmic-star--private`;
 }
 
+function cosmicGlyphClass(node: GraphNode) {
+  // Variant overlay ring: gives each node a distinct “instrument” feel without becoming noisy.
+  const common = "cosmic-glyph";
+  const variant = node.variant;
+  const level = node.openLevel === "FULL_OPEN" ? "cosmic-glyph--open" : node.openLevel === "SEMI_OPEN" ? "cosmic-glyph--semi" : "cosmic-glyph--private";
+  return `${common} ${level} cosmic-glyph--v${variant}`;
+}
+
 function latestEdgeLabel(edges: GraphEdge[]) {
   const newest = edges
     .slice()
@@ -752,3 +828,40 @@ function hash(value: string) {
   return h;
 }
 
+function nodeScale(node: GraphNode) {
+  return 0.88 + node.z * 0.22;
+}
+
+function nodeDims(node: GraphNode) {
+  const scale = nodeScale(node);
+  return {
+    width: Math.round(NODE_BASE_WIDTH * scale),
+    height: Math.round(NODE_BASE_HEIGHT * scale),
+    scale,
+  };
+}
+
+function nodeCollisionRadius(node: GraphNode) {
+  const { width, height } = nodeDims(node);
+  return Math.sqrt((width / 2) ** 2 + (height / 2) ** 2);
+}
+
+function nodeMaxHalfDiagonal() {
+  const scale = 0.88 + 1 * 0.22;
+  const width = NODE_BASE_WIDTH * scale;
+  const height = NODE_BASE_HEIGHT * scale;
+  return Math.sqrt((width / 2) ** 2 + (height / 2) ** 2);
+}
+
+function compactName(name: string) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "-";
+  // Keep it readable in a dense graph: show first 3 glyphs (Korean names typically fit).
+  return trimmed.length <= 3 ? trimmed : trimmed.slice(0, 3);
+}
+
+function openPipClass(openLevel: DashboardUser["openLevel"]) {
+  if (openLevel === "FULL_OPEN") return "bg-sky-300 shadow-[0_0_18px_rgba(56,189,248,0.25)]";
+  if (openLevel === "SEMI_OPEN") return "bg-amber-300 shadow-[0_0_18px_rgba(245,158,11,0.18)]";
+  return "bg-zinc-300/70 shadow-[0_0_16px_rgba(161,161,170,0.12)]";
+}
