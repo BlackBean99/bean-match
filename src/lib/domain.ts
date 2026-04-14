@@ -133,6 +133,20 @@ export type DashboardRoundSelection = {
   createdAt: string;
 };
 
+export type ParticipantRoundCandidate = DashboardUser & {
+  alreadySelected: boolean;
+};
+
+export type ParticipantRoundData = {
+  actor: DashboardUser | null;
+  round: DashboardRound | null;
+  candidates: ParticipantRoundCandidate[];
+  selectedCount: number;
+  selectionLimit: number;
+  databaseConnected: boolean;
+  loadError: string | null;
+};
+
 export type DashboardEntryQueueItem = {
   id: number;
   userId: number;

@@ -104,10 +104,13 @@ model User {
   archivedAt           DateTime?              @map("archived_at")
   blockedAt            DateTime?              @map("blocked_at")
   blockedReason        String?                @map("blocked_reason") @db.VarChar(255)
+  invitedByUserId      BigInt?                @map("invited_by_user_id")
   roles                UserRoleAssignment[]
   preference           UserPreference?
   photos               UserPhoto[]
   mainPhoto            UserPhoto?             @relation("UserMainPhoto", fields: [mainPhotoId], references: [id], onDelete: SetNull)
+  invitedBy            User?                  @relation("UserInvites", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  invitedUsers         User[]                 @relation("UserInvites")
   introParticipations  IntroCaseParticipant[]
   invitedIntroCases    IntroCase[]            @relation("InvitorIntroCases")
   introEvents          IntroCaseEvent[]       @relation("IntroCaseEventActor")

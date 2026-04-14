@@ -10,6 +10,7 @@
 - `context/05-Operations-Admin-Policy.md`: 운영 정책과 관리자 기능
 - `context/06-design-style-generic-guide.md`: 디자인 스타일 가이드
 - `context/07-Technical-Specification.md`: 기술 스택과 인프라 방향
+- `context/08-URL-Sharing-and-Access-Guide.md`: 사용자/모집인/관리자 URL 공유 방식
 - `context/SUPABASE_NOTION_SYNC.md`: Supabase/Notion 동기화 운영 문서
 
 ## Operations

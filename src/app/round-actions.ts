@@ -6,6 +6,7 @@ import {
   createOnboardingUser,
   createRound,
   createRoundSelection,
+  createRoundSelections,
   updateRoundStatus,
 } from "@/lib/round-repository";
 
@@ -43,6 +44,20 @@ export async function createRoundSelectionAction(formData: FormData) {
   revalidateRounds();
 }
 
+export async function createParticipantRoundSelectionsAction(formData: FormData) {
+  const roundId = parseNamedId(formData, "roundId");
+  const fromUserId = parseNamedId(formData, "fromUserId");
+  const toUserIds = formData
+    .getAll("toUserId")
+    .map((value) => value.toString())
+    .filter(Boolean)
+    .map((value) => BigInt(value));
+
+  await createRoundSelections(roundId, fromUserId, toUserIds);
+  revalidatePath(`/rounds/${roundId.toString()}/participants/${fromUserId.toString()}`);
+  revalidateRounds();
+}
+
 export async function createOnboardingUserAction(formData: FormData) {
   await createOnboardingUser({
     name: readRequiredString(formData, "name"),
@@ -53,6 +68,7 @@ export async function createOnboardingUserAction(formData: FormData) {
     selfIntro: readString(formData, "selfIntro"),
     idealTypeDescription: readString(formData, "idealTypeDescription"),
     openLevel: readEnum(formData, "openLevel", openLevelValues, "PRIVATE"),
+    invitorUserId: readString(formData, "invitorUserId") ? parseNamedId(formData, "invitorUserId") : null,
   });
   revalidateRounds();
 }

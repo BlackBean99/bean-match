@@ -6,6 +6,7 @@ import {
   type DashboardUser,
   type EntryQueueStatus,
   type OpenLevel,
+  type ParticipantRoundData,
   type RoundStatus,
 } from "@/lib/domain";
 import { getMemberDashboardData } from "@/lib/member-repository";
@@ -61,6 +62,7 @@ export type OnboardingInput = {
   selfIntro: string | null;
   idealTypeDescription: string | null;
   openLevel: OpenLevel;
+  invitorUserId: bigint | null;
 };
 
 export async function getRoundDashboardData(): Promise<RoundDashboardData> {
@@ -158,6 +160,29 @@ export async function createRoundSelection(roundId: bigint, fromUserId: bigint, 
   });
 }
 
+export async function createRoundSelections(roundId: bigint, fromUserId: bigint, toUserIds: bigint[]) {
+  const uniqueToUserIds = [...new Set(toUserIds.map((id) => id.toString()))].map((id) => BigInt(id));
+  if (uniqueToUserIds.length === 0) throw new Error("선택할 후보를 1명 이상 고르세요.");
+  if (uniqueToUserIds.length > 2) throw new Error("한 라운드에서 최대 2명만 선택할 수 있습니다.");
+
+  const round = await getRoundOrNull(roundId);
+  if (!round) throw new Error("라운드를 찾을 수 없습니다.");
+  if (round.status !== "OPEN") throw new Error("선택 가능한 라운드가 아닙니다.");
+
+  const existingSelections = await supabaseRest<RoundSelectionRow[]>(
+    `/round_selections?select=*&round_id=eq.${roundId.toString()}&from_user_id=eq.${fromUserId.toString()}`,
+  );
+  const existingToUserIds = new Set(existingSelections.map((selection) => selection.to_user_id));
+  const newToUserIds = uniqueToUserIds.filter((toUserId) => !existingToUserIds.has(Number(toUserId)));
+  if (existingSelections.length + newToUserIds.length > round.selection_limit) {
+    throw new Error(`한 라운드에서 최대 ${round.selection_limit}명만 선택할 수 있습니다.`);
+  }
+
+  for (const toUserId of newToUserIds) {
+    await createRoundSelection(roundId, fromUserId, toUserId);
+  }
+}
+
 export async function createOnboardingUser(input: OnboardingInput) {
   const [user] = await supabaseRest<{ id: number }[]>("/users?select=id", {
     method: "POST",
@@ -172,6 +197,7 @@ export async function createOnboardingUser(input: OnboardingInput) {
       height_cm: input.heightCm,
       self_intro: input.selfIntro,
       ideal_type_description: input.idealTypeDescription,
+      invited_by_user_id: input.invitorUserId ? Number(input.invitorUserId) : null,
     }),
   });
 
@@ -185,11 +211,70 @@ export async function createOnboardingUser(input: OnboardingInput) {
     body: JSON.stringify({
       user_id: user.id,
       status: input.openLevel === "FULL_OPEN" ? "READY" : "WAITING",
-      memo: "onboarding",
+      memo: input.invitorUserId ? `onboarding:invitor=${input.invitorUserId.toString()}` : "onboarding",
     }),
   });
 
   return user;
+}
+
+export async function getParticipantRoundData(roundId: bigint, userId: bigint): Promise<ParticipantRoundData> {
+  const memberData = await getMemberDashboardData();
+  const actor = memberData.allUsers.find((user) => user.id === Number(userId)) ?? null;
+
+  if (!hasSupabaseRestConfig()) {
+    return {
+      actor,
+      round: null,
+      candidates: [],
+      selectedCount: 0,
+      selectionLimit: 2,
+      databaseConnected: false,
+      loadError: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
+    };
+  }
+
+  try {
+    const [round, selectionRows] = await Promise.all([
+      getRoundOrNull(roundId),
+      supabaseRest<RoundSelectionRow[]>(
+        `/round_selections?select=*&round_id=eq.${roundId.toString()}&order=created_at.asc,id.asc`,
+      ),
+    ]);
+    const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
+    const selectedToUserIds = new Set(
+      selectionRows.filter((selection) => selection.from_user_id === Number(userId)).map((selection) => selection.to_user_id),
+    );
+    const candidates = memberData.allUsers
+      .filter(
+        (user) =>
+          user.id !== Number(userId) &&
+          user.status === "READY" &&
+          user.openLevel === "FULL_OPEN" &&
+          !activeIntroUserIds.has(user.id),
+      )
+      .map((user) => ({ ...user, alreadySelected: selectedToUserIds.has(user.id) }));
+
+    return {
+      actor,
+      round: round ? toDashboardRound(round, candidates.length, selectionRows) : null,
+      candidates,
+      selectedCount: selectedToUserIds.size,
+      selectionLimit: round?.selection_limit ?? 2,
+      databaseConnected: true,
+      loadError: null,
+    };
+  } catch (error) {
+    return {
+      actor,
+      round: null,
+      candidates: [],
+      selectedCount: 0,
+      selectionLimit: 2,
+      databaseConnected: false,
+      loadError: error instanceof Error ? error.message : "Participant round query failed.",
+    };
+  }
 }
 
 function activeIntroUserIdSet(introCases: { status: string; participantIds: [number, number] | [] }[]) {
@@ -200,6 +285,13 @@ function activeIntroUserIdSet(introCases: { status: string; participantIds: [num
     for (const userId of introCase.participantIds) ids.add(userId);
   }
   return ids;
+}
+
+async function getRoundOrNull(roundId: bigint) {
+  const [round] = await supabaseRest<RoundRow[]>(
+    `/rounds?select=*&id=eq.${roundId.toString()}&limit=1`,
+  );
+  return round ?? null;
 }
 
 function groupSelectionsByRoundId(rows: RoundSelectionRow[]) {

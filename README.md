@@ -63,6 +63,7 @@ npm run sync:notion -- --write
 - `docs/context/05-Operations-Admin-Policy.md`
 - `docs/context/06-design-style-generic-guide.md`
 - `docs/context/07-Technical-Specification.md`
+- `docs/context/08-URL-Sharing-and-Access-Guide.md`
 - `docs/context/SUPABASE_NOTION_SYNC.md`
 - `docs/operations/08-Agent-Operating-Model-RPI.md`
 - `docs/operations/09-Git-Workflow-and-Branch-Strategy.md`

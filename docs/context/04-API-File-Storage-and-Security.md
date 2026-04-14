@@ -38,6 +38,15 @@
 - `POST /api/intro-cases/{id}/responses` : 참여자 응답 등록
 - `POST /api/intro-cases/{id}/result` : 결과 확인 등록
 
+### 2.6 Round / Selection
+- `GET /rounds/{roundId}/participants/{userId}` : 참가자가 라운드 후보를 보고 최대 2명을 선택하는 공유 URL
+- `POST /rounds/{roundId}/participants/{userId}` : 라운드 선택 저장. 실제 구현은 Server Action을 사용한다.
+- `GET /invite/{invitorId}` : 모집인 초대 링크. 온보딩 폼에 `invitorId`를 전달한다.
+- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 온보딩 URL
+- `GET /rounds` : 관리자 라운드 운영 화면
+- `GET /users` : 관리자 사용자 풀 화면
+- `GET /matches` : 관리자 매칭 조율 화면
+
 ---
 
 ## 3. 상태 변경 정책
@@ -146,6 +155,14 @@
 4. `IntroCase` 생성
 5. 참여자 매핑 생성
 6. 두 사용자 상태를 `PROGRESSING` 으로 전환
+
+### 라운드 선택
+1. 라운드가 `OPEN` 상태인지 검증
+2. 선택한 사용자가 `READY` + `FULL_OPEN` 인지 검증
+3. 선택 대상이 `READY` 상태인지 검증
+4. 자기 자신 선택 금지
+5. 사용자당 라운드 선택 수가 2명을 넘지 않는지 검증
+6. 선택 기록은 직접 수정하지 않고 운영자 판단 대상으로 남김
 
 ---
 

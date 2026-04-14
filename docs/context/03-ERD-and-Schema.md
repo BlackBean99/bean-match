@@ -18,6 +18,8 @@ erDiagram
         VARCHAR name
         VARCHAR gender
         VARCHAR status
+        VARCHAR open_level
+        BIGINT invited_by_user_id FK
         DATE birth_date
         VARCHAR age_text
         VARCHAR phone
@@ -112,6 +114,35 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    ROUNDS {
+        BIGINT id PK
+        VARCHAR title
+        VARCHAR status
+        TIMESTAMP start_at
+        TIMESTAMP end_at
+        INT selection_limit
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    ROUND_SELECTIONS {
+        BIGINT id PK
+        BIGINT round_id FK
+        BIGINT from_user_id FK
+        BIGINT to_user_id FK
+        TIMESTAMP created_at
+    }
+
+    ENTRY_QUEUE {
+        BIGINT id PK
+        BIGINT user_id FK
+        VARCHAR status
+        TIMESTAMP joined_at
+        TIMESTAMP ready_at
+        TIMESTAMP promoted_at
+        TEXT memo
+    }
+
     USER_STATE_HISTORY {
         BIGINT id PK
         BIGINT user_id FK
@@ -130,8 +161,13 @@ erDiagram
     USERS ||--o{ INTRO_CASES : invites
     USERS ||--o{ INTRO_CASE_EVENTS : acts
     USERS ||--o{ USER_STATE_HISTORY : changes
+    USERS ||--o{ USERS : invites
+    USERS ||--o{ ROUND_SELECTIONS : selects
+    USERS ||--o{ ROUND_SELECTIONS : selected_by
+    USERS ||--o{ ENTRY_QUEUE : queues
     INTRO_CASES ||--o{ INTRO_CASE_PARTICIPANTS : contains
     INTRO_CASES ||--o{ INTRO_CASE_EVENTS : logs
+    ROUNDS ||--o{ ROUND_SELECTIONS : contains
 ```
 
 ---
@@ -145,6 +181,8 @@ erDiagram
 - `name`
 - `gender`
 - `status`
+- `open_level`
+- `invited_by_user_id`
 - `birth_date`
 - `age_text` (Notion `나이` 원문처럼 생년/나이 값이 자유 입력일 때 보존)
 - `phone`
@@ -184,6 +222,28 @@ erDiagram
 
 ### 3.8 USER_STATE_HISTORY
 사용자 상태 변경 감사 로그.
+
+### 3.9 ROUNDS
+주 2회 운영할 수 있는 선택 라운드.
+- `DRAFT`
+- `OPEN`
+- `CLOSED`
+- `MATCHING`
+- `COMPLETED`
+
+### 3.10 ROUND_SELECTIONS
+라운드 내 사용자 선택 기록.
+- `from_user_id`: 선택한 사용자
+- `to_user_id`: 선택된 후보
+- 한 라운드에서 같은 후보 중복 선택 금지
+- 사용자당 선택 수는 최대 2명
+
+### 3.11 ENTRY_QUEUE
+신규 온보딩 사용자를 다음 라운드에 넣기 전까지 보관하는 큐.
+- `WAITING`
+- `READY`
+- `PROMOTED`
+- `CANCELLED`
 
 ---
 

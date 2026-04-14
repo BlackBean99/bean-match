@@ -25,6 +25,11 @@ end $$;
 alter table users
   add column if not exists open_level "OpenLevel" not null default 'PRIVATE';
 
+alter table users
+  add column if not exists invited_by_user_id bigint references users(id) on delete set null;
+
+create index if not exists users_invited_by_user_id_idx on users(invited_by_user_id);
+
 create or replace function is_active_intro_case_status(status "IntroCaseStatus")
 returns boolean as $$
 begin

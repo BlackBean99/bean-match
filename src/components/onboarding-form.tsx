@@ -4,7 +4,11 @@ import { openLevelLabels, type OpenLevel } from "@/lib/domain";
 
 const openLevels: OpenLevel[] = ["PRIVATE", "SEMI_OPEN", "FULL_OPEN"];
 
-export function OnboardingForm() {
+type OnboardingFormProps = {
+  invitorId?: string;
+};
+
+export function OnboardingForm({ invitorId }: OnboardingFormProps) {
   return (
     <section className="mx-auto w-full max-w-3xl rounded-lg border border-red-100 bg-white p-6 shadow-sm">
       <p className="text-sm font-bold text-[#E00E0E]">Blackbean Match</p>
@@ -12,7 +16,13 @@ export function OnboardingForm() {
       <p className="mt-2 text-sm leading-6 text-zinc-600">
         정보 입력 후 오픈 레벨을 선택하면 운영자가 다음 라운드 또는 큐레이션 매칭으로 배치합니다.
       </p>
+      {invitorId ? (
+        <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-[#E00E0E]">
+          모집인 초대 링크로 들어왔습니다. 가입 출처는 운영자에게만 기록됩니다.
+        </p>
+      ) : null}
       <form action={createOnboardingUserAction} className="mt-6 grid gap-4">
+        {invitorId ? <input type="hidden" name="invitorUserId" value={invitorId} /> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="이름">
             <input name="name" className={inputClassName} required />

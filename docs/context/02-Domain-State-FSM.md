@@ -90,6 +90,8 @@ User가 업로드한 이미지 파일 메타데이터.
 ### 규칙 1. 활성 소개 건이 있으면 User는 `PROGRESSING`
 활성 상태는 다음과 같다.
 - `OFFERED`
+- `A_INTERESTED`
+- `B_OFFERED`
 - `WAITING_RESPONSE`
 - `MATCHED`
 - `CONNECTED`
@@ -150,7 +152,13 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> OFFERED
-    OFFERED --> WAITING_RESPONSE : 제안 확인
+    OFFERED --> A_INTERESTED : A 관심
+    A_INTERESTED --> B_OFFERED : B에게 제안
+    B_OFFERED --> MATCHED : B 수락
+    B_OFFERED --> DECLINED : B 거절
+    B_OFFERED --> EXPIRED : 만료
+    B_OFFERED --> CANCELLED : 취소
+    OFFERED --> WAITING_RESPONSE : 양측 제안 확인
     OFFERED --> DECLINED : 거절
     OFFERED --> EXPIRED : 만료
     OFFERED --> CANCELLED : 취소
@@ -184,7 +192,25 @@ stateDiagram-v2
 
 ---
 
-## 7. 파생 상태 계산
+## 7. Round / Selection 운영 규칙
+
+### Round
+- `DRAFT`: 운영자가 라운드 준비
+- `OPEN`: 사용자 선택 가능
+- `CLOSED`: 선택 마감
+- `MATCHING`: 운영자 조율
+- `COMPLETED`: 결과 전달 완료
+
+### Selection
+- `READY` + `FULL_OPEN` 사용자만 라운드 선택을 제출할 수 있다.
+- `PROGRESSING` 사용자는 후보 노출에서 제외한다.
+- 한 사용자당 한 라운드에서 최대 2명까지 선택할 수 있다.
+- 선택은 변경할 수 없다. 수정이 필요하면 운영자가 별도 조치한다.
+- 상호 선택은 자동 매칭 후보, 단방향 선택은 운영자 판단 대상으로 분류한다.
+
+---
+
+## 8. 파생 상태 계산
 
 ### User.status = `PROGRESSING`
 조건:
@@ -198,7 +224,7 @@ stateDiagram-v2
 
 ---
 
-## 8. 운영 화면용 라벨
+## 9. 운영 화면용 라벨
 
 | 코드 | 운영 화면 라벨 |
 |---|---|
