@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
 import {
   introStatusLabels,
   openLevelLabels,
@@ -89,16 +90,27 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
   return (
     <>
       <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
-      <RecommendationPanel
-        users={allUsers}
-        selectedUser={selectedUser}
-        recommendations={recommendations}
-        filters={filters}
-      />
-      <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
-        <IntroCaseTable introCases={introCases} editable={databaseConnected} />
+      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+        <DashboardTabs filters={filters} />
+        <FilterForm filters={filters} />
       </section>
+
+      {filters.view === "graph" ? (
+        <MatchNetworkDashboard users={allUsers} introCases={introCases} />
+      ) : (
+        <>
+          <RecommendationPanel
+            users={allUsers}
+            selectedUser={selectedUser}
+            recommendations={recommendations}
+            filters={filters}
+          />
+          <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+            <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
+            <IntroCaseTable introCases={introCases} editable={databaseConnected} />
+          </section>
+        </>
+      )}
     </>
   );
 }
@@ -201,6 +213,9 @@ function DashboardTabs({ filters }: { filters: MemberFilterState }) {
       </Link>
       <Link href={dashboardHref(filters, { view: "recommend" }, "/matches")} className={tabClassName(filters.view === "recommend")}>
         상대 추천 매칭
+      </Link>
+      <Link href={dashboardHref(filters, { view: "graph" }, "/matches")} className={tabClassName(filters.view === "graph")}>
+        관계 그래프
       </Link>
     </div>
   );

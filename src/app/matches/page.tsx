@@ -10,7 +10,9 @@ type MatchesPageProps = {
 };
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
-  const filters = parseMemberFilters({ ...((await searchParams) ?? {}), view: "recommend" });
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const view = typeof resolvedSearchParams.view === "string" ? resolvedSearchParams.view : undefined;
+  const filters = parseMemberFilters({ ...resolvedSearchParams, view: view ?? "recommend" });
   const data = await getMemberDashboardData(filters);
 
   return (

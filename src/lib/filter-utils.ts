@@ -4,7 +4,7 @@ export type SearchParamMap = Record<string, string | string[] | undefined>;
 
 export function parseMemberFilters(searchParams: SearchParamMap): MemberFilterState {
   return {
-    view: readFilter(searchParams.view, ["pool", "recommend"], "pool"),
+    view: readFilter(searchParams.view, ["pool", "recommend", "graph"], "pool"),
     recommendationFor: readString(searchParams.recommendationFor),
     gender: readFilter(searchParams.gender, ["ALL", "FEMALE", "MALE", "OTHER", "UNDISCLOSED"], "ALL"),
     ageMin: readString(searchParams.ageMin),

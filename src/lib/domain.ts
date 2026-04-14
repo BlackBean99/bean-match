@@ -94,6 +94,7 @@ export type DashboardIntroCase = {
   invitor: string;
   memo?: string;
   updatedAt: string;
+  updatedAtIso?: string;
 };
 
 export type DashboardUserPhoto = {
@@ -158,7 +159,7 @@ export type DashboardEntryQueueItem = {
 };
 
 export type MemberFilterState = {
-  view: "pool" | "recommend";
+  view: "pool" | "recommend" | "graph";
   recommendationFor: string;
   gender: "ALL" | "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED";
   ageMin: string;

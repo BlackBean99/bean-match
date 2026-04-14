@@ -53,3 +53,50 @@ select {
     transform: translateX(100%);
   }
 }
+
+.lux-network-surface {
+  background-color: #0b0b0c;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: 0 0;
+  overflow: hidden;
+}
+
+.lux-network-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.05) 35%, transparent 70%);
+  opacity: 0.22;
+  transform: translateX(-40%);
+  animation: lux-surface-sweep 10s ease-in-out infinite;
+}
+
+@keyframes lux-surface-sweep {
+  0% {
+    transform: translateX(-45%);
+  }
+  50% {
+    transform: translateX(25%);
+  }
+  100% {
+    transform: translateX(-45%);
+  }
+}
+
+.lux-edge-dash {
+  animation: lux-dash 1.8s linear infinite;
+}
+
+.lux-edge-dash-soft {
+  animation: lux-dash 3.2s linear infinite;
+}
+
+@keyframes lux-dash {
+  100% {
+    stroke-dashoffset: -56;
+  }
+}

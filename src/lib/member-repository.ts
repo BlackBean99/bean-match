@@ -817,6 +817,47 @@ export async function updateMember(id: bigint, input: MemberInput) {
   });
 }
 
+export async function updateMemberExposure(
+  id: bigint,
+  input: { status: UserStatus; openLevel: OpenLevel; roles?: UserRole[] },
+) {
+  if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const userId = Number(id);
+    const [user] = await supabaseRest<SupabaseUserRow[]>(`/users?id=eq.${id.toString()}&select=*`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ status: input.status, open_level: input.openLevel }),
+    });
+
+    if (input.roles) {
+      await upsertSupabaseRoles(userId, input.roles);
+    }
+
+    await reconcileSupabaseEntryQueueForExposure(userId, user.status, user.open_level ?? "PRIVATE", "admin:exposure");
+    return user;
+  }
+
+  assertDatabaseUrl();
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id },
+      data: { status: input.status, openLevel: input.openLevel },
+    });
+
+    if (input.roles) {
+      await tx.userRoleAssignment.deleteMany({ where: { userId: id } });
+      await tx.userRoleAssignment.createMany({
+        data: normalizeRoles(input.roles).map((role) => ({ userId: id, role })),
+        skipDuplicates: true,
+      });
+    }
+
+    await reconcileEntryQueueForExposureWithPrisma(tx, user.id, user.status, user.openLevel, "admin:exposure");
+    return user;
+  });
+}
+
 export async function deleteMember(id: bigint) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     return supabaseRest(`/users?id=eq.${id.toString()}`, {
@@ -1334,6 +1375,101 @@ async function promoteUserToFullOpenOnPhotoPrisma(tx: Prisma.TransactionClient, 
   });
 }
 
+async function reconcileSupabaseEntryQueueForExposure(
+  userId: number,
+  status: UserStatus,
+  openLevel: OpenLevel,
+  memo: string,
+) {
+  if (!hasSupabaseRestConfig()) return;
+
+  const roles = await supabaseRest<{ role: UserRole }[]>(`/user_roles?select=role&user_id=eq.${userId}`);
+  if (!roles.some((row) => row.role === ("PARTICIPANT" as UserRole))) return;
+
+  const shouldBeReady = status === "READY" && openLevel === "FULL_OPEN";
+  const payload = shouldBeReady
+    ? { status: "READY", ready_at: new Date().toISOString(), memo }
+    : { status: "WAITING", memo };
+
+  const [ready] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId}&status=eq.READY&limit=1`,
+  );
+  const [waiting] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId}&status=eq.WAITING&limit=1`,
+  );
+
+  if (shouldBeReady) {
+    if (ready) {
+      await supabaseRest(`/entry_queue?id=eq.${ready.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      return;
+    }
+    if (waiting) {
+      await supabaseRest(`/entry_queue?id=eq.${waiting.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      return;
+    }
+    await supabaseRest("/entry_queue", { method: "POST", body: JSON.stringify({ user_id: userId, ...payload }) });
+    return;
+  }
+
+  if (waiting) {
+    await supabaseRest(`/entry_queue?id=eq.${waiting.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    return;
+  }
+  if (ready) {
+    await supabaseRest(`/entry_queue?id=eq.${ready.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    return;
+  }
+  await supabaseRest("/entry_queue", { method: "POST", body: JSON.stringify({ user_id: userId, ...payload }) });
+}
+
+async function reconcileEntryQueueForExposureWithPrisma(
+  tx: Prisma.TransactionClient,
+  userId: bigint,
+  status: UserStatus,
+  openLevel: OpenLevel,
+  memo: string,
+) {
+  const roleCount = await tx.userRoleAssignment.count({ where: { userId, role: "PARTICIPANT" } });
+  if (roleCount === 0) return;
+
+  const shouldBeReady = status === "READY" && openLevel === "FULL_OPEN";
+  const payload = shouldBeReady
+    ? { status: "READY" as const, readyAt: new Date(), memo }
+    : { status: "WAITING" as const, memo };
+
+  const ready = await tx.entryQueue.findUnique({
+    where: { userId_status: { userId, status: "READY" } },
+    select: { id: true },
+  });
+  const waiting = await tx.entryQueue.findUnique({
+    where: { userId_status: { userId, status: "WAITING" } },
+    select: { id: true },
+  });
+
+  if (shouldBeReady) {
+    if (ready) {
+      await tx.entryQueue.update({ where: { id: ready.id }, data: payload });
+      return;
+    }
+    if (waiting) {
+      await tx.entryQueue.update({ where: { id: waiting.id }, data: payload });
+      return;
+    }
+    await tx.entryQueue.create({ data: { userId, ...payload } });
+    return;
+  }
+
+  if (waiting) {
+    await tx.entryQueue.update({ where: { id: waiting.id }, data: payload });
+    return;
+  }
+  if (ready) {
+    await tx.entryQueue.update({ where: { id: ready.id }, data: payload });
+    return;
+  }
+  await tx.entryQueue.create({ data: { userId, ...payload } });
+}
+
 function normalizeRoles(roles: UserRole[]): UserRole[] {
   return roles.length > 0 ? roles : ["PARTICIPANT" as UserRole];
 }
@@ -1427,6 +1563,7 @@ function toDashboardIntroCase(
     invitor: introCase.invitor?.name ?? "미지정",
     memo: introCase.memo ?? "",
     updatedAt: formatDateTime(introCase.updatedAt),
+    updatedAtIso: introCase.updatedAt.toISOString(),
   };
 }
 
@@ -1450,6 +1587,7 @@ function toDashboardIntroCaseFromSupabase(
     invitor: introCase.invitor_user_id ? namesByUserId.get(introCase.invitor_user_id) ?? "미확인" : "미지정",
     memo: introCase.memo ?? "",
     updatedAt: formatDateTime(new Date(introCase.updated_at)),
+    updatedAtIso: introCase.updated_at,
   };
 }
 
