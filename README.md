@@ -70,4 +70,5 @@ npm run sync:notion -- --write
 - `docs/operations/10-Commit-PR-Merge-Policy.md`
 - `docs/operations/11-Code-Complete-and-Definition-of-Done.md`
 - `docs/operations/12-Agent-Autonomy-Runbook.md`
+- `docs/operations/13-Agent-Prompt-and-Skills.md`
 - `docs/history/20260414_Requirement_Document.md`

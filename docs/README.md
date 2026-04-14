@@ -19,6 +19,7 @@
 - `operations/10-Commit-PR-Merge-Policy.md`: 커밋, PR, merge 정책
 - `operations/11-Code-Complete-and-Definition-of-Done.md`: 완료 기준
 - `operations/12-Agent-Autonomy-Runbook.md`: 에이전트 자율 실행 절차
+- `operations/13-Agent-Prompt-and-Skills.md`: 프로젝트 에이전트 프롬프트와 스킬 기준
 
 ## History
 - `history/20260414_Requirement_Document.md`: 2026-04-14 요구사항 기록
