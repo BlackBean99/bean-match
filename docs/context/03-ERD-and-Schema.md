@@ -19,6 +19,7 @@ erDiagram
         VARCHAR gender
         VARCHAR status
         DATE birth_date
+        VARCHAR age_text
         VARCHAR phone
         BOOLEAN contact_visible
         INT height_cm
@@ -145,6 +146,7 @@ erDiagram
 - `gender`
 - `status`
 - `birth_date`
+- `age_text` (Notion `나이` 원문처럼 생년/나이 값이 자유 입력일 때 보존)
 - `phone`
 - `height_cm`
 - `job_title`
@@ -194,6 +196,7 @@ create table users (
     gender varchar(20) not null,
     status varchar(30) not null,
     birth_date date null,
+    age_text varchar(30) null,
     phone varchar(30) null,
     contact_visible boolean not null default false,
     height_cm int null,
