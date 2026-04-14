@@ -290,6 +290,7 @@ function EntryQueueTable({ items }: { items: DashboardEntryQueueItem[] }) {
           items.map((item) => (
             <div key={item.id} className="rounded-lg border border-zinc-100 px-3 py-2">
               <p className="text-sm font-bold text-zinc-950">{item.userName}</p>
+              <p className="mt-1 text-[11px] font-semibold text-zinc-500">UserId {item.userId}</p>
               <p className="text-xs text-zinc-500">
                 {entryQueueStatusLabels[item.status]} · {item.joinedAt}
               </p>

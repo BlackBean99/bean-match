@@ -427,8 +427,9 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
           )}
         </div>
       </td>
-      <td className="truncate px-3 py-2 font-semibold text-zinc-950" title={user.name}>
-        {user.name}
+      <td className="px-3 py-2" title={user.name}>
+        <p className="truncate font-semibold text-zinc-950">{user.name}</p>
+        <p className="mt-1 text-[11px] font-semibold text-zinc-500">ID {user.id}</p>
       </td>
       <td className="px-3 py-2 text-zinc-700">{user.gender}</td>
       <td className="truncate px-3 py-2 text-zinc-700" title={formatAge(user)}>
