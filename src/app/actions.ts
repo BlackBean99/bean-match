@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { OpenLevel } from "@/lib/domain";
 import {
   addUserPhoto,
+  bulkApplyRoundParticipationDefaults,
   createIntroCase,
   createMember,
   deleteIntroCase,
@@ -48,6 +49,20 @@ export async function updateMemberExposureAction(formData: FormData) {
     openLevel: readEnum(formData, "openLevel", openLevelValues, "PRIVATE"),
   });
   revalidatePath(`/users/${id.toString()}`);
+  revalidatePath("/users");
+  revalidatePath("/matches");
+  revalidatePath("/rounds");
+}
+
+export async function bulkApplyRoundParticipationDefaultsAction(formData: FormData) {
+  if (formData.get("confirm") !== "on") {
+    throw new Error("확인 체크가 필요합니다.");
+  }
+
+  await bulkApplyRoundParticipationDefaults({
+    exceptNames: ["정희", "김채원", "이원민"],
+  });
+
   revalidatePath("/users");
   revalidatePath("/matches");
   revalidatePath("/rounds");

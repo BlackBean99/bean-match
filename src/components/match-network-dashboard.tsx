@@ -10,13 +10,19 @@ import {
   type DashboardUser,
   type IntroStatus,
 } from "@/lib/domain";
-import { updateMemberExposureAction } from "@/app/actions";
+import {
+  bulkApplyRoundParticipationDefaultsAction,
+  updateMemberExposureAction,
+} from "@/app/actions";
 import {
   forceCenter,
   forceCollide,
   forceLink,
   forceManyBody,
   forceSimulation,
+  forceX,
+  forceY,
+  type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
@@ -33,9 +39,6 @@ type GraphNode = SimulationNodeDatum & {
   name: string;
   openLevel: DashboardUser["openLevel"];
   status: DashboardUser["status"];
-  roles: string[];
-  lastActionLabel: string;
-  lastActionIso: string | null;
   degree: number;
 };
 
@@ -50,6 +53,11 @@ type GraphEdge = SimulationLinkDatum<GraphNode> & {
   invitor: string;
 };
 
+type TooltipState =
+  | { kind: "node"; x: number; y: number; nodeId: number }
+  | { kind: "edge"; x: number; y: number; edgeId: string }
+  | null;
+
 const bucketLabel: Record<RelationshipBucket, string> = {
   UNCONNECTED: "미연결",
   IN_PROGRESS: "진행중",
@@ -59,7 +67,7 @@ const bucketLabel: Record<RelationshipBucket, string> = {
 
 const bucketClassName: Record<RelationshipBucket, string> = {
   UNCONNECTED: "text-zinc-300 border-zinc-700 bg-zinc-900/70",
-  IN_PROGRESS: "text-amber-200 border-amber-900/40 bg-amber-950/20",
+  IN_PROGRESS: "text-sky-200 border-sky-900/40 bg-sky-950/20",
   REJECTED: "text-rose-200 border-rose-900/40 bg-rose-950/20",
   CONFIRMED: "text-emerald-200 border-emerald-900/40 bg-emerald-950/20",
 };
@@ -79,9 +87,15 @@ function parseIsoOrNull(value: string | undefined) {
 
 export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboardProps) {
   const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<TooltipState>(null);
+  const [, setFrame] = useState(0);
+
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const simRef = useRef<Simulation<GraphNode, GraphEdge> | null>(null);
+  const draggingRef = useRef<{ nodeId: number; pointerId: number; moved: boolean } | null>(null);
   const [surfaceSize, setSurfaceSize] = useState<{ width: number; height: number }>({ width: 800, height: 560 });
 
   const { nodes, edges, edgesByNodeId, nodesById, buckets } = useMemo(() => {
@@ -92,16 +106,13 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
         name: user.name,
         openLevel: user.openLevel,
         status: user.status,
-        roles: user.roles,
-        lastActionLabel: "관계 없음",
-        lastActionIso: null,
         degree: 0,
         x: Math.random() * 600 + 100,
         y: Math.random() * 420 + 70,
       });
     }
 
-    // Deduplicate by pair; keep the most recently updated introCase per pair.
+    // Pair-dedupe: keep the most recently updated introCase per pair.
     const edgesByPair = new Map<string, GraphEdge>();
     for (const introCase of introCases) {
       if (introCase.participantIds.length !== 2) continue;
@@ -145,16 +156,6 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
       edgesByNodeId.set(targetId, [...(edgesByNodeId.get(targetId) ?? []), edge]);
     }
 
-    for (const [nodeId, node] of nodesById.entries()) {
-      const nodeEdges = edgesByNodeId.get(nodeId) ?? [];
-      const newest = nodeEdges
-        .slice()
-        .sort((a, b) => (b.updatedAtIso ? Date.parse(b.updatedAtIso) : -1) - (a.updatedAtIso ? Date.parse(a.updatedAtIso) : -1))[0];
-      if (!newest) continue;
-      node.lastActionIso = newest.updatedAtIso;
-      node.lastActionLabel = `${bucketLabel[newest.bucket]} · ${newest.updatedAtLabel}`;
-    }
-
     const buckets: Record<RelationshipBucket, number> = {
       UNCONNECTED: 0,
       IN_PROGRESS: 0,
@@ -172,8 +173,6 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
     };
   }, [users, introCases]);
 
-  const [, setFrame] = useState(0);
-
   useEffect(() => {
     if (!surfaceRef.current) return;
     const el = surfaceRef.current;
@@ -190,34 +189,56 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
   useEffect(() => {
     const sim = forceSimulation<GraphNode>(nodes)
       .alpha(1)
-      .alphaDecay(0.04)
-      .velocityDecay(0.42)
+      .alphaDecay(0.03)
+      .velocityDecay(0.28)
       .force(
         "link",
         forceLink<GraphNode, GraphEdge>(edges)
           .id((d: GraphNode) => d.id)
           .distance((link: GraphEdge) => {
             const bucket = link.bucket;
-            if (bucket === "CONFIRMED") return 130;
+            if (bucket === "CONFIRMED") return 132;
             if (bucket === "IN_PROGRESS") return 150;
             if (bucket === "REJECTED") return 170;
             return 190;
           })
-          .strength(0.35),
+          .strength(0.48),
       )
-      .force("charge", forceManyBody().strength(-520))
-      .force("collide", forceCollide<GraphNode>().radius((d: GraphNode) => 56 + Math.min(d.degree * 6, 26)).iterations(2))
-      .force("center", forceCenter(surfaceSize.width / 2, surfaceSize.height / 2));
+      .force("charge", forceManyBody().strength(-440))
+      .force(
+        "collide",
+        forceCollide<GraphNode>()
+          .radius((d: GraphNode) => 22 + Math.min(d.degree * 2, 12))
+          .iterations(3),
+      )
+      .force("center", forceCenter(surfaceSize.width / 2, surfaceSize.height / 2))
+      .force("x", forceX(surfaceSize.width / 2).strength(0.012))
+      .force("y", forceY(surfaceSize.height / 2).strength(0.012));
+
+    simRef.current = sim;
 
     let last = performance.now();
     let rafId: number | null = null;
     const tick = () => {
       const now = performance.now();
-      // Throttle UI re-render; keep simulation running for that "alive" feeling.
       if (now - last >= 42) {
         last = now;
         setFrame((v) => (v + 1) % 1_000_000);
       }
+
+      const cx = surfaceSize.width / 2;
+      const cy = surfaceSize.height / 2;
+      for (const node of nodes) {
+        if (node.fx !== null && node.fx !== undefined) continue;
+        if (node.fy !== null && node.fy !== undefined) continue;
+        const dx = (node.x ?? cx) - cx;
+        const dy = (node.y ?? cy) - cy;
+        const dist = Math.max(80, Math.sqrt(dx * dx + dy * dy));
+        const spin = 0.00095;
+        node.vx = (node.vx ?? 0) + (-dy / dist) * spin;
+        node.vy = (node.vy ?? 0) + (dx / dist) * spin;
+      }
+
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
@@ -225,6 +246,7 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
       sim.stop();
+      simRef.current = null;
     };
   }, [nodes, edges, surfaceSize.width, surfaceSize.height]);
 
@@ -243,17 +265,18 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
 
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null;
   const selectedNodeEdges = selectedNodeId ? (edgesByNodeId.get(selectedNodeId) ?? []) : [];
-  const selectedEdge = selectedEdgeId
-    ? edges.find((edge) => edge.id === selectedEdgeId) ?? null
-    : null;
+  const selectedEdge = selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId) ?? null : null;
+
+  const hoveredNode = hoveredNodeId ? nodesById.get(hoveredNodeId) ?? null : null;
+  const hoveredEdge = hoveredEdgeId ? edges.find((edge) => edge.id === hoveredEdgeId) ?? null : null;
 
   return (
     <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-zinc-200 bg-white px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Relationship Network</p>
-          <h2 className="mt-2 text-lg font-bold text-zinc-950">소개팅 풀 관계 상태</h2>
-          <p className="mt-1 text-sm text-zinc-600">노드를 클릭하면 상세 패널에서 관계 히스토리와 메모를 확인합니다.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Cosmic Relationship Map</p>
+          <h2 className="mt-2 text-lg font-bold text-zinc-950">소개팅 풀 관계 관리</h2>
+          <p className="mt-1 text-sm text-zinc-600">hover에서 빠르게 읽고, click에서 상세를 확인합니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {(["UNCONNECTED", "IN_PROGRESS", "REJECTED", "CONFIRMED"] as const).map((bucket) => (
@@ -272,9 +295,17 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
       </div>
 
       <div className="grid gap-0 lg:grid-cols-[1.45fr_0.55fr]">
-        <div className="relative min-h-[560px] bg-[#0B0B0C]">
-          <div ref={surfaceRef} className="lux-network-surface relative h-[72vh] min-h-[560px] w-full">
-            <svg className="pointer-events-none absolute inset-0 h-full w-full">
+        <div className="relative min-h-[560px] bg-[#070709]">
+          <div
+            ref={surfaceRef}
+            className="cosmic-network-surface relative h-[72vh] min-h-[560px] w-full"
+            onPointerLeave={() => {
+              setHoveredNodeId(null);
+              setHoveredEdgeId(null);
+              setTooltip(null);
+            }}
+          >
+            <svg className="absolute inset-0 h-full w-full">
               <defs>
                 <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
                   <feGaussianBlur stdDeviation="2.4" result="blur" />
@@ -298,95 +329,214 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                 const x2 = clamp(target.x ?? surfaceSize.width / 2, 22, surfaceSize.width - 22);
                 const y2 = clamp(target.y ?? surfaceSize.height / 2, 22, surfaceSize.height - 22);
 
-                const dimmed = highlighted
-                  ? !highlighted.connectedEdges.has(edge.id)
-                  : false;
+                const dimmed = highlighted ? !highlighted.connectedEdges.has(edge.id) : false;
                 const isSelected = selectedEdgeId === edge.id;
                 const color = edgeColor(edge.bucket);
-                const width = isSelected ? 2.1 : edge.bucket === "CONFIRMED" ? 1.6 : 1.15;
-                const dash = edge.bucket === "IN_PROGRESS" ? "5 6" : edge.bucket === "UNCONNECTED" ? "2 8" : undefined;
+                const width = isSelected ? 2.2 : edge.bucket === "CONFIRMED" ? 1.7 : 1.2;
+                const dash = edge.bucket === "IN_PROGRESS" ? "5 6" : edge.bucket === "UNCONNECTED" ? "2 10" : undefined;
                 const dashClass =
                   edge.bucket === "IN_PROGRESS"
                     ? "lux-edge-dash"
                     : edge.bucket === "UNCONNECTED"
                       ? "lux-edge-dash-soft"
                       : "";
+                const d = curvedOrbitPath(x1, y1, x2, y2, edge.id);
+                const mx = (x1 + x2) / 2;
+                const my = (y1 + y2) / 2;
 
                 return (
-                  <line
-                    key={edge.id}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={color}
-                    strokeWidth={width}
-                    strokeOpacity={dimmed ? 0.07 : edge.bucket === "CONFIRMED" ? 0.34 : 0.22}
-                    strokeDasharray={dash}
-                    className={dashClass}
-                    filter={isSelected ? "url(#softGlow)" : undefined}
-                  />
+                  <g key={edge.id}>
+                    <path
+                      d={d}
+                      stroke={color}
+                      strokeWidth={width + 1.8}
+                      strokeOpacity={dimmed ? 0.03 : 0.11}
+                      filter="url(#softGlow)"
+                      fill="none"
+                      pointerEvents="none"
+                    />
+                    <path
+                      d={d}
+                      stroke={color}
+                      strokeWidth={width}
+                      strokeOpacity={dimmed ? 0.06 : edge.bucket === "CONFIRMED" ? 0.48 : 0.28}
+                      strokeDasharray={dash}
+                      className={dashClass}
+                      fill="none"
+                      pointerEvents="none"
+                    />
+                    <path
+                      d={d}
+                      stroke="transparent"
+                      strokeWidth={12}
+                      fill="none"
+                      pointerEvents="stroke"
+                      onPointerEnter={() => {
+                        setHoveredEdgeId(edge.id);
+                        setTooltip({ kind: "edge", x: mx, y: my, edgeId: edge.id });
+                      }}
+                      onPointerLeave={() => {
+                        setHoveredEdgeId((prev) => (prev === edge.id ? null : prev));
+                        setTooltip((prev) => (prev?.kind === "edge" && prev.edgeId === edge.id ? null : prev));
+                      }}
+                      onClick={() => {
+                        setSelectedEdgeId(edge.id);
+                        setSelectedNodeId((edge.source as GraphNode).id);
+                      }}
+                    />
+                  </g>
                 );
               })}
             </svg>
 
             {nodes.map((node) => {
-              const x = clamp((node.x ?? surfaceSize.width / 2) - 90, 10, surfaceSize.width - 190);
-              const y = clamp((node.y ?? surfaceSize.height / 2) - 30, 10, surfaceSize.height - 86);
+              const x = clamp(node.x ?? surfaceSize.width / 2, 16, surfaceSize.width - 16);
+              const y = clamp(node.y ?? surfaceSize.height / 2, 16, surfaceSize.height - 16);
               const dimmed = highlighted ? !highlighted.connectedNodes.has(node.id) : false;
               const isSelected = selectedNodeId === node.id;
+              const starSize = isSelected ? 18 : 14;
 
               return (
                 <motion.button
                   key={node.id}
                   type="button"
-                  onPointerEnter={() => setHoveredNodeId(node.id)}
-                  onPointerLeave={() => setHoveredNodeId((prev) => (prev === node.id ? null : prev))}
+                  onPointerEnter={() => {
+                    setHoveredNodeId(node.id);
+                    setTooltip({ kind: "node", x, y, nodeId: node.id });
+                  }}
+                  onPointerMove={() => {
+                    if (hoveredNodeId !== node.id) return;
+                    setTooltip({ kind: "node", x, y, nodeId: node.id });
+                  }}
+                  onPointerLeave={() => {
+                    setHoveredNodeId((prev) => (prev === node.id ? null : prev));
+                    setTooltip((prev) => (prev?.kind === "node" && prev.nodeId === node.id ? null : prev));
+                  }}
+                  onPointerDown={(event) => {
+                    draggingRef.current = { nodeId: node.id, pointerId: event.pointerId, moved: false };
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    const sim = simRef.current;
+                    if (sim) sim.alphaTarget(0.25).restart();
+                    node.fx = x;
+                    node.fy = y;
+                  }}
+                  onPointerMoveCapture={(event) => {
+                    const dragging = draggingRef.current;
+                    if (!dragging || dragging.nodeId !== node.id || dragging.pointerId !== event.pointerId) return;
+                    const rect = surfaceRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const nx = clamp(event.clientX - rect.left, 16, surfaceSize.width - 16);
+                    const ny = clamp(event.clientY - rect.top, 16, surfaceSize.height - 16);
+                    node.fx = nx;
+                    node.fy = ny;
+                    dragging.moved = true;
+                    setTooltip({ kind: "node", x: nx, y: ny, nodeId: node.id });
+                  }}
+                  onPointerUp={(event) => {
+                    const dragging = draggingRef.current;
+                    if (!dragging || dragging.nodeId !== node.id || dragging.pointerId !== event.pointerId) return;
+                    draggingRef.current = null;
+                    node.fx = null;
+                    node.fy = null;
+                    const sim = simRef.current;
+                    if (sim) sim.alphaTarget(0);
+                  }}
                   onClick={() => {
+                    const dragging = draggingRef.current;
+                    if (dragging?.nodeId === node.id && dragging.moved) return;
                     setSelectedNodeId(node.id);
                     setSelectedEdgeId(null);
                   }}
-                  className={
-                    "absolute grid w-[180px] gap-1 rounded-lg border px-3 py-2 text-left transition " +
-                    (isSelected
-                      ? "border-white/30 bg-white/[0.08]"
-                      : "border-white/10 bg-white/[0.05] hover:border-white/20 hover:bg-white/[0.07]")
-                  }
+                  className="absolute grid place-items-center rounded-full"
                   style={{
-                    left: x,
-                    top: y,
+                    left: x - starSize / 2,
+                    top: y - starSize / 2,
                     opacity: dimmed ? 0.28 : 1,
                     transform: "translateZ(0)",
                   }}
                   initial={false}
                   animate={{
-                    y: dimmed ? 0 : [0, -1.4, 0],
+                    scale: dimmed ? 1 : [1, 1.05, 1],
                     transition: {
-                      duration: 4.8,
+                      duration: 3.8,
                       repeat: dimmed ? 0 : Infinity,
                       ease: "easeInOut",
                       delay: (node.id % 17) * 0.05,
                     },
                   }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-white">{node.name}</p>
-                      <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-300">
-                        {openLevelLabels[node.openLevel]} · {node.status}
-                      </p>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-bold ${nodeBadgeClass(node)}`}>
-                      {node.degree}
-                    </span>
-                  </div>
-                  <p className="truncate text-[11px] font-semibold text-zinc-400">{node.lastActionLabel}</p>
+                  <span
+                    className={`cosmic-star ${cosmicStarClass(node, hoveredNodeId === node.id, isSelected)}`}
+                    style={{ width: starSize, height: starSize }}
+                  />
                 </motion.button>
               );
             })}
+
+            <AnimatePresence>
+              {tooltip && tooltip.kind === "node" && hoveredNode ? (
+                <motion.div
+                  key={`tooltip-node:${tooltip.nodeId}`}
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.14 }}
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: clamp(tooltip.x + 14, 12, surfaceSize.width - 260),
+                    top: clamp(tooltip.y + 14, 12, surfaceSize.height - 120),
+                  }}
+                >
+                  <div className="cosmic-tooltip w-[248px] rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-white backdrop-blur">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{hoveredNode.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-white/70">
+                          {openLevelLabels[hoveredNode.openLevel]} · {hoveredNode.status}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-white/80">
+                        {hoveredNode.degree}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold text-white/55">
+                      연결 {(edgesByNodeId.get(hoveredNode.id) ?? []).length} · 마지막 업데이트{" "}
+                      {latestEdgeLabel(edgesByNodeId.get(hoveredNode.id) ?? [])}
+                    </p>
+                  </div>
+                </motion.div>
+              ) : null}
+
+              {tooltip && tooltip.kind === "edge" && hoveredEdge ? (
+                <motion.div
+                  key={`tooltip-edge:${tooltip.edgeId}`}
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.14 }}
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: clamp(tooltip.x + 14, 12, surfaceSize.width - 260),
+                    top: clamp(tooltip.y + 14, 12, surfaceSize.height - 110),
+                  }}
+                >
+                  <div className="cosmic-tooltip w-[248px] rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-white backdrop-blur">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-bold">Intro #{hoveredEdge.introCaseId}</p>
+                      <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-white/80">
+                        {bucketLabel[hoveredEdge.bucket]}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold text-white/70">
+                      {introStatusLabels[hoveredEdge.status]} · {hoveredEdge.updatedAtLabel}
+                    </p>
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0B0B0C] to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#070709] to-transparent" />
         </div>
 
         <aside className="border-t border-zinc-200 bg-white lg:border-l lg:border-t-0">
@@ -412,35 +562,62 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
               <p className="text-sm text-zinc-500">그래프에서 노드를 클릭해 관계를 확인하세요.</p>
             )}
 
+            <details className="rounded-lg border border-zinc-200 bg-white p-3" open>
+              <summary className="cursor-pointer text-xs font-bold text-zinc-700">라운드 참여 기본값</summary>
+              <form action={bulkApplyRoundParticipationDefaultsAction} className="mt-3 grid gap-3">
+                <p className="text-xs leading-5 text-zinc-500">
+                  모든 참가자를 <span className="font-bold text-zinc-700">FULL_OPEN</span> 으로 맞추고,
+                  <span className="font-bold text-zinc-700"> 정희/김채원/이원민</span> 만 Operator 매칭(PRIVATE)으로 둡니다.
+                </p>
+                <label className="flex items-start gap-2 text-xs font-semibold text-zinc-700">
+                  <input type="checkbox" name="confirm" className="mt-0.5" required />
+                  이 변경을 즉시 적용합니다.
+                </label>
+                <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E]">
+                  기본값 일괄 적용
+                </button>
+              </form>
+            </details>
+
+            {selectedNode ? (
+              <form action={updateMemberExposureAction} className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-3">
+                <input type="hidden" name="id" value={selectedNode.id} />
+                <label className="grid gap-1 text-xs font-semibold text-zinc-600">
+                  상태
+                  <select
+                    name="status"
+                    defaultValue={selectedNode.status}
+                    className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="INCOMPLETE">정보 미완성</option>
+                    <option value="READY">소개 가능</option>
+                    <option value="PROGRESSING">소개 진행 중</option>
+                    <option value="HOLD">잠시 보류</option>
+                    <option value="STOP_REQUESTED">탈퇴 요청</option>
+                    <option value="ARCHIVED">보관 완료</option>
+                    <option value="BLOCKED">운영 제한</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-zinc-600">
+                  오픈 레벨
+                  <select
+                    name="openLevel"
+                    defaultValue={selectedNode.openLevel}
+                    className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
+                  >
+                    <option value="PRIVATE">Operator 매칭</option>
+                    <option value="SEMI_OPEN">제한 노출</option>
+                    <option value="FULL_OPEN">전체 라운드</option>
+                  </select>
+                </label>
+                <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E]">
+                  상태 저장
+                </button>
+              </form>
+            ) : null}
+
             {selectedNode ? (
               <>
-                <form action={updateMemberExposureAction} className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-3">
-                  <input type="hidden" name="id" value={selectedNode.id} />
-                  <label className="grid gap-1 text-xs font-semibold text-zinc-600">
-                    상태
-                    <select name="status" defaultValue={selectedNode.status} className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100">
-                      <option value="INCOMPLETE">정보 미완성</option>
-                      <option value="READY">소개 가능</option>
-                      <option value="PROGRESSING">소개 진행 중</option>
-                      <option value="HOLD">잠시 보류</option>
-                      <option value="STOP_REQUESTED">탈퇴 요청</option>
-                      <option value="ARCHIVED">보관 완료</option>
-                      <option value="BLOCKED">운영 제한</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-semibold text-zinc-600">
-                    오픈 레벨
-                    <select name="openLevel" defaultValue={selectedNode.openLevel} className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100">
-                      <option value="PRIVATE">Operator 매칭</option>
-                      <option value="SEMI_OPEN">제한 노출</option>
-                      <option value="FULL_OPEN">전체 라운드</option>
-                    </select>
-                  </label>
-                  <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E]">
-                    상태 저장
-                  </button>
-                </form>
-
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">Relations</p>
                   <p className="text-xs font-semibold text-zinc-500">{selectedNodeEdges.length}개</p>
@@ -449,7 +626,11 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                 <div className="grid gap-2">
                   {selectedNodeEdges
                     .slice()
-                    .sort((a, b) => (b.updatedAtIso ? Date.parse(b.updatedAtIso) : -1) - (a.updatedAtIso ? Date.parse(a.updatedAtIso) : -1))
+                    .sort(
+                      (a, b) =>
+                        (b.updatedAtIso ? Date.parse(b.updatedAtIso) : -1) -
+                        (a.updatedAtIso ? Date.parse(a.updatedAtIso) : -1),
+                    )
                     .map((edge) => {
                       const source = edge.source as GraphNode;
                       const target = edge.target as GraphNode;
@@ -485,10 +666,10 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                   {selectedEdge ? (
                     <motion.section
                       key={selectedEdge.id}
-                      initial={{ opacity: 0, y: 8 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: 0.18 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
                       className="rounded-lg border border-zinc-200 bg-white p-3"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -519,21 +700,55 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function edgeColor(bucket: RelationshipBucket) {
-  if (bucket === "CONFIRMED") return "rgba(16, 185, 129, 0.92)";
-  if (bucket === "IN_PROGRESS") return "rgba(245, 158, 11, 0.92)";
+  if (bucket === "CONFIRMED") return "rgba(34, 197, 94, 0.92)";
+  if (bucket === "IN_PROGRESS") return "rgba(56, 189, 248, 0.92)";
   if (bucket === "REJECTED") return "rgba(244, 63, 94, 0.92)";
-  return "rgba(161, 161, 170, 0.55)";
-}
-
-function nodeBadgeClass(node: GraphNode) {
-  if (node.openLevel === "FULL_OPEN") return "border-white/20 bg-white/[0.06] text-white";
-  if (node.openLevel === "SEMI_OPEN") return "border-amber-500/25 bg-amber-500/10 text-amber-200";
-  return "border-zinc-500/25 bg-zinc-500/10 text-zinc-200";
+  return "rgba(161, 161, 170, 0.6)";
 }
 
 function chipForBucket(bucket: RelationshipBucket) {
   if (bucket === "CONFIRMED") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (bucket === "IN_PROGRESS") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (bucket === "IN_PROGRESS") return "border-sky-200 bg-sky-50 text-sky-800";
   if (bucket === "REJECTED") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-zinc-200 bg-zinc-50 text-zinc-700";
 }
+
+function cosmicStarClass(node: GraphNode, isHovered: boolean, isSelected: boolean) {
+  const base = isSelected ? "cosmic-star--selected" : isHovered ? "cosmic-star--hovered" : "cosmic-star--idle";
+  if (node.openLevel === "FULL_OPEN") return `${base} cosmic-star--open`;
+  if (node.openLevel === "SEMI_OPEN") return `${base} cosmic-star--semi`;
+  return `${base} cosmic-star--private`;
+}
+
+function latestEdgeLabel(edges: GraphEdge[]) {
+  const newest = edges
+    .slice()
+    .sort(
+      (a, b) =>
+        (b.updatedAtIso ? Date.parse(b.updatedAtIso) : -1) - (a.updatedAtIso ? Date.parse(a.updatedAtIso) : -1),
+    )[0];
+  return newest ? newest.updatedAtLabel : "-";
+}
+
+function curvedOrbitPath(x1: number, y1: number, x2: number, y2: number, seed: string) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.max(40, Math.sqrt(dx * dx + dy * dy));
+  const nx = -dy / len;
+  const ny = dx / len;
+  const offset = (hash(seed) % 21 - 10) * 6;
+  const cx = mx + nx * offset;
+  const cy = my + ny * offset;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
+function hash(value: string) {
+  let h = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    h = (h * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+

@@ -859,6 +859,77 @@ export async function updateMemberExposure(
   });
 }
 
+export async function bulkApplyRoundParticipationDefaults(input: { exceptNames: string[] }) {
+  const exceptSet = new Set(input.exceptNames.map(normalizeHumanName));
+
+  if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const roles = await supabaseRest<{ user_id: number }[]>(
+      "/user_roles?select=user_id&role=eq.PARTICIPANT&limit=2000",
+    );
+    const participantIds = new Set(roles.map((row) => row.user_id));
+    const users = await supabaseRest<{ id: number; name: string; status: UserStatus; open_level: OpenLevel | null }[]>(
+      "/users?select=id,name,status,open_level&limit=2000",
+    );
+
+    const results = { fullOpen: 0, private: 0, skipped: 0 };
+    for (const user of users) {
+      if (!participantIds.has(user.id)) continue;
+
+      const target = exceptSet.has(normalizeHumanName(user.name)) ? ("PRIVATE" as const) : ("FULL_OPEN" as const);
+      const current = user.open_level ?? "PRIVATE";
+
+      if (current !== target) {
+        await supabaseRest(`/users?id=eq.${user.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ open_level: target }),
+        });
+      }
+
+      await reconcileSupabaseEntryQueueForExposure(user.id, user.status, target, "admin:bulk-defaults");
+
+      if (target === "FULL_OPEN") results.fullOpen += 1;
+      else results.private += 1;
+      if (current === target) results.skipped += 1;
+    }
+
+    return results;
+  }
+
+  assertDatabaseUrl();
+
+  return prisma.$transaction(async (tx) => {
+    const participantUserIds = await tx.userRoleAssignment.findMany({
+      where: { role: "PARTICIPANT" },
+      select: { userId: true },
+    });
+    const participantIdSet = new Set(participantUserIds.map((row) => row.userId.toString()));
+    const users = await tx.user.findMany({
+      where: { id: { in: participantUserIds.map((row) => row.userId) } },
+      select: { id: true, name: true, status: true, openLevel: true },
+    });
+
+    const results = { fullOpen: 0, private: 0, skipped: 0 };
+    for (const user of users) {
+      if (!participantIdSet.has(user.id.toString())) continue;
+      const target = exceptSet.has(normalizeHumanName(user.name)) ? ("PRIVATE" as const) : ("FULL_OPEN" as const);
+      const current = user.openLevel ?? "PRIVATE";
+
+      if (current !== target) {
+        await tx.user.update({ where: { id: user.id }, data: { openLevel: target } });
+      } else {
+        results.skipped += 1;
+      }
+
+      await reconcileEntryQueueForExposureWithPrisma(tx, user.id, user.status, target, "admin:bulk-defaults");
+
+      if (target === "FULL_OPEN") results.fullOpen += 1;
+      else results.private += 1;
+    }
+
+    return results;
+  });
+}
+
 export async function deleteMember(id: bigint) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     return supabaseRest(`/users?id=eq.${id.toString()}`, {
@@ -1241,6 +1312,10 @@ type EntryQueueUpsertStatus = "WAITING" | "READY";
 
 function entryQueueStatusFor(status: UserStatus, openLevel: OpenLevel): EntryQueueUpsertStatus {
   return status === "READY" && openLevel === "FULL_OPEN" ? "READY" : "WAITING";
+}
+
+function normalizeHumanName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("ko-KR");
 }
 
 async function ensureSupabaseEntryQueueRow(
