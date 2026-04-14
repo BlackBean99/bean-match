@@ -89,6 +89,7 @@ FULL_OPEN → 전체 라운드 참여
 
 • FULL_OPEN만 전체 풀 노출
 • PRIVATE는 큐레이션 only
+• 사진을 제공한 사용자는 기본값을 Operator 매칭(PRIVATE)로 두지 않고, 기본 FULL_OPEN으로 간주한다. (운영자가 필요 시 하향 조정)
 
 5.3 Round System (핵심)
 라운드 정의
