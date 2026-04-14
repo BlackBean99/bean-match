@@ -1,0 +1,319 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  INCOMPLETE
+  READY
+  PROGRESSING
+  HOLD
+  STOP_REQUESTED
+  ARCHIVED
+  BLOCKED
+}
+
+enum UserRole {
+  PARTICIPANT
+  INVITOR
+  ADMIN
+}
+
+enum OpenLevel {
+  PRIVATE
+  SEMI_OPEN
+  FULL_OPEN
+}
+
+enum RoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  MATCHING
+  COMPLETED
+}
+
+enum EntryQueueStatus {
+  WAITING
+  READY
+  PROMOTED
+  CANCELLED
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum PhotoType {
+  PROFILE
+}
+
+enum IntroCaseStatus {
+  OFFERED
+  A_INTERESTED
+  B_OFFERED
+  WAITING_RESPONSE
+  MATCHED
+  CONNECTED
+  MEETING_DONE
+  RESULT_PENDING
+  SUCCESS
+  FAILED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum IntroParticipantRole {
+  PERSON_A
+  PERSON_B
+}
+
+enum IntroResponseStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id                   BigInt                 @id @default(autoincrement())
+  name                 String                 @db.VarChar(50)
+  gender               Gender
+  status               UserStatus             @default(INCOMPLETE)
+  openLevel            OpenLevel              @default(PRIVATE) @map("open_level")
+  birthDate            DateTime?              @map("birth_date") @db.Date
+  ageText              String?                @map("age_text") @db.VarChar(30)
+  phone                String?                @db.VarChar(30)
+  contactVisible       Boolean                @default(false) @map("contact_visible")
+  heightCm             Int?                   @map("height_cm")
+  jobTitle             String?                @map("job_title") @db.VarChar(100)
+  companyName          String?                @map("company_name") @db.VarChar(100)
+  selfIntro            String?                @map("self_intro")
+  idealTypeDescription String?                @map("ideal_type_description")
+  mainPhotoId          BigInt?                @map("main_photo_id")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  stopRequestedAt      DateTime?              @map("stop_requested_at")
+  archivedAt           DateTime?              @map("archived_at")
+  blockedAt            DateTime?              @map("blocked_at")
+  blockedReason        String?                @map("blocked_reason") @db.VarChar(255)
+  invitedByUserId      BigInt?                @map("invited_by_user_id")
+  roles                UserRoleAssignment[]
+  preference           UserPreference?
+  photos               UserPhoto[]
+  mainPhoto            UserPhoto?             @relation("UserMainPhoto", fields: [mainPhotoId], references: [id], onDelete: SetNull)
+  invitedBy            User?                  @relation("UserInvites", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  invitedUsers         User[]                 @relation("UserInvites")
+  introParticipations  IntroCaseParticipant[]
+  invitedIntroCases    IntroCase[]            @relation("InvitorIntroCases")
+  introEvents          IntroCaseEvent[]       @relation("IntroCaseEventActor")
+  stateHistory         UserStateHistory[]     @relation("UserStateHistoryUser")
+  actedStateChanges    UserStateHistory[]     @relation("UserStateHistoryActor")
+  roundSelectionsFrom  RoundSelection[]        @relation("RoundSelectionFromUser")
+  roundSelectionsTo    RoundSelection[]        @relation("RoundSelectionToUser")
+  entryQueues          EntryQueue[]
+
+  @@map("users")
+}
+
+model Round {
+  id          BigInt           @id @default(autoincrement())
+  title       String           @db.VarChar(120)
+  status      RoundStatus      @default(DRAFT)
+  startAt     DateTime         @map("start_at")
+  endAt       DateTime         @map("end_at")
+  selectionLimit Int           @default(2) @map("selection_limit")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  selections  RoundSelection[]
+
+  @@index([status, startAt])
+  @@map("rounds")
+}
+
+model RoundSelection {
+  id         BigInt   @id @default(autoincrement())
+  roundId    BigInt   @map("round_id")
+  fromUserId BigInt   @map("from_user_id")
+  toUserId   BigInt   @map("to_user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  round      Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  fromUser   User     @relation("RoundSelectionFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User     @relation("RoundSelectionToUser", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, fromUserId, toUserId])
+  @@index([roundId, toUserId])
+  @@index([fromUserId])
+  @@map("round_selections")
+}
+
+model EntryQueue {
+  id        BigInt           @id @default(autoincrement())
+  userId    BigInt           @map("user_id")
+  status    EntryQueueStatus @default(WAITING)
+  joinedAt  DateTime         @default(now()) @map("joined_at")
+  readyAt   DateTime?        @map("ready_at")
+  promotedAt DateTime?       @map("promoted_at")
+  memo      String?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, status])
+  @@index([status, joinedAt])
+  @@map("entry_queue")
+}
+
+model UserRoleAssignment {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  role      UserRole
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+model UserPreference {
+  id                 BigInt   @id @default(autoincrement())
+  userId             BigInt   @unique @map("user_id")
+  preferredGender    Gender?  @map("preferred_gender")
+  preferredAgeMin    Int?     @map("preferred_age_min")
+  preferredAgeMax    Int?     @map("preferred_age_max")
+  preferredHeightMin Int?     @map("preferred_height_min")
+  preferredHeightMax Int?     @map("preferred_height_max")
+  preferredJobText   String?  @map("preferred_job_text") @db.VarChar(255)
+  preferredStyleText String?  @map("preferred_style_text")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserPhoto {
+  id               BigInt    @id @default(autoincrement())
+  userId           BigInt    @map("user_id")
+  photoType        PhotoType @map("photo_type")
+  originalFileName String    @map("original_file_name") @db.VarChar(255)
+  storedFileName   String    @map("stored_file_name") @db.VarChar(255)
+  filePath         String    @map("file_path")
+  fileUrl          String?   @map("file_url")
+  mimeType         String    @map("mime_type") @db.VarChar(100)
+  fileSizeBytes    BigInt    @map("file_size_bytes")
+  widthPx          Int?      @map("width_px")
+  heightPx         Int?      @map("height_px")
+  sortOrder        Int       @default(0) @map("sort_order")
+  isMain           Boolean   @default(false) @map("is_main")
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at")
+  deletedAt        DateTime? @map("deleted_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainPhotoOf      User[]    @relation("UserMainPhoto")
+
+  @@index([userId, isMain])
+  @@map("user_photos")
+}
+
+model IntroCase {
+  id                BigInt                 @id @default(autoincrement())
+  status            IntroCaseStatus
+  invitorUserId     BigInt?                @map("invitor_user_id")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  offeredAt         DateTime?              @map("offered_at")
+  matchedAt         DateTime?              @map("matched_at")
+  connectedAt       DateTime?              @map("connected_at")
+  meetingDoneAt     DateTime?              @map("meeting_done_at")
+  resultConfirmedAt DateTime?              @map("result_confirmed_at")
+  closedAt          DateTime?              @map("closed_at")
+  memo              String?
+  invitor           User?                  @relation("InvitorIntroCases", fields: [invitorUserId], references: [id], onDelete: SetNull)
+  participants      IntroCaseParticipant[]
+  events            IntroCaseEvent[]
+
+  @@map("intro_cases")
+}
+
+model IntroCaseParticipant {
+  id              BigInt               @id @default(autoincrement())
+  introCaseId     BigInt               @map("intro_case_id")
+  userId          BigInt               @map("user_id")
+  participantRole IntroParticipantRole @map("participant_role")
+  responseStatus  IntroResponseStatus? @map("response_status")
+  respondedAt     DateTime?            @map("responded_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  introCase       IntroCase            @relation(fields: [introCaseId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([introCaseId, userId])
+  @@index([userId])
+  @@map("intro_case_participants")
+}
+
+model IntroCaseEvent {
+  id          BigInt           @id @default(autoincrement())
+  introCaseId BigInt           @map("intro_case_id")
+  fromStatus  IntroCaseStatus? @map("from_status")
+  toStatus    IntroCaseStatus  @map("to_status")
+  actorUserId BigInt?          @map("actor_user_id")
+  eventType   String           @map("event_type") @db.VarChar(50)
+  memo        String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  introCase   IntroCase        @relation(fields: [introCaseId], references: [id], onDelete: Cascade)
+  actor       User?            @relation("IntroCaseEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([introCaseId, createdAt])
+  @@map("intro_case_events")
+}
+
+model UserStateHistory {
+  id          BigInt      @id @default(autoincrement())
+  userId      BigInt      @map("user_id")
+  fromStatus  UserStatus? @map("from_status")
+  toStatus    UserStatus  @map("to_status")
+  actorUserId BigInt?     @map("actor_user_id")
+  reasonCode  String      @map("reason_code") @db.VarChar(50)
+  memo        String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  user        User        @relation("UserStateHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor       User?       @relation("UserStateHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("user_state_history")
+}
+
+model NotionSyncRecord {
+  id             BigInt    @id @default(autoincrement())
+  entityType     String    @map("entity_type") @db.VarChar(50)
+  entityId       BigInt    @map("entity_id")
+  notionPageId   String    @unique @map("notion_page_id") @db.VarChar(100)
+  checksum       String    @db.VarChar(64)
+  lastSyncedAt   DateTime  @default(now()) @map("last_synced_at")
+  notionEditedAt DateTime? @map("notion_edited_at")
+
+  @@unique([entityType, entityId])
+  @@index([entityType])
+  @@map("notion_sync_records")
+}
+
+model NotionRawRecord {
+  id             BigInt   @id @default(autoincrement())
+  sourceType     String   @map("source_type") @db.VarChar(50)
+  sourceId       String   @map("source_id") @db.VarChar(100)
+  sourceName     String   @map("source_name") @db.VarChar(100)
+  notionPageId   String   @unique @map("notion_page_id") @db.VarChar(100)
+  payload        Json
+  checksum       String   @db.VarChar(64)
+  lastSyncedAt   DateTime @default(now()) @map("last_synced_at")
+  notionEditedAt DateTime? @map("notion_edited_at")
+
+  @@index([sourceType, sourceId])
+  @@map("notion_raw_records")
+}

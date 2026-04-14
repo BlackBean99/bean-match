@@ -7,6 +7,9 @@
 
 ## 2. 주요 API 목록
 
+### 2.0 Operations
+- `POST /api/migration/notion` : 운영자가 수동으로 Notion 데이터를 Supabase로 동기화한다. 응답은 항상 JSON이며, 실패도 `status: "error"` 상태로 반환해 현재 페이지 URL로 잘못 POST하지 않게 한다.
+
 ### 2.1 User
 - `POST /api/users` : 사용자 생성
 - `GET /api/users/{id}` : 사용자 상세 조회
@@ -26,6 +29,7 @@
 - `PATCH /api/users/{id}/photos/{photoId}/main` : 대표 사진 변경
 - `DELETE /api/users/{id}/photos/{photoId}` : 사진 삭제
 - `GET /api/users/{id}/photos/{photoId}` : 사진 조회/다운로드
+- `GET /api/photos/{photoId}` : 앱 내부 사진 표시 URL. Supabase Storage 사진은 저장 URL을 서버에서 프록시하고, Notion 동기화 사진은 Notion 파일 URL을 최신 URL로 갱신한 뒤 서버에서 프록시한다.
 
 ### 2.5 IntroCase
 - `POST /api/intro-cases` : 소개 건 생성
@@ -33,6 +37,15 @@
 - `PATCH /api/intro-cases/{id}/status` : 소개 건 상태 변경
 - `POST /api/intro-cases/{id}/responses` : 참여자 응답 등록
 - `POST /api/intro-cases/{id}/result` : 결과 확인 등록
+
+### 2.6 Round / Selection
+- `GET /rounds/{roundId}/participants/{userId}` : 참가자가 라운드 후보를 보고 최대 2명을 선택하는 공유 URL
+- `POST /rounds/{roundId}/participants/{userId}` : 라운드 선택 저장. 실제 구현은 Server Action을 사용한다.
+- `GET /invite/{invitorId}` : 모집인 초대 링크. 온보딩 폼에 `invitorId`를 전달한다.
+- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 온보딩 URL
+- `GET /rounds` : 관리자 라운드 운영 화면
+- `GET /users` : 관리자 사용자 풀 화면
+- `GET /matches` : 관리자 매칭 조율 화면
 
 ---
 
@@ -59,13 +72,16 @@
 
 ### 4.1 저장 원칙
 - DB에는 이미지 바이너리를 저장하지 않는다.
-- 서버 디스크에 원본을 저장한다.
+- 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
+- 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage 같은 외부 오브젝트 스토리지에 저장한다.
+- Notion에서 가져온 파일은 Notion 파일 URL을 메타데이터로 동기화하며, 바이너리를 재복사하지 않는다.
+- Notion 파일 URL은 만료될 수 있으므로 UI에는 저장된 외부 URL을 직접 노출하지 않고 `/api/photos/{photoId}`를 사용한다. 이 라우트는 Notion 원본을 수정하지 않고 필요한 경우 Supabase의 `file_url`/`file_path`만 최신 표시 URL로 갱신한 뒤 이미지 바이트를 서버에서 프록시한다.
 - DB에는 메타데이터를 저장한다.
 
 ### 4.2 저장 예시
 파일 경로 예시:
 
-`/var/app/uploads/profile/2026/04/07/{uuid}.jpg`
+`user-photos/users/{user_id}/{uuid}.jpg`
 
 저장 메타데이터:
 - `original_file_name`
@@ -101,7 +117,7 @@
 - 연락처는 `CONNECTED` 전까지 비공개 정책을 권장
 
 ### 5.2 업로드 보안
-- 허용 MIME type 제한: `image/jpeg`, `image/png`, `image/webp`
+- 허용 MIME type 제한: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
 - 최대 파일 크기 제한
 - 파일 헤더 검사
 - 실행 가능 파일 업로드 금지
@@ -139,6 +155,14 @@
 4. `IntroCase` 생성
 5. 참여자 매핑 생성
 6. 두 사용자 상태를 `PROGRESSING` 으로 전환
+
+### 라운드 선택
+1. 라운드가 `OPEN` 상태인지 검증
+2. 선택한 사용자가 `READY` + `FULL_OPEN` 인지 검증
+3. 선택 대상이 `READY` 상태인지 검증
+4. 자기 자신 선택 금지
+5. 사용자당 라운드 선택 수가 2명을 넘지 않는지 검증
+6. 선택 기록은 직접 수정하지 않고 운영자 판단 대상으로 남김
 
 ---
 

@@ -23,18 +23,18 @@ Speed + Precision + Delight
 👉 핵심: 고채도 + 제한된 팔레트
 
 Primary
-Electric Purple: #7B61FF
-Neon Pink: #FF3CAC
+Action Red: #FF3131
+Deep Red: #E00E0E
 Secondary
-Deep Black: #0B0B0F
-Dark Gray: #1A1A22
+White: #FFFFFF
+Near Black: #18181B
 Accent
-Cyan Glow: #00E5FF
-Lime Highlight: #A3FF12
+Light Red Surface: #FEF2F2
+Neutral Line: #E4E4E7
 ⚠️ 규칙
-배경은 항상 어둡게
-컬러는 포인트로만 사용
-한 화면에 2개 이상 포인트 색 금지
+운영 화면 배경은 흰색을 기본으로 사용
+#FF3131, #E00E0E는 주요 액션과 상태 강조에만 사용
+테이블, 필터, 폼은 회색 선과 흰 배경으로 정보 밀도를 높임
 3. Typography
 Font Strategy
 Heading: Inter / Space Grotesk
@@ -62,10 +62,10 @@ Section Gap: 80px
 카드 중심 레이아웃
 중앙 정렬
 정보 밀도 낮음
-❗ 금지
-복잡한 테이블 UI
-정보 과다 노출
-긴 텍스트 블록
+❗ 운영 화면 예외
+사용자 풀과 매칭 기록은 많은 행을 한 번에 볼 수 있도록 테이블 UI를 우선 사용
+연락처처럼 공개 정책이 있는 정보는 목록에서 제외
+긴 텍스트는 요약 표시 후 수정 영역에서 관리
 5. Interaction System
 
 이 서비스의 핵심이다.
