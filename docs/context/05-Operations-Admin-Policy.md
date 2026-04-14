@@ -66,12 +66,14 @@
 ### 2.5 공유 URL 관리
 운영자는 사용자 유형별로 다른 URL을 공유한다.
 
-- 사용자 온보딩: `/onboarding` 또는 `/invite/{invitorId}`
+- 사용자 라운드 참여 진입: `/onboarding` 또는 `/invite/{invitorId}`
 - 사용자 라운드 선택: `/rounds/{roundId}/participants/{userId}`
 - 모집인 초대: `/invite/{invitorId}`
 - 관리자 운영: `/users`, `/rounds`, `/matches`, `/users/{userId}`
+- 관리자 테스트 참여: `/rounds/{roundId}/test`
 
 참가자와 모집인에게 관리자 운영 URL을 공유하지 않는다. 참가자 라운드 선택 URL에는 연락처를 노출하지 않는다.
+관리자 테스트 참여 URL은 실제 `round_selections` 데이터를 저장하지 않고 화면/후보 노출이 정상인지 확인하는 용도다.
 
 ---
 
@@ -90,6 +92,8 @@
 - `READY` + `FULL_OPEN` 사용자만 전체 라운드 후보로 노출한다.
 - `PRIVATE` 사용자는 운영자 큐레이션 대상으로만 관리한다.
 - `SEMI_OPEN` 사용자는 제한된 풀 또는 운영자 판단 대상으로 관리한다.
+- 사진을 제공한 사용자는 기본적으로 `FULL_OPEN` 으로 간주한다. (운영자가 필요 시 `SEMI_OPEN/PRIVATE` 로 조정)
+- 참가자가 직접 라운드에 들어오려면 `FULL_OPEN` 전체 노출에 동의해야 하며, 제한 노출 상태로는 라운드 선택을 할 수 없다.
 - `PROGRESSING` 사용자는 어떤 라운드 후보에서도 제외한다.
 - 과다 선택 사용자는 운영자가 다음 라운드 노출을 제한할 수 있다.
 

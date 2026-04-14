@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { OpenLevel, RoundStatus } from "@/lib/domain";
 import {
   createOnboardingUser,
   createRound,
   createRoundSelection,
   createRoundSelections,
+  joinCurrentRoundWithExistingUser,
   updateRoundStatus,
 } from "@/lib/round-repository";
 
@@ -71,6 +73,21 @@ export async function createOnboardingUserAction(formData: FormData) {
     invitorUserId: readString(formData, "invitorUserId") ? parseNamedId(formData, "invitorUserId") : null,
   });
   revalidateRounds();
+}
+
+export async function joinCurrentRoundAction(formData: FormData) {
+  const agreedToFullOpen = formData.get("fullOpenConsent") === "on";
+  if (!agreedToFullOpen) {
+    throw new Error("전체 노출에 동의해야 현재 라운드에 참여할 수 있습니다.");
+  }
+
+  const result = await joinCurrentRoundWithExistingUser({
+    userId: parseNamedId(formData, "userId"),
+    name: readRequiredString(formData, "name"),
+    invitorUserId: readString(formData, "invitorUserId") ? parseNamedId(formData, "invitorUserId") : null,
+  });
+  revalidateRounds();
+  redirect(`/rounds/${result.roundId.toString()}/participants/${result.userId.toString()}`);
 }
 
 function revalidateRounds() {

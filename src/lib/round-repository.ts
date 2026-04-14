@@ -65,6 +65,12 @@ export type OnboardingInput = {
   invitorUserId: bigint | null;
 };
 
+export type RoundEntryInput = {
+  userId: bigint;
+  name: string;
+  invitorUserId: bigint | null;
+};
+
 export async function getRoundDashboardData(): Promise<RoundDashboardData> {
   const memberData = await getMemberDashboardData();
   if (!hasSupabaseRestConfig()) {
@@ -218,6 +224,41 @@ export async function createOnboardingUser(input: OnboardingInput) {
   return user;
 }
 
+export async function joinCurrentRoundWithExistingUser(input: RoundEntryInput) {
+  const user = await getRoundEntryUser(input.userId);
+  if (!user) throw new Error("입력한 ID에 해당하는 사용자 정보를 찾을 수 없습니다.");
+  if (normalizeName(user.name) !== normalizeName(input.name)) {
+    throw new Error("입력한 이름이 기존 사용자 정보와 일치하지 않습니다.");
+  }
+  if (user.status === "PROGRESSING") {
+    throw new Error("소개 진행 중인 사용자는 현재 라운드에 참여할 수 없습니다.");
+  }
+  if (["STOP_REQUESTED", "ARCHIVED", "BLOCKED"].includes(user.status)) {
+    throw new Error("운영 제한 또는 보관 상태의 사용자는 라운드에 참여할 수 없습니다.");
+  }
+  if (input.invitorUserId && user.invited_by_user_id && user.invited_by_user_id !== Number(input.invitorUserId)) {
+    throw new Error("모집인 초대 정보가 기존 사용자 데이터와 일치하지 않습니다.");
+  }
+
+  const round = await getCurrentOpenRound();
+  if (!round) throw new Error("현재 참여 가능한 OPEN 라운드가 없습니다.");
+
+  await supabaseRest(`/users?id=eq.${input.userId.toString()}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "READY",
+      open_level: "FULL_OPEN",
+      invited_by_user_id: input.invitorUserId ? Number(input.invitorUserId) : user.invited_by_user_id,
+    }),
+  });
+  await upsertReadyEntryQueue(input.userId, input.invitorUserId);
+
+  return {
+    roundId: BigInt(round.id),
+    userId: input.userId,
+  };
+}
+
 export async function getParticipantRoundData(roundId: bigint, userId: bigint): Promise<ParticipantRoundData> {
   const memberData = await getMemberDashboardData();
   const actor = memberData.allUsers.find((user) => user.id === Number(userId)) ?? null;
@@ -229,6 +270,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      isTestMode: false,
       databaseConnected: false,
       loadError: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
     };
@@ -241,6 +283,19 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
         `/round_selections?select=*&round_id=eq.${roundId.toString()}&order=created_at.asc,id.asc`,
       ),
     ]);
+    if (!actor || actor.status !== "READY" || actor.openLevel !== "FULL_OPEN") {
+      return {
+        actor,
+        round: round ? toDashboardRound(round, 0, selectionRows) : null,
+        candidates: [],
+        selectedCount: 0,
+        selectionLimit: round?.selection_limit ?? 2,
+        isTestMode: false,
+        databaseConnected: true,
+        loadError: "READY + FULL_OPEN 사용자만 현재 라운드 후보를 볼 수 있습니다.",
+      };
+    }
+
     const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
     const selectedToUserIds = new Set(
       selectionRows.filter((selection) => selection.from_user_id === Number(userId)).map((selection) => selection.to_user_id),
@@ -261,6 +316,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       candidates,
       selectedCount: selectedToUserIds.size,
       selectionLimit: round?.selection_limit ?? 2,
+      isTestMode: false,
       databaseConnected: true,
       loadError: null,
     };
@@ -271,8 +327,62 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      isTestMode: false,
       databaseConnected: false,
       loadError: error instanceof Error ? error.message : "Participant round query failed.",
+    };
+  }
+}
+
+export async function getAdminTestRoundData(roundId: bigint): Promise<ParticipantRoundData> {
+  const memberData = await getMemberDashboardData();
+  const testActor = createAdminTestActor();
+
+  if (!hasSupabaseRestConfig()) {
+    return {
+      actor: testActor,
+      round: null,
+      candidates: [],
+      selectedCount: 0,
+      selectionLimit: 2,
+      isTestMode: true,
+      databaseConnected: false,
+      loadError: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
+    };
+  }
+
+  try {
+    const [round, selectionRows] = await Promise.all([
+      getRoundOrNull(roundId),
+      supabaseRest<RoundSelectionRow[]>(
+        `/round_selections?select=*&round_id=eq.${roundId.toString()}&order=created_at.asc,id.asc`,
+      ),
+    ]);
+    const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
+    const candidates = memberData.allUsers
+      .filter((user) => user.status === "READY" && user.openLevel === "FULL_OPEN" && !activeIntroUserIds.has(user.id))
+      .map((user) => ({ ...user, alreadySelected: false }));
+
+    return {
+      actor: testActor,
+      round: round ? toDashboardRound(round, candidates.length, selectionRows) : null,
+      candidates,
+      selectedCount: 0,
+      selectionLimit: round?.selection_limit ?? 2,
+      isTestMode: true,
+      databaseConnected: true,
+      loadError: null,
+    };
+  } catch (error) {
+    return {
+      actor: testActor,
+      round: null,
+      candidates: [],
+      selectedCount: 0,
+      selectionLimit: 2,
+      isTestMode: true,
+      databaseConnected: false,
+      loadError: error instanceof Error ? error.message : "Admin test round query failed.",
     };
   }
 }
@@ -292,6 +402,86 @@ async function getRoundOrNull(roundId: bigint) {
     `/rounds?select=*&id=eq.${roundId.toString()}&limit=1`,
   );
   return round ?? null;
+}
+
+async function getCurrentOpenRound() {
+  const [round] = await supabaseRest<RoundRow[]>(
+    "/rounds?select=*&status=eq.OPEN&order=end_at.asc,start_at.asc,id.asc&limit=1",
+  );
+  return round ?? null;
+}
+
+async function getRoundEntryUser(userId: bigint) {
+  const [user] = await supabaseRest<
+    {
+      id: number;
+      name: string;
+      status: string;
+      open_level: OpenLevel | null;
+      invited_by_user_id: number | null;
+    }[]
+  >(`/users?select=id,name,status,open_level,invited_by_user_id&id=eq.${userId.toString()}&limit=1`);
+  return user ?? null;
+}
+
+async function upsertReadyEntryQueue(userId: bigint, invitorUserId: bigint | null) {
+  const [existing] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId.toString()}&status=eq.READY&limit=1`,
+  );
+  const payload = {
+    ready_at: new Date().toISOString(),
+    memo: invitorUserId ? `round-entry:update:invitor=${invitorUserId.toString()}` : "round-entry:update",
+  };
+
+  if (existing) {
+    await supabaseRest(`/entry_queue?id=eq.${existing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return;
+  }
+
+  const [waiting] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId.toString()}&status=eq.WAITING&limit=1`,
+  );
+  if (waiting) {
+    await supabaseRest(`/entry_queue?id=eq.${waiting.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "READY", ...payload }),
+    });
+    return;
+  }
+
+  await supabaseRest("/entry_queue", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      status: "READY",
+      ...payload,
+    }),
+  });
+}
+
+function normalizeName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("ko-KR");
+}
+
+function createAdminTestActor(): DashboardUser {
+  return {
+    id: 0,
+    name: "관리자 테스트 계정",
+    age: 0,
+    ageSortValue: 0,
+    gender: "비공개",
+    genderCode: "UNDISCLOSED",
+    heightCm: 0,
+    jobTitle: "운영 테스트",
+    status: "READY",
+    openLevel: "FULL_OPEN",
+    roles: ["ADMIN"],
+    hasMainPhoto: false,
+    lastChangedAt: "test",
+  };
 }
 
 function groupSelectionsByRoundId(rows: RoundSelectionRow[]) {

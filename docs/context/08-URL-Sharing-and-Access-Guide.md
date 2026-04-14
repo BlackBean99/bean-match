@@ -3,14 +3,25 @@
 ## 목적
 2026-04-14 요구사항 기준으로 사용자, 모집인, 관리자가 서로 다른 URL을 받도록 운영한다. URL은 역할별 목적을 분리하고, 연락처와 운영자 기능을 불필요하게 노출하지 않기 위한 경계다.
 
-## 사용자(PARTICIPANT)
-사용자는 가입과 라운드 선택 URL만 받는다.
+## 기본 전제(호스트)
+- 로컬 개발: `http://localhost:3000`
+- 같은 LAN 테스트: `npm run dev` 출력의 `Network` 주소 사용
+- 외부 퍼블리싱(도메인/공개 IP)은 별도 배포 구성이 필요하다. (`docs/context/09-Deployment-and-Env.md`)
 
-- 온보딩: `/onboarding`
+## 사용자(PARTICIPANT)
+사용자는 라운드 참여 진입과 라운드 선택 URL만 받는다.
+
+- 라운드 참여 진입: `/onboarding`
 - 모집인 초대 기반 온보딩: `/invite/{invitorId}` 또는 `/onboarding?invitorId={invitorId}`
 - 라운드 선택: `/rounds/{roundId}/participants/{userId}`
 
-사용자 라운드 URL에서 가능한 일:
+라운드 참여 진입 URL에서 가능한 일:
+- 모집인이 먼저 생성한 데이터 ID와 본인 이름 입력
+- 현재 라운드 참여를 위한 `FULL_OPEN` 전체 노출 동의
+- 기존 사용자 데이터의 상태와 엔트리 큐 갱신
+- 현재 OPEN 라운드 선택 URL로 이동
+
+사용자 라운드 선택 URL에서 가능한 일:
 - 라운드 후보 확인
 - 최대 2명 선택
 - 이미 선택한 후보 확인
@@ -44,6 +55,7 @@
 - 사용자 상세: `/users/{userId}`
 - 라운드 운영: `/rounds`
 - 매칭 조율: `/matches`
+- 관리자 테스트 참여: `/rounds/{roundId}/test`
 - Notion 동기화: 운영 화면의 `Notion -> Supabase 동기화` 버튼
 
 관리자가 할 수 있는 일:
@@ -54,9 +66,11 @@
 - Fast Track 실행 판단
 - 노출 제한과 후보 재배치
 - `CONNECTED` 이후 연락처 공개 정책 처리
+- 실제 데이터 저장 없이 라운드 후보 노출과 참여 화면 테스트
 
 ## 공유 원칙
 - 공개 공유 URL은 `/invite/{invitorId}` 와 `/rounds/{roundId}/participants/{userId}` 만 사용한다.
+- `/onboarding` 은 기존 사용자 데이터 ID와 이름을 확인하는 라운드 진입점으로 사용한다.
 - 관리자 URL은 내부 운영자에게만 공유한다.
 - 연락처는 `CONNECTED` 전까지 어떤 URL에서도 노출하지 않는다.
 - `PROGRESSING` 사용자는 라운드 후보와 신규 소개 생성에서 제외한다.

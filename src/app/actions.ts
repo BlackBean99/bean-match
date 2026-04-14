@@ -15,6 +15,7 @@ import {
   uploadUserPhotoFile,
   updateIntroCase,
   updateMember,
+  updateMemberExposure,
 } from "@/lib/member-repository";
 
 const genderValues = new Set(Object.values(Gender));
@@ -38,6 +39,18 @@ export async function deleteMemberAction(formData: FormData) {
   const id = parseId(formData);
   await deleteMember(id);
   revalidatePath("/");
+}
+
+export async function updateMemberExposureAction(formData: FormData) {
+  const id = parseId(formData);
+  await updateMemberExposure(id, {
+    status: readEnum(formData, "status", statusValues, UserStatus.INCOMPLETE),
+    openLevel: readEnum(formData, "openLevel", openLevelValues, "PRIVATE"),
+  });
+  revalidatePath(`/users/${id.toString()}`);
+  revalidatePath("/users");
+  revalidatePath("/matches");
+  revalidatePath("/rounds");
 }
 
 export async function createIntroCaseAction(formData: FormData) {

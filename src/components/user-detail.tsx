@@ -25,6 +25,7 @@ export function UserDetail({ user }: UserDetailProps) {
         <div className="mt-5 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-zinc-950">{user.name}</h2>
+            <p className="mt-1 text-xs font-semibold text-zinc-500">UserId {user.id}</p>
             <p className="mt-2 text-sm text-zinc-600">
               {user.gender} · {formatAge(user)} · {user.heightCm > 0 ? `${user.heightCm}cm` : "키 미입력"}
             </p>

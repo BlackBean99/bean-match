@@ -11,6 +11,7 @@
 - `context/06-design-style-generic-guide.md`: 디자인 스타일 가이드
 - `context/07-Technical-Specification.md`: 기술 스택과 인프라 방향
 - `context/08-URL-Sharing-and-Access-Guide.md`: 사용자/모집인/관리자 URL 공유 방식
+- `context/09-Deployment-and-Env.md`: 배포/환경 변수 구성
 - `context/SUPABASE_NOTION_SYNC.md`: Supabase/Notion 동기화 운영 문서
 
 ## Operations
