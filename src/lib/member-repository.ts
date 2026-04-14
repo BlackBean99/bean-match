@@ -273,7 +273,8 @@ async function getMemberDashboardDataFromSupabaseRest(filters: MemberFilterState
         selfIntro: user.self_intro ?? "",
         idealTypeDescription: user.ideal_type_description ?? "",
         status: user.status,
-        openLevel: user.open_level ?? "PRIVATE",
+        // 정책: 사진을 제공한 사람은 디폴트로 FULL_OPEN. (명시적 open_level이 있으면 그 값을 우선)
+        openLevel: user.open_level ?? (mainPhoto ? "FULL_OPEN" : "PRIVATE"),
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(mainPhoto),
         mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
