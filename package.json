@@ -1,0 +1,38 @@
+{
+  "name": "blackbean-match-admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postbuild": "node scripts/fix-next-server-chunks.mjs && node scripts/verify-next-server-bundle.mjs",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "verify:server-bundle": "node scripts/fix-next-server-chunks.mjs && node scripts/verify-next-server-bundle.mjs",
+    "sync:notion": "node scripts/sync-notion-to-supabase.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "framer-motion": "^12.0.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.0",
+    "prettier": "^3.3.0",
+    "prisma": "^6.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.8.0"
+  }
+}
