@@ -441,6 +441,17 @@ async function upsertReadyEntryQueue(userId: bigint, invitorUserId: bigint | nul
     return;
   }
 
+  const [waiting] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId.toString()}&status=eq.WAITING&limit=1`,
+  );
+  if (waiting) {
+    await supabaseRest(`/entry_queue?id=eq.${waiting.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "READY", ...payload }),
+    });
+    return;
+  }
+
   await supabaseRest("/entry_queue", {
     method: "POST",
     body: JSON.stringify({

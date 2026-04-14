@@ -47,6 +47,23 @@ const userStatusValues = new Set([
 ]);
 
 const userRoleValues = new Set(["PARTICIPANT", "INVITOR", "ADMIN"]);
+const openLevelValues = new Set(["PRIVATE", "SEMI_OPEN", "FULL_OPEN"]);
+const openLevelMap = new Map([
+  ["private", "PRIVATE"],
+  ["semi_open", "SEMI_OPEN"],
+  ["full_open", "FULL_OPEN"],
+  ["operator", "PRIVATE"],
+  ["operator only", "PRIVATE"],
+  ["operator matching", "PRIVATE"],
+  ["운영자", "PRIVATE"],
+  ["운영자만", "PRIVATE"],
+  ["제한", "SEMI_OPEN"],
+  ["제한 노출", "SEMI_OPEN"],
+  ["전체", "FULL_OPEN"],
+  ["전체 노출", "FULL_OPEN"],
+  ["풀", "FULL_OPEN"],
+  ["풀 오픈", "FULL_OPEN"],
+]);
 
 const userStatusMap = new Map([
   ["정보 미완성", "INCOMPLETE"],
@@ -171,6 +188,8 @@ async function writeUserFromNotion(existingSync, input, page, checksum, rawCheck
         });
       }
 
+      await ensureEntryQueueWithPrisma(tx, user, input.roles);
+
       await tx.notionSyncRecord.upsert({
         where: { notionPageId: page.id },
         create: {
@@ -219,6 +238,8 @@ async function writeUserFromNotion(existingSync, input, page, checksum, rawCheck
     method: "POST",
     body: JSON.stringify(input.roles.map((role) => ({ user_id: user.id, role }))),
   });
+
+  await ensureEntryQueueWithSupabase(user.id, user, input.roles);
 
   await syncUserPhotosWithSupabase(user.id, page.id, input.photos);
 
@@ -310,12 +331,21 @@ function mapUserPage(page, defaultRoles) {
   const roles = multiSelectProp(findProperty(props, ["Roles", "roles", "역할"]))
     .map((role) => enumValue(role, userRoleValues, null))
     .filter(Boolean);
+  const photos = filesProp(findProperty(props, ["Photos", "photos", "Picture", "picture", "사진"]));
+  const openLevel =
+    enumValue(
+      selectProp(findProperty(props, ["Open level", "OpenLevel", "open_level", "노출", "오픈레벨", "공개"])),
+      openLevelValues,
+      null,
+      openLevelMap,
+    ) || (photos.length > 0 ? "FULL_OPEN" : "PRIVATE");
 
   return {
     user: {
       name,
       gender,
       status,
+      openLevel,
       birthDate: dateProp(findProperty(props, ["Birth date", "BirthDate", "birth_date", "생년월일"])),
       ageText: textProp(findProperty(props, ["Age", "age", "age_text", "나이", "출생연도"])),
       phone: textProp(findProperty(props, ["Phone", "phone", "연락처", "전화번호"])),
@@ -330,7 +360,7 @@ function mapUserPage(page, defaultRoles) {
         findProperty(props, ["Ideal type", "IdealType", "ideal_type_description", "이상형"]),
       ),
     },
-    photos: filesProp(findProperty(props, ["Photos", "photos", "Picture", "picture", "사진"])),
+    photos,
     roles: roles.length > 0 ? roles : defaultRoles,
   };
 }
@@ -514,6 +544,7 @@ function toSupabaseUserPayload(user) {
     name: user.name,
     gender: user.gender,
     status: user.status,
+    open_level: user.openLevel,
     birth_date: user.birthDate ? user.birthDate.toISOString().slice(0, 10) : null,
     age_text: user.ageText,
     phone: user.phone,
@@ -524,6 +555,41 @@ function toSupabaseUserPayload(user) {
     self_intro: user.selfIntro,
     ideal_type_description: user.idealTypeDescription,
   };
+}
+
+function entryQueueStatusForUser(user) {
+  return user.status === "READY" && user.openLevel === "FULL_OPEN" ? "READY" : "WAITING";
+}
+
+async function ensureEntryQueueWithPrisma(tx, user, roles) {
+  if (!roles.includes("PARTICIPANT")) return;
+
+  const existing = await tx.entryQueue.findFirst({ where: { userId: user.id }, select: { id: true } });
+  if (existing) return;
+
+  await tx.entryQueue.create({
+    data: {
+      userId: user.id,
+      status: entryQueueStatusForUser(user),
+      memo: "notion-sync",
+    },
+  });
+}
+
+async function ensureEntryQueueWithSupabase(userId, user, roles) {
+  if (!roles.includes("PARTICIPANT")) return;
+
+  const rows = await supabaseRest(`/entry_queue?select=id&user_id=eq.${userId}&limit=1`);
+  if (Array.isArray(rows) && rows.length > 0) return;
+
+  await supabaseRest("/entry_queue", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: userId,
+      status: entryQueueStatusForUser(user),
+      memo: "notion-sync",
+    }),
+  });
 }
 
 async function syncUserPhotosWithPrisma(tx, userId, notionPageId, photos) {

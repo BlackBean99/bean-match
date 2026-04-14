@@ -303,36 +303,56 @@ async function getMemberDashboardDataFromSupabaseRest(filters: MemberFilterState
 
 export async function createMember(input: MemberInput) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const normalizedRoles = normalizeRoles(input.roles);
     const [user] = await supabaseRest<SupabaseUserRow[]>("/users?select=*", {
       method: "POST",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabaseUserPayload(input, true)),
     });
 
-    await upsertSupabaseRoles(user.id, input.roles);
+    await upsertSupabaseRoles(user.id, normalizedRoles);
+    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+      await ensureSupabaseEntryQueueRow(user.id, input.status, input.openLevel, "member:create");
+    }
     return user;
   }
 
   assertDatabaseUrl();
 
-  return prisma.user.create({
-    data: {
-      name: input.name,
-      gender: input.gender,
-      status: input.status,
-      openLevel: input.openLevel,
-      birthDate: input.birthDate,
-      ageText: input.ageText,
-      heightCm: input.heightCm,
-      jobTitle: input.jobTitle,
-      companyName: input.companyName,
-      selfIntro: input.selfIntro,
-      idealTypeDescription: input.idealTypeDescription,
-      phone: input.phone,
-      roles: {
-        create: normalizeRoles(input.roles).map((role) => ({ role })),
+  const normalizedRoles = normalizeRoles(input.roles);
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name: input.name,
+        gender: input.gender,
+        status: input.status,
+        openLevel: input.openLevel,
+        birthDate: input.birthDate,
+        ageText: input.ageText,
+        heightCm: input.heightCm,
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        selfIntro: input.selfIntro,
+        idealTypeDescription: input.idealTypeDescription,
+        phone: input.phone,
+        roles: {
+          create: normalizedRoles.map((role) => ({ role })),
+        },
       },
-    },
+    });
+
+    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+      await tx.entryQueue.create({
+        data: {
+          userId: user.id,
+          status: entryQueueStatusFor(user.status, user.openLevel),
+          memo: "member:create",
+        },
+      });
+    }
+
+    return user;
   });
 }
 
@@ -515,6 +535,7 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
       body: JSON.stringify(toSupabasePhotoPayload(numericUserId, photoInput)),
     });
     if (shouldBeMain) await updateSupabaseMainPhoto(numericUserId, photo.id);
+    await promoteUserToFullOpenOnPhotoSupabase(numericUserId);
     return photo;
   }
 
@@ -532,6 +553,7 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
     if (shouldBeMain) {
       await tx.user.update({ where: { id: userId }, data: { mainPhotoId: photo.id } });
     }
+    await promoteUserToFullOpenOnPhotoPrisma(tx, userId);
     return photo;
   });
 }
@@ -1171,6 +1193,145 @@ function getSupabaseUrl() {
 
 function getSupabaseServerKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+}
+
+type EntryQueueUpsertStatus = "WAITING" | "READY";
+
+function entryQueueStatusFor(status: UserStatus, openLevel: OpenLevel): EntryQueueUpsertStatus {
+  return status === "READY" && openLevel === "FULL_OPEN" ? "READY" : "WAITING";
+}
+
+async function ensureSupabaseEntryQueueRow(
+  userId: number,
+  status: UserStatus,
+  openLevel: OpenLevel,
+  memo: string,
+) {
+  if (!hasSupabaseRestConfig()) return;
+
+  const [existing] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId}&limit=1`,
+  );
+  if (existing) return;
+
+  await supabaseRest("/entry_queue", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: userId,
+      status: entryQueueStatusFor(status, openLevel),
+      memo,
+    }),
+  });
+}
+
+async function promoteUserToFullOpenOnPhotoSupabase(userId: number) {
+  if (!hasSupabaseRestConfig()) return;
+
+  const roles = await supabaseRest<{ role: UserRole }[]>(`/user_roles?select=role&user_id=eq.${userId}`);
+  if (!roles.some((row) => row.role === ("PARTICIPANT" as UserRole))) return;
+
+  const [user] = await supabaseRest<
+    { id: number; status: UserStatus; open_level: OpenLevel | null }[]
+  >(`/users?select=id,status,open_level&id=eq.${userId}&limit=1`);
+  if (!user) return;
+
+  if (user.open_level !== "FULL_OPEN") {
+    await supabaseRest(`/users?id=eq.${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ open_level: "FULL_OPEN" }),
+    });
+  }
+
+  if (user.status !== "READY") return;
+
+  const payload = {
+    ready_at: new Date().toISOString(),
+    memo: "auto:photo:full-open",
+  };
+
+  const [ready] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId}&status=eq.READY&limit=1`,
+  );
+  if (ready) {
+    await supabaseRest(`/entry_queue?id=eq.${ready.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return;
+  }
+
+  const [waiting] = await supabaseRest<{ id: number }[]>(
+    `/entry_queue?select=id&user_id=eq.${userId}&status=eq.WAITING&limit=1`,
+  );
+  if (waiting) {
+    await supabaseRest(`/entry_queue?id=eq.${waiting.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "READY", ...payload }),
+    });
+    return;
+  }
+
+  await supabaseRest("/entry_queue", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: userId,
+      status: "READY",
+      ...payload,
+    }),
+  });
+}
+
+async function promoteUserToFullOpenOnPhotoPrisma(tx: Prisma.TransactionClient, userId: bigint) {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true, openLevel: true } });
+  if (!user) return;
+
+  const roleCount = await tx.userRoleAssignment.count({
+    where: { userId, role: "PARTICIPANT" },
+  });
+  if (roleCount === 0) return;
+
+  if (user.openLevel !== "FULL_OPEN") {
+    await tx.user.update({ where: { id: userId }, data: { openLevel: "FULL_OPEN" } });
+  }
+
+  if (user.status !== "READY") return;
+
+  const payload = {
+    readyAt: new Date(),
+    memo: "auto:photo:full-open",
+  };
+
+  const ready = await tx.entryQueue.findUnique({
+    where: { userId_status: { userId, status: "READY" } },
+    select: { id: true },
+  });
+  if (ready) {
+    await tx.entryQueue.update({
+      where: { id: ready.id },
+      data: payload,
+    });
+    return;
+  }
+
+  const waiting = await tx.entryQueue.findUnique({
+    where: { userId_status: { userId, status: "WAITING" } },
+    select: { id: true },
+  });
+  if (waiting) {
+    await tx.entryQueue.update({
+      where: { id: waiting.id },
+      data: { status: "READY", ...payload },
+    });
+    return;
+  }
+
+  await tx.entryQueue.create({
+    data: {
+      userId,
+      status: "READY",
+      ...payload,
+    },
+  });
 }
 
 function normalizeRoles(roles: UserRole[]): UserRole[] {
