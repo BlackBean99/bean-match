@@ -13,7 +13,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const view = typeof resolvedSearchParams.view === "string" ? resolvedSearchParams.view : undefined;
   const filters = parseMemberFilters({ ...resolvedSearchParams, view: view ?? "recommend" });
-  const data = await getMemberDashboardData(filters);
+  const data = await getMemberDashboardData(filters, { includeRoles: false });
 
   return (
     <AdminShell title="매칭 관리" description="특정 사용자 기준 상대 추천과 매칭 기록을 관리합니다." active="matches">

@@ -11,7 +11,7 @@ type UsersPageProps = {
 
 export default async function UsersPage({ searchParams }: UsersPageProps) {
   const filters = parseMemberFilters((await searchParams) ?? {});
-  const data = await getMemberDashboardData(filters);
+  const data = await getMemberDashboardData(filters, { includeIntroCases: false });
 
   return (
     <AdminShell title="사용자 풀" description="전체 사용자 정보를 목록형으로 보고 수정합니다." active="users">

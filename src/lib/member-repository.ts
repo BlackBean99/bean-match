@@ -114,18 +114,6 @@ type UploadedPhotoInput = Required<Pick<PhotoInput, "url" | "storedFileName" | "
   originalFileName: string;
 };
 
-const userInclude = {
-  roles: true,
-  mainPhoto: true,
-  photos: {
-    where: {
-      isMain: true,
-      deletedAt: null,
-    },
-    take: 1,
-  },
-} satisfies Prisma.UserInclude;
-
 const introCaseInclude = {
   invitor: true,
   participants: {
@@ -149,13 +137,27 @@ export type MemberDashboardData = {
   loadError: string | null;
 };
 
-export async function getMemberDashboardData(filters: MemberFilterState = defaultFilters()): Promise<MemberDashboardData> {
+type MemberDashboardQueryOptions = {
+  includeIntroCases?: boolean;
+  includeRoles?: boolean;
+};
+
+const defaultMemberDashboardQueryOptions: Required<MemberDashboardQueryOptions> = {
+  includeIntroCases: true,
+  includeRoles: true,
+};
+
+export async function getMemberDashboardData(
+  filters: MemberFilterState = defaultFilters(),
+  options: MemberDashboardQueryOptions = defaultMemberDashboardQueryOptions,
+): Promise<MemberDashboardData> {
+  const resolvedOptions = { ...defaultMemberDashboardQueryOptions, ...options };
   if (hasDatabaseUrl()) {
-    return getMemberDashboardDataFromPrisma(filters);
+    return getMemberDashboardDataFromPrisma(filters, resolvedOptions);
   }
 
   if (hasSupabaseRestConfig()) {
-    return getMemberDashboardDataFromSupabaseRest(filters);
+    return getMemberDashboardDataFromSupabaseRest(filters, resolvedOptions);
   }
 
     return {
@@ -167,21 +169,31 @@ export async function getMemberDashboardData(filters: MemberFilterState = defaul
     };
 }
 
-async function getMemberDashboardDataFromPrisma(filters: MemberFilterState): Promise<MemberDashboardData> {
+async function getMemberDashboardDataFromPrisma(
+  filters: MemberFilterState,
+  options: Required<MemberDashboardQueryOptions>,
+): Promise<MemberDashboardData> {
   try {
-    const users = await prisma.user.findMany({
-      include: userInclude,
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      take: 100,
-    });
-    const introCases = await prisma.introCase.findMany({
-      include: introCaseInclude,
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      take: 100,
-    });
+    const [users, introCases] = await Promise.all([
+      prisma.user.findMany({
+        include: {
+          mainPhoto: true,
+          ...(options.includeRoles ? { roles: true } : {}),
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: 100,
+      }),
+      options.includeIntroCases
+        ? prisma.introCase.findMany({
+            include: introCaseInclude,
+            orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+            take: 100,
+          })
+        : Promise.resolve([]),
+    ]);
     const dashboardUsers = users.map((user) => {
       const userAge = ageFromProfile(user.birthDate, user.ageText);
-      const mainPhoto = user.mainPhoto && !user.mainPhoto.deletedAt ? user.mainPhoto : user.photos[0];
+      const mainPhoto = user.mainPhoto && !user.mainPhoto.deletedAt ? user.mainPhoto : null;
       return {
         id: Number(user.id),
         name: user.name,
@@ -198,7 +210,7 @@ async function getMemberDashboardDataFromPrisma(filters: MemberFilterState): Pro
         idealTypeDescription: user.idealTypeDescription ?? "",
         status: user.status,
         openLevel: user.openLevel,
-        roles: user.roles.map((role) => role.role),
+        roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
         mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
         lastChangedAt: formatDateTime(user.updatedAt),
@@ -223,30 +235,29 @@ async function getMemberDashboardDataFromPrisma(filters: MemberFilterState): Pro
   }
 }
 
-async function getMemberDashboardDataFromSupabaseRest(filters: MemberFilterState): Promise<MemberDashboardData> {
+async function getMemberDashboardDataFromSupabaseRest(
+  filters: MemberFilterState,
+  options: Required<MemberDashboardQueryOptions>,
+): Promise<MemberDashboardData> {
   try {
     const users = await supabaseRest<SupabaseUserRow[]>(
-      "/users?select=*&order=updated_at.desc,id.desc&limit=100",
+      "/users?select=id,name,gender,status,open_level,main_photo_id,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
     );
     const userIds = users.map((user) => user.id);
-    const roles =
-      userIds.length > 0
-        ? await supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
-        : [];
-    const photos =
-      userIds.length > 0
-        ? await supabaseRest<SupabasePhotoRow[]>(
-            `/user_photos?select=id,user_id,original_file_name,stored_file_name,file_path,file_url,mime_type,sort_order,is_main,uploaded_at&user_id=in.(${userIds.join(",")})&deleted_at=is.null&order=user_id.asc,sort_order.asc,id.asc`,
+    const [roles, introCases] = await Promise.all([
+      options.includeRoles && userIds.length > 0
+        ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
+        : Promise.resolve([]),
+      options.includeIntroCases
+        ? supabaseRest<SupabaseIntroCaseRow[]>(
+            "/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=100",
           )
-        : [];
+        : Promise.resolve([]),
+    ]);
     const rolesByUserId = groupByUserId(roles);
-    const photosByUserId = groupPhotosByUserId(photos);
-    const introCases = await supabaseRest<SupabaseIntroCaseRow[]>(
-      "/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=100",
-    );
     const introCaseIds = introCases.map((introCase) => introCase.id);
     const introParticipants =
-      introCaseIds.length > 0
+      options.includeIntroCases && introCaseIds.length > 0
         ? await supabaseRest<SupabaseIntroParticipantRow[]>(
             `/intro_case_participants?select=intro_case_id,user_id,participant_role,response_status&intro_case_id=in.(${introCaseIds.join(",")})`,
           )
@@ -257,7 +268,6 @@ async function getMemberDashboardDataFromSupabaseRest(filters: MemberFilterState
         user.birth_date ? new Date(`${user.birth_date}T00:00:00.000Z`) : null,
         user.age_text,
       );
-      const mainPhoto = findMainSupabasePhoto(photosByUserId.get(user.id) ?? [], user.main_photo_id);
       return {
         id: user.id,
         name: user.name,
@@ -274,10 +284,10 @@ async function getMemberDashboardDataFromSupabaseRest(filters: MemberFilterState
         idealTypeDescription: user.ideal_type_description ?? "",
         status: user.status,
         // 정책: 사진을 제공한 사람은 디폴트로 FULL_OPEN. (명시적 open_level이 있으면 그 값을 우선)
-        openLevel: user.open_level ?? (mainPhoto ? "FULL_OPEN" : "PRIVATE"),
+        openLevel: user.open_level ?? (user.main_photo_id ? "FULL_OPEN" : "PRIVATE"),
         roles: rolesByUserId.get(user.id) ?? [],
-        hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+        hasMainPhoto: Boolean(user.main_photo_id),
+        mainPhotoUrl: photoDisplayUrl(user.main_photo_id),
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
@@ -1226,16 +1236,6 @@ function groupByUserId(rows: SupabaseRoleRow[]) {
   }
 
   return rolesByUserId;
-}
-
-function groupPhotosByUserId(rows: SupabasePhotoRow[]) {
-  const photosByUserId = new Map<number, SupabasePhotoRow[]>();
-
-  for (const row of rows) {
-    photosByUserId.set(row.user_id, [...(photosByUserId.get(row.user_id) ?? []), row]);
-  }
-
-  return photosByUserId;
 }
 
 function findMainSupabasePhoto(photos: SupabasePhotoRow[], mainPhotoId: number | null) {
