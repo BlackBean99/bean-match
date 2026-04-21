@@ -136,10 +136,11 @@ function RoundList({ rounds }: { rounds: DashboardRound[] }) {
                   {roundStatusLabels[round.status]}
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 text-xs text-zinc-600 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 text-xs text-zinc-600 sm:grid-cols-4">
                 <p>후보 {round.participantCount}명</p>
                 <p>선택 {round.selectionCount}건</p>
                 <p>상호 선택 {round.mutualCount}쌍</p>
+                <p>패스 {round.passCount}명</p>
               </div>
               <div className="mt-3 grid gap-2 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
                 <Link className="font-bold text-[#E00E0E]" href={`/rounds/${round.id}/test`}>

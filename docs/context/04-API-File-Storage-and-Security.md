@@ -41,6 +41,7 @@
 ### 2.6 Round / Selection
 - `GET /rounds/{roundId}/participants/{userId}` : 참가자가 라운드 후보를 보고 최대 2명을 선택하는 공유 URL
 - `POST /rounds/{roundId}/participants/{userId}` : 라운드 선택 저장. 실제 구현은 Server Action을 사용한다.
+- `POST /rounds/{roundId}/participants/{userId}/pass` : 이번 라운드에서 선택하지 않겠다는 의사 저장. 실제 구현은 Server Action을 사용한다.
 - `GET /invite/{invitorId}` : 모집인 초대 링크. 라운드 참여 진입 폼에 `invitorId`를 전달한다.
 - `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 라운드 참여 진입 URL
 - `GET /rounds/{roundId}/test` : 관리자 테스트 참여 URL. 실제 선택 데이터는 저장하지 않는다.

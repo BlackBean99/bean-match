@@ -133,6 +133,14 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    ROUND_PASSES {
+        BIGINT id PK
+        BIGINT round_id FK
+        BIGINT user_id FK
+        TEXT reason
+        TIMESTAMP created_at
+    }
+
     ENTRY_QUEUE {
         BIGINT id PK
         BIGINT user_id FK
@@ -164,10 +172,12 @@ erDiagram
     USERS ||--o{ USERS : invites
     USERS ||--o{ ROUND_SELECTIONS : selects
     USERS ||--o{ ROUND_SELECTIONS : selected_by
+    USERS ||--o{ ROUND_PASSES : passes
     USERS ||--o{ ENTRY_QUEUE : queues
     INTRO_CASES ||--o{ INTRO_CASE_PARTICIPANTS : contains
     INTRO_CASES ||--o{ INTRO_CASE_EVENTS : logs
     ROUNDS ||--o{ ROUND_SELECTIONS : contains
+    ROUNDS ||--o{ ROUND_PASSES : contains
 ```
 
 ---
@@ -238,7 +248,14 @@ erDiagram
 - 한 라운드에서 같은 후보 중복 선택 금지
 - 사용자당 선택 수는 최대 2명
 
-### 3.11 ENTRY_QUEUE
+### 3.11 ROUND_PASSES
+라운드에서 선택하지 않겠다는 의사 기록.
+- `user_id`: 이번 라운드를 패스한 사용자
+- `reason`: 선택 안 함 메모
+- 한 사용자당 한 라운드 1건만 허용
+- 이미 선택을 제출한 사용자는 패스를 남길 수 없음
+
+### 3.12 ENTRY_QUEUE
 신규 온보딩 사용자를 다음 라운드에 넣기 전까지 보관하는 큐.
 - `WAITING`
 - `READY`
