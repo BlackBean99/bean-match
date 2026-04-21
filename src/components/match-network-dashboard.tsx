@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import {
   introStatusLabels,
   openLevelLabels,
@@ -30,9 +32,11 @@ import {
 type MatchNetworkDashboardProps = {
   users: DashboardUser[];
   introCases: DashboardIntroCase[];
+  initialStatusFilter?: RelationshipStatusFilter;
 };
 
 type RelationshipBucket = "UNCONNECTED" | "IN_PROGRESS" | "REJECTED" | "CONFIRMED";
+type RelationshipStatusFilter = "ALL" | IntroStatus;
 
 type GraphNode = SimulationNodeDatum & {
   id: number;
@@ -40,6 +44,8 @@ type GraphNode = SimulationNodeDatum & {
   openLevel: DashboardUser["openLevel"];
   status: DashboardUser["status"];
   degree: number;
+  z: number;
+  variant: 0 | 1 | 2;
 };
 
 type GraphEdge = SimulationLinkDatum<GraphNode> & {
@@ -72,6 +78,22 @@ const bucketClassName: Record<RelationshipBucket, string> = {
   CONFIRMED: "text-emerald-200 border-emerald-900/40 bg-emerald-950/20",
 };
 
+const introStatusOrder: IntroStatus[] = [
+  "OFFERED",
+  "A_INTERESTED",
+  "B_OFFERED",
+  "WAITING_RESPONSE",
+  "MATCHED",
+  "CONNECTED",
+  "MEETING_DONE",
+  "RESULT_PENDING",
+  "SUCCESS",
+  "FAILED",
+  "DECLINED",
+  "EXPIRED",
+  "CANCELLED",
+];
+
 function bucketForIntroStatus(status: IntroStatus): RelationshipBucket {
   if (["DECLINED", "EXPIRED", "CANCELLED", "FAILED"].includes(status)) return "REJECTED";
   if (["CONNECTED", "SUCCESS"].includes(status)) return "CONFIRMED";
@@ -85,7 +107,15 @@ function parseIsoOrNull(value: string | undefined) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
-export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboardProps) {
+const NODE_BASE_WIDTH = 94;
+const NODE_BASE_HEIGHT = 30;
+
+export function MatchNetworkDashboard({
+  users,
+  introCases,
+  initialStatusFilter = "ALL",
+}: MatchNetworkDashboardProps) {
+  const [statusFilter, setStatusFilter] = useState<RelationshipStatusFilter>(initialStatusFilter);
   const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
@@ -98,23 +128,42 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
   const draggingRef = useRef<{ nodeId: number; pointerId: number; moved: boolean } | null>(null);
   const [surfaceSize, setSurfaceSize] = useState<{ width: number; height: number }>({ width: 800, height: 560 });
 
-  const { nodes, edges, edgesByNodeId, nodesById, buckets } = useMemo(() => {
+  const { nodes, edges, edgesByNodeId, nodesById, buckets, totalEdgeCount } = useMemo(() => {
     const nodesById = new Map<number, GraphNode>();
     for (const user of users) {
+      const seed = hash(`node:${user.id}:${user.name}`);
+      const z = ((seed % 100) / 100) * 0.9 + 0.1;
+      const variant = (seed % 3) as 0 | 1 | 2;
+      const angle = ((seed % 360) / 360) * Math.PI * 2;
+      const ring = 160 + (((seed >>> 9) % 100) / 100) * 240;
+      const jitterX = ((seed >>> 3) % 21) - 10;
+      const jitterY = ((seed >>> 5) % 21) - 10;
       nodesById.set(user.id, {
         id: user.id,
         name: user.name,
         openLevel: user.openLevel,
         status: user.status,
         degree: 0,
-        x: Math.random() * 600 + 100,
-        y: Math.random() * 420 + 70,
+        z,
+        variant,
+        // Deterministic initial placement reduces “stacked nodes” at time 0.
+        x: 420 + Math.cos(angle) * ring + jitterX,
+        y: 300 + Math.sin(angle) * ring * 0.72 + jitterY,
       });
+    }
+
+    const totalEdgesByPair = new Map<string, true>();
+    for (const introCase of introCases) {
+      if (introCase.participantIds.length !== 2) continue;
+      const [a, b] = introCase.participantIds;
+      if (!nodesById.has(a) || !nodesById.has(b)) continue;
+      totalEdgesByPair.set([a, b].sort((x, y) => x - y).join(":"), true);
     }
 
     // Pair-dedupe: keep the most recently updated introCase per pair.
     const edgesByPair = new Map<string, GraphEdge>();
     for (const introCase of introCases) {
+      if (statusFilter !== "ALL" && introCase.status !== statusFilter) continue;
       if (introCase.participantIds.length !== 2) continue;
       const [a, b] = introCase.participantIds;
       if (!nodesById.has(a) || !nodesById.has(b)) continue;
@@ -164,14 +213,21 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
     };
     for (const edge of edges) buckets[edge.bucket] += 1;
 
+    if (statusFilter !== "ALL") {
+      for (const [nodeId, node] of nodesById) {
+        if (!edgesByNodeId.has(nodeId)) nodesById.delete(node.id);
+      }
+    }
+
     return {
       nodes: [...nodesById.values()],
       edges,
       edgesByNodeId,
       nodesById,
       buckets,
+      totalEdgeCount: totalEdgesByPair.size,
     };
-  }, [users, introCases]);
+  }, [users, introCases, statusFilter]);
 
   useEffect(() => {
     if (!surfaceRef.current) return;
@@ -208,8 +264,8 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
       .force(
         "collide",
         forceCollide<GraphNode>()
-          .radius((d: GraphNode) => 22 + Math.min(d.degree * 2, 12))
-          .iterations(3),
+          .radius((d: GraphNode) => nodeCollisionRadius(d) + Math.min(d.degree * 2.5, 14))
+          .iterations(4),
       )
       .force("center", forceCenter(surfaceSize.width / 2, surfaceSize.height / 2))
       .force("x", forceX(surfaceSize.width / 2).strength(0.012))
@@ -228,6 +284,8 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
 
       const cx = surfaceSize.width / 2;
       const cy = surfaceSize.height / 2;
+      // Boundaries must account for the visual node size (cards, not points).
+      const margin = 12 + nodeMaxHalfDiagonal();
       for (const node of nodes) {
         if (node.fx !== null && node.fx !== undefined) continue;
         if (node.fy !== null && node.fy !== undefined) continue;
@@ -237,6 +295,24 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
         const spin = 0.00095;
         node.vx = (node.vx ?? 0) + (-dy / dist) * spin;
         node.vy = (node.vy ?? 0) + (dx / dist) * spin;
+
+        // Keep nodes inside bounds without hard render-time clamping (which causes visual overlap).
+        const x = node.x ?? cx;
+        const y = node.y ?? cy;
+        if (x < margin) {
+          node.x = margin;
+          node.vx = Math.abs(node.vx ?? 0) * 0.6;
+        } else if (x > surfaceSize.width - margin) {
+          node.x = surfaceSize.width - margin;
+          node.vx = -Math.abs(node.vx ?? 0) * 0.6;
+        }
+        if (y < margin) {
+          node.y = margin;
+          node.vy = Math.abs(node.vy ?? 0) * 0.6;
+        } else if (y > surfaceSize.height - margin) {
+          node.y = surfaceSize.height - margin;
+          node.vy = -Math.abs(node.vy ?? 0) * 0.6;
+        }
       }
 
       rafId = requestAnimationFrame(tick);
@@ -270,15 +346,49 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
   const hoveredNode = hoveredNodeId ? nodesById.get(hoveredNodeId) ?? null : null;
   const hoveredEdge = hoveredEdgeId ? edges.find((edge) => edge.id === hoveredEdgeId) ?? null : null;
 
+  useEffect(() => {
+    if (selectedNodeId && !nodesById.has(selectedNodeId)) setSelectedNodeId(null);
+    if (hoveredNodeId && !nodesById.has(hoveredNodeId)) setHoveredNodeId(null);
+    if (selectedEdgeId && !edges.some((edge) => edge.id === selectedEdgeId)) setSelectedEdgeId(null);
+    if (hoveredEdgeId && !edges.some((edge) => edge.id === hoveredEdgeId)) setHoveredEdgeId(null);
+    setTooltip((current) => {
+      if (current?.kind === "node" && !nodesById.has(current.nodeId)) return null;
+      if (current?.kind === "edge" && !edges.some((edge) => edge.id === current.edgeId)) return null;
+      return current;
+    });
+  }, [edges, hoveredEdgeId, hoveredNodeId, nodesById, selectedEdgeId, selectedNodeId]);
+
   return (
     <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-zinc-200 bg-white px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Cosmic Relationship Map</p>
           <h2 className="mt-2 text-lg font-bold text-zinc-950">소개팅 풀 관계 관리</h2>
-          <p className="mt-1 text-sm text-zinc-600">hover에서 빠르게 읽고, click에서 상세를 확인합니다.</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            상태별 관계를 필터링하고, hover에서 빠르게 읽고, click에서 상세를 확인합니다.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 lg:items-end">
+          <label className="grid gap-1 text-xs font-bold text-zinc-600">
+            관계 상태 필터
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as RelationshipStatusFilter)}
+              className="h-10 min-w-56 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
+            >
+              <option value="ALL">전체 상태</option>
+              {introStatusOrder.map((status) => (
+                <option key={status} value={status}>
+                  {introStatusLabels[status]} ({status})
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs font-semibold text-zinc-500">
+            표시 관계 {edges.length}개 / 전체 관계 {totalEdgeCount}개
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 lg:basis-full">
           {(["UNCONNECTED", "IN_PROGRESS", "REJECTED", "CONFIRMED"] as const).map((bucket) => (
             <span
               key={bucket}
@@ -324,10 +434,11 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
               {edges.map((edge) => {
                 const source = edge.source as GraphNode;
                 const target = edge.target as GraphNode;
-                const x1 = clamp(source.x ?? surfaceSize.width / 2, 22, surfaceSize.width - 22);
-                const y1 = clamp(source.y ?? surfaceSize.height / 2, 22, surfaceSize.height - 22);
-                const x2 = clamp(target.x ?? surfaceSize.width / 2, 22, surfaceSize.width - 22);
-                const y2 = clamp(target.y ?? surfaceSize.height / 2, 22, surfaceSize.height - 22);
+                const edgeMargin = 8 + nodeMaxHalfDiagonal();
+                const x1 = clamp(source.x ?? surfaceSize.width / 2, edgeMargin, surfaceSize.width - edgeMargin);
+                const y1 = clamp(source.y ?? surfaceSize.height / 2, edgeMargin, surfaceSize.height - edgeMargin);
+                const x2 = clamp(target.x ?? surfaceSize.width / 2, edgeMargin, surfaceSize.width - edgeMargin);
+                const y2 = clamp(target.y ?? surfaceSize.height / 2, edgeMargin, surfaceSize.height - edgeMargin);
 
                 const dimmed = highlighted ? !highlighted.connectedEdges.has(edge.id) : false;
                 const isSelected = selectedEdgeId === edge.id;
@@ -389,15 +500,17 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
               })}
             </svg>
 
-            {nodes.map((node) => {
-              const x = clamp(node.x ?? surfaceSize.width / 2, 16, surfaceSize.width - 16);
-              const y = clamp(node.y ?? surfaceSize.height / 2, 16, surfaceSize.height - 16);
-              const dimmed = highlighted ? !highlighted.connectedNodes.has(node.id) : false;
-              const isSelected = selectedNodeId === node.id;
-              const starSize = isSelected ? 18 : 14;
+	            {nodes.map((node) => {
+	              const x = node.x ?? surfaceSize.width / 2;
+	              const y = node.y ?? surfaceSize.height / 2;
+	              const dimmed = highlighted ? !highlighted.connectedNodes.has(node.id) : false;
+	              const isSelected = selectedNodeId === node.id;
+	              const { width: nodeWidth, height: nodeHeight, scale } = nodeDims(node);
+	              const iconSize = Math.round(10 + node.z * 6) + (isSelected ? 2 : 0);
+	              const shortName = compactName(node.name);
 
-              return (
-                <motion.button
+	              return (
+	                <motion.button
                   key={node.id}
                   type="button"
                   onPointerEnter={() => {
@@ -425,8 +538,9 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                     if (!dragging || dragging.nodeId !== node.id || dragging.pointerId !== event.pointerId) return;
                     const rect = surfaceRef.current?.getBoundingClientRect();
                     if (!rect) return;
-                    const nx = clamp(event.clientX - rect.left, 16, surfaceSize.width - 16);
-                    const ny = clamp(event.clientY - rect.top, 16, surfaceSize.height - 16);
+                    const margin = 10 + nodeMaxHalfDiagonal();
+                    const nx = clamp(event.clientX - rect.left, margin, surfaceSize.width - margin);
+                    const ny = clamp(event.clientY - rect.top, margin, surfaceSize.height - margin);
                     node.fx = nx;
                     node.fy = ny;
                     dragging.moved = true;
@@ -447,31 +561,60 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
                     setSelectedNodeId(node.id);
                     setSelectedEdgeId(null);
                   }}
-                  className="absolute grid place-items-center rounded-full"
-                  style={{
-                    left: x - starSize / 2,
-                    top: y - starSize / 2,
-                    opacity: dimmed ? 0.28 : 1,
-                    transform: "translateZ(0)",
-                  }}
-                  initial={false}
-                  animate={{
-                    scale: dimmed ? 1 : [1, 1.05, 1],
-                    transition: {
-                      duration: 3.8,
-                      repeat: dimmed ? 0 : Infinity,
-                      ease: "easeInOut",
-                      delay: (node.id % 17) * 0.05,
-                    },
-                  }}
-                >
-                  <span
-                    className={`cosmic-star ${cosmicStarClass(node, hoveredNodeId === node.id, isSelected)}`}
-                    style={{ width: starSize, height: starSize }}
-                  />
-                </motion.button>
-              );
-            })}
+	                  className="absolute"
+	                  style={{
+	                    left: x - nodeWidth / 2,
+	                    top: y - nodeHeight / 2,
+	                    opacity: dimmed ? 0.28 : 1,
+	                    transform: "translateZ(0)",
+	                  }}
+	                  initial={false}
+	                  animate={{
+	                    scale: dimmed ? scale : [scale, scale + 0.04, scale],
+	                    transition: {
+	                      duration: 3.8,
+	                      repeat: dimmed ? 0 : Infinity,
+	                      ease: "easeInOut",
+	                      delay: (node.id % 17) * 0.05,
+	                    },
+	                  }}
+	                >
+	                  <span
+	                    className={
+	                      "pointer-events-none flex h-full w-full items-center gap-2 rounded-lg border px-2.5 " +
+	                      "backdrop-blur transition " +
+	                      (isSelected
+	                        ? "border-white/22 bg-black/55 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_0_40px_rgba(56,189,248,0.07)]"
+	                        : hoveredNodeId === node.id
+	                          ? "border-white/18 bg-black/50 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_0_32px_rgba(255,255,255,0.05)]"
+	                          : "border-white/12 bg-black/38 shadow-[0_0_0_1px_rgba(255,255,255,0.035)]")
+	                    }
+	                    style={{ width: nodeWidth, height: nodeHeight }}
+	                  >
+	                    <span className="relative grid place-items-center" style={{ width: iconSize, height: iconSize }}>
+	                      <span
+	                        className={`cosmic-star ${cosmicStarClass(node, hoveredNodeId === node.id, isSelected)}`}
+	                        style={{ width: iconSize, height: iconSize }}
+	                      />
+	                      <span
+	                        className={`absolute inset-0 rounded-full ${cosmicGlyphClass(node)}`}
+	                        style={{
+	                          transform: `rotate(${(hash(`glyph:${node.id}`) % 360).toString()}deg)`,
+	                        }}
+	                      />
+	                    </span>
+	                    <span className="min-w-0 flex-1">
+	                      <span className="block truncate text-[12px] font-bold text-white/90">{shortName}</span>
+	                    </span>
+	                    <span
+	                      aria-hidden
+	                      className={`h-2.5 w-2.5 rounded-full ${openPipClass(node.openLevel)}`}
+	                      title={openLevelLabels[node.openLevel]}
+	                    />
+	                  </span>
+	                </motion.button>
+	              );
+	            })}
 
             <AnimatePresence>
               {tooltip && tooltip.kind === "node" && hoveredNode ? (
@@ -537,6 +680,14 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
           </div>
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#070709] to-transparent" />
+          {edges.length === 0 ? (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center">
+              <div className="rounded-lg border border-white/10 bg-black/45 px-4 py-3 text-white backdrop-blur">
+                <p className="text-sm font-bold">표시할 관계가 없습니다.</p>
+                <p className="mt-1 text-xs font-semibold text-white/60">다른 관계 상태를 선택하세요.</p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <aside className="border-t border-zinc-200 bg-white lg:border-l lg:border-t-0">
@@ -565,54 +716,61 @@ export function MatchNetworkDashboard({ users, introCases }: MatchNetworkDashboa
             <details className="rounded-lg border border-zinc-200 bg-white p-3" open>
               <summary className="cursor-pointer text-xs font-bold text-zinc-700">라운드 참여 기본값</summary>
               <form action={bulkApplyRoundParticipationDefaultsAction} className="mt-3 grid gap-3">
-                <p className="text-xs leading-5 text-zinc-500">
-                  모든 참가자를 <span className="font-bold text-zinc-700">FULL_OPEN</span> 으로 맞추고,
-                  <span className="font-bold text-zinc-700"> 정희/김채원/이원민</span> 만 Operator 매칭(PRIVATE)으로 둡니다.
-                </p>
-                <label className="flex items-start gap-2 text-xs font-semibold text-zinc-700">
-                  <input type="checkbox" name="confirm" className="mt-0.5" required />
-                  이 변경을 즉시 적용합니다.
-                </label>
-                <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E]">
-                  기본값 일괄 적용
-                </button>
+                <FormPendingFieldset className="grid gap-3">
+                  <p className="text-xs leading-5 text-zinc-500">
+                    라운드 기본 노출 상태를 한 번에 정리합니다. 일부 운영 대상만 비공개 매칭으로 유지합니다.
+                  </p>
+                  <label className="flex items-start gap-2 text-xs font-semibold text-zinc-700">
+                    <input type="checkbox" name="confirm" className="mt-0.5" required />
+                    이 변경을 즉시 적용합니다.
+                  </label>
+                  <FormSubmitButton
+                    label="기본값 일괄 적용"
+                    pendingLabel="적용 중..."
+                    className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  />
+                </FormPendingFieldset>
               </form>
             </details>
 
             {selectedNode ? (
               <form action={updateMemberExposureAction} className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-3">
-                <input type="hidden" name="id" value={selectedNode.id} />
-                <label className="grid gap-1 text-xs font-semibold text-zinc-600">
-                  상태
-                  <select
-                    name="status"
-                    defaultValue={selectedNode.status}
-                    className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
-                  >
-                    <option value="INCOMPLETE">정보 미완성</option>
-                    <option value="READY">소개 가능</option>
-                    <option value="PROGRESSING">소개 진행 중</option>
-                    <option value="HOLD">잠시 보류</option>
-                    <option value="STOP_REQUESTED">탈퇴 요청</option>
-                    <option value="ARCHIVED">보관 완료</option>
-                    <option value="BLOCKED">운영 제한</option>
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs font-semibold text-zinc-600">
-                  오픈 레벨
-                  <select
-                    name="openLevel"
-                    defaultValue={selectedNode.openLevel}
-                    className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
-                  >
-                    <option value="PRIVATE">Operator 매칭</option>
-                    <option value="SEMI_OPEN">제한 노출</option>
-                    <option value="FULL_OPEN">전체 라운드</option>
-                  </select>
-                </label>
-                <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E]">
-                  상태 저장
-                </button>
+                <FormPendingFieldset className="grid gap-3">
+                  <input type="hidden" name="id" value={selectedNode.id} />
+                  <label className="grid gap-1 text-xs font-semibold text-zinc-600">
+                    상태
+                    <select
+                      name="status"
+                      defaultValue={selectedNode.status}
+                      className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
+                    >
+                      <option value="INCOMPLETE">정보 미완성</option>
+                      <option value="READY">소개 가능</option>
+                      <option value="PROGRESSING">소개 진행 중</option>
+                      <option value="HOLD">잠시 보류</option>
+                      <option value="STOP_REQUESTED">탈퇴 요청</option>
+                      <option value="ARCHIVED">보관 완료</option>
+                      <option value="BLOCKED">운영 제한</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-zinc-600">
+                    오픈 레벨
+                    <select
+                      name="openLevel"
+                      defaultValue={selectedNode.openLevel}
+                      className="h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100"
+                    >
+                      <option value="PRIVATE">Operator 매칭</option>
+                      <option value="SEMI_OPEN">제한 노출</option>
+                      <option value="FULL_OPEN">전체 라운드</option>
+                    </select>
+                  </label>
+                  <FormSubmitButton
+                    label="상태 저장"
+                    pendingLabel="저장 중..."
+                    className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white transition hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  />
+                </FormPendingFieldset>
               </form>
             ) : null}
 
@@ -720,6 +878,14 @@ function cosmicStarClass(node: GraphNode, isHovered: boolean, isSelected: boolea
   return `${base} cosmic-star--private`;
 }
 
+function cosmicGlyphClass(node: GraphNode) {
+  // Variant overlay ring: gives each node a distinct “instrument” feel without becoming noisy.
+  const common = "cosmic-glyph";
+  const variant = node.variant;
+  const level = node.openLevel === "FULL_OPEN" ? "cosmic-glyph--open" : node.openLevel === "SEMI_OPEN" ? "cosmic-glyph--semi" : "cosmic-glyph--private";
+  return `${common} ${level} cosmic-glyph--v${variant}`;
+}
+
 function latestEdgeLabel(edges: GraphEdge[]) {
   const newest = edges
     .slice()
@@ -752,3 +918,40 @@ function hash(value: string) {
   return h;
 }
 
+function nodeScale(node: GraphNode) {
+  return 0.88 + node.z * 0.22;
+}
+
+function nodeDims(node: GraphNode) {
+  const scale = nodeScale(node);
+  return {
+    width: Math.round(NODE_BASE_WIDTH * scale),
+    height: Math.round(NODE_BASE_HEIGHT * scale),
+    scale,
+  };
+}
+
+function nodeCollisionRadius(node: GraphNode) {
+  const { width, height } = nodeDims(node);
+  return Math.sqrt((width / 2) ** 2 + (height / 2) ** 2);
+}
+
+function nodeMaxHalfDiagonal() {
+  const scale = 0.88 + 1 * 0.22;
+  const width = NODE_BASE_WIDTH * scale;
+  const height = NODE_BASE_HEIGHT * scale;
+  return Math.sqrt((width / 2) ** 2 + (height / 2) ** 2);
+}
+
+function compactName(name: string) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "-";
+  // Keep it readable in a dense graph: show first 3 glyphs (Korean names typically fit).
+  return trimmed.length <= 3 ? trimmed : trimmed.slice(0, 3);
+}
+
+function openPipClass(openLevel: DashboardUser["openLevel"]) {
+  if (openLevel === "FULL_OPEN") return "bg-sky-300 shadow-[0_0_18px_rgba(56,189,248,0.25)]";
+  if (openLevel === "SEMI_OPEN") return "bg-amber-300 shadow-[0_0_18px_rgba(245,158,11,0.18)]";
+  return "bg-zinc-300/70 shadow-[0_0_16px_rgba(161,161,170,0.12)]";
+}

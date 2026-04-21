@@ -28,6 +28,15 @@ select {
   font: inherit;
 }
 
+fieldset[disabled] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+form:has(fieldset[disabled]) {
+  opacity: 0.72;
+}
+
 .photo-skeleton::before,
 .photo-skeleton::after {
   content: "";
@@ -187,6 +196,46 @@ select {
 .cosmic-star--selected::after {
   opacity: 0.8;
   transform: scale(1);
+}
+
+.cosmic-glyph {
+  pointer-events: none;
+  opacity: 0.42;
+  transition: opacity 220ms ease;
+}
+
+.cosmic-star--hovered + .cosmic-glyph,
+.cosmic-star--selected + .cosmic-glyph {
+  opacity: 0.78;
+}
+
+.cosmic-glyph--open {
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.12);
+}
+
+.cosmic-glyph--semi {
+  box-shadow: 0 0 22px rgba(245, 158, 11, 0.11);
+}
+
+.cosmic-glyph--private {
+  box-shadow: 0 0 20px rgba(161, 161, 170, 0.08);
+}
+
+.cosmic-glyph--v0 {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  mask: radial-gradient(circle, transparent 48%, #000 49%);
+}
+
+.cosmic-glyph--v1 {
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  mask: radial-gradient(circle, transparent 42%, #000 43%);
+}
+
+.cosmic-glyph--v2 {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  mask:
+    radial-gradient(circle, transparent 52%, #000 53%),
+    conic-gradient(from 0deg, #000 0 12%, transparent 12% 25%, #000 25% 38%, transparent 38% 50%, #000 50% 62%, transparent 62% 75%, #000 75% 88%, transparent 88% 100%);
 }
 
 .cosmic-tooltip {

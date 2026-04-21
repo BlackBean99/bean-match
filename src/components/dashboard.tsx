@@ -1,8 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
+import { NavigationSubmitButton } from "@/components/navigation-submit-button";
 import {
+  activeIntroStatuses,
   introStatusLabels,
   openLevelLabels,
   userStatusLabels,
@@ -86,17 +90,19 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
 export function MatchesDashboard({ allUsers, introCases, databaseConnected, loadError, filters }: DashboardProps) {
   const selectedUser = allUsers.find((user) => user.id.toString() === filters.recommendationFor) ?? null;
   const recommendations = selectedUser ? getOppositeGenderRecommendations(selectedUser, allUsers, introCases) : [];
+  const filteredIntroCases =
+    filters.introStatus === "ALL" ? introCases : introCases.filter((introCase) => introCase.status === filters.introStatus);
 
   return (
     <>
       <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
         <DashboardTabs filters={filters} />
-        <FilterForm filters={filters} />
+        <FilterForm filters={filters} showIntroStatus />
       </section>
 
       {filters.view === "graph" ? (
-        <MatchNetworkDashboard users={allUsers} introCases={introCases} />
+        <MatchNetworkDashboard users={allUsers} introCases={introCases} initialStatusFilter={filters.introStatus} />
       ) : (
         <>
           <RecommendationPanel
@@ -107,7 +113,7 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
           />
           <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
             <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
-            <IntroCaseTable introCases={introCases} editable={databaseConnected} />
+            <IntroCaseTable introCases={filteredIntroCases} editable={databaseConnected} />
           </section>
         </>
       )}
@@ -152,7 +158,7 @@ export function Dashboard({ users, allUsers, introCases, databaseConnected, load
 
         <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <DashboardTabs filters={filters} />
-          <FilterForm filters={filters} />
+          <FilterForm filters={filters} showIntroStatus={filters.view !== "pool"} />
         </section>
 
         {filters.view === "recommend" ? (
@@ -208,7 +214,7 @@ function DashboardTabs({ filters }: { filters: MemberFilterState }) {
 
   return (
     <div className="mb-4 flex flex-wrap gap-2">
-      <Link href={dashboardHref(filters, { view: "pool" }, "/users")} className={tabClassName(filters.view === "pool")}>
+      <Link href={dashboardHref(filters, { view: "pool", introStatus: "ALL" }, "/users")} className={tabClassName(filters.view === "pool")}>
         전체 풀
       </Link>
       <Link href={dashboardHref(filters, { view: "recommend" }, "/matches")} className={tabClassName(filters.view === "recommend")}>
@@ -221,11 +227,23 @@ function DashboardTabs({ filters }: { filters: MemberFilterState }) {
   );
 }
 
-function FilterForm({ filters }: { filters: MemberFilterState }) {
+function FilterForm({ filters, showIntroStatus = false }: { filters: MemberFilterState; showIntroStatus?: boolean }) {
   return (
-    <form className="grid gap-3 md:grid-cols-7" method="get">
+    <form className={showIntroStatus ? "grid gap-3 md:grid-cols-8" : "grid gap-3 md:grid-cols-7"} method="get">
       <input type="hidden" name="view" value={filters.view} />
       <input type="hidden" name="recommendationFor" value={filters.recommendationFor} />
+      {showIntroStatus ? (
+        <Field label="관계 상태">
+          <select name="introStatus" defaultValue={filters.introStatus} className={inputClassName}>
+            <option value="ALL">전체</option>
+            {introStatusOrder.map((status) => (
+              <option key={status} value={status}>
+                {introStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <Field label="성별">
         <select name="gender" defaultValue={filters.gender} className={inputClassName}>
           <option value="ALL">전체</option>
@@ -260,9 +278,11 @@ function FilterForm({ filters }: { filters: MemberFilterState }) {
         </select>
       </Field>
       <div className="flex items-end gap-2">
-        <button className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white hover:bg-[#E00E0E]">
-          적용
-        </button>
+        <NavigationSubmitButton
+          label="적용"
+          pendingLabel="적용 중..."
+          className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
+        />
         <Link className="flex h-10 items-center rounded-lg border border-zinc-300 px-4 text-sm font-semibold text-zinc-700" href="/">
           초기화
         </Link>
@@ -292,6 +312,7 @@ function RecommendationPanel({
           </p>
           <form className="mt-4 grid gap-3" method="get">
             <input type="hidden" name="view" value="recommend" />
+            <input type="hidden" name="introStatus" value={filters.introStatus} />
             <input type="hidden" name="gender" value={filters.gender} />
             <input type="hidden" name="ageMin" value={filters.ageMin} />
             <input type="hidden" name="ageMax" value={filters.ageMax} />
@@ -301,7 +322,7 @@ function RecommendationPanel({
             <Field label="기준 사용자">
               <UserSelect name="recommendationFor" users={users} required selectedValue={filters.recommendationFor} />
             </Field>
-            <button className={primaryButtonClassName}>추천 보기</button>
+            <NavigationSubmitButton label="추천 보기" pendingLabel="불러오는 중..." className={primaryButtonClassName} />
           </form>
         </div>
 
@@ -368,10 +389,10 @@ function MemberCreatePanel({ disabled }: { disabled: boolean }) {
     <details className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <summary className="cursor-pointer text-sm font-bold text-[#E00E0E]">사용자 등록</summary>
       <form action={createMemberAction} className="mt-4 grid gap-4">
-        <MemberFields />
-        <button disabled={disabled} className={primaryButtonClassName}>
-          사용자 등록
-        </button>
+        <FormPendingFieldset className="grid gap-4">
+          <MemberFields />
+          <FormSubmitButton label="사용자 등록" pendingLabel="등록 중..." disabled={disabled} className={primaryButtonClassName} />
+        </FormPendingFieldset>
       </form>
     </details>
   );
@@ -490,13 +511,21 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
           <details className="relative w-14">
             <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">수정</summary>
             <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
-              <input type="hidden" name="id" value={user.id} />
-              <MemberFields user={user} compact />
-              <button className={primaryButtonClassName}>저장</button>
+              <FormPendingFieldset className="grid gap-3">
+                <input type="hidden" name="id" value={user.id} />
+                <MemberFields user={user} compact />
+                <FormSubmitButton label="저장" pendingLabel="저장 중..." className={primaryButtonClassName} />
+              </FormPendingFieldset>
             </form>
             <form action={deleteMemberAction} className="mt-2">
-              <input type="hidden" name="id" value={user.id} />
-              <button className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E]">삭제</button>
+              <FormPendingFieldset className="contents">
+                <input type="hidden" name="id" value={user.id} />
+                <FormSubmitButton
+                  label="삭제"
+                  pendingLabel="삭제 중..."
+                  className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
+                />
+              </FormPendingFieldset>
             </form>
           </details>
           </div>
@@ -511,10 +540,15 @@ function IntroCreatePanel({ users, disabled }: { users: DashboardUser[]; disable
     <details className="overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm" open>
       <summary className="cursor-pointer text-lg font-bold text-zinc-950">매칭 기록 생성</summary>
       <form action={createIntroCaseAction} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
-        <IntroCaseFields users={users} />
-        <button disabled={disabled} className={`${primaryButtonClassName} sm:col-span-2`}>
-          매칭 기록 추가
-        </button>
+        <FormPendingFieldset className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2">
+          <IntroCaseFields users={users} />
+          <FormSubmitButton
+            label="매칭 기록 추가"
+            pendingLabel="추가 중..."
+            disabled={disabled}
+            className={`${primaryButtonClassName} sm:col-span-2`}
+          />
+        </FormPendingFieldset>
       </form>
     </details>
   );
@@ -572,24 +606,32 @@ function IntroCaseTable({
                       <details className="relative w-16">
                         <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">수정</summary>
                         <form action={updateIntroCaseAction} className="absolute right-0 z-20 mt-3 grid w-72 gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
-                          <input type="hidden" name="id" value={introCase.id} />
-                          <Field label="상태">
-                            <select name="status" defaultValue={introCase.status} className={inputClassName}>
-                              {introStatusOrder.map((status) => (
-                                <option key={status} value={status}>
-                                  {introStatusLabels[status]}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field label="메모">
-                            <textarea name="memo" defaultValue={introCase.memo} rows={3} className={inputClassName} />
-                          </Field>
-                          <button className={primaryButtonClassName}>저장</button>
+                          <FormPendingFieldset className="grid gap-3">
+                            <input type="hidden" name="id" value={introCase.id} />
+                            <Field label="상태">
+                              <select name="status" defaultValue={introCase.status} className={inputClassName}>
+                                {introStatusOrder.map((status) => (
+                                  <option key={status} value={status}>
+                                    {introStatusLabels[status]}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            <Field label="메모">
+                              <textarea name="memo" defaultValue={introCase.memo} rows={3} className={inputClassName} />
+                            </Field>
+                            <FormSubmitButton label="저장" pendingLabel="저장 중..." className={primaryButtonClassName} />
+                          </FormPendingFieldset>
                         </form>
                         <form action={deleteIntroCaseAction} className="mt-2">
-                          <input type="hidden" name="id" value={introCase.id} />
-                          <button className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E]">삭제</button>
+                          <FormPendingFieldset className="contents">
+                            <input type="hidden" name="id" value={introCase.id} />
+                            <FormSubmitButton
+                              label="삭제"
+                              pendingLabel="삭제 중..."
+                              className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
+                            />
+                          </FormPendingFieldset>
                         </form>
                       </details>
                     ) : null}
@@ -774,14 +816,18 @@ function getOppositeGenderRecommendations(
   users: DashboardUser[],
   introCases: DashboardIntroCase[],
 ) {
+  if (selectedUser.status !== "READY") return [];
+
   const activeUserIds = new Set(
     introCases
-      .filter((introCase) =>
-        ["OFFERED", "WAITING_RESPONSE", "MATCHED", "CONNECTED", "MEETING_DONE", "RESULT_PENDING"].includes(
-          introCase.status,
-        ),
-      )
+      .filter((introCase) => activeIntroStatuses.includes(introCase.status))
       .flatMap((introCase) => introCase.participantIds),
+  );
+  const previouslyMatchedUserIds = new Set(
+    introCases
+      .filter((introCase) => participantIdsInclude(introCase.participantIds, selectedUser.id))
+      .flatMap((introCase) => introCase.participantIds)
+      .filter((userId) => userId !== selectedUser.id),
   );
 
   return users
@@ -789,9 +835,14 @@ function getOppositeGenderRecommendations(
       if (user.id === selectedUser.id) return false;
       if (!isOppositeGender(selectedUser, user)) return false;
       if (user.status !== "READY") return false;
+      if (previouslyMatchedUserIds.has(user.id)) return false;
       return !activeUserIds.has(user.id);
     })
     .sort((a, b) => recommendationScore(selectedUser, b) - recommendationScore(selectedUser, a));
+}
+
+function participantIdsInclude(participantIds: DashboardIntroCase["participantIds"], userId: number) {
+  return participantIds.some((participantId) => participantId === userId);
 }
 
 function isOppositeGender(selectedUser: DashboardUser, candidate: DashboardUser) {
@@ -834,6 +885,7 @@ function dashboardHref(filters: MemberFilterState, overrides: Partial<MemberFilt
 
   if (nextFilters.view !== "pool") params.set("view", nextFilters.view);
   if (nextFilters.recommendationFor) params.set("recommendationFor", nextFilters.recommendationFor);
+  if (nextFilters.introStatus !== "ALL") params.set("introStatus", nextFilters.introStatus);
   if (nextFilters.gender !== "ALL") params.set("gender", nextFilters.gender);
   if (nextFilters.ageMin) params.set("ageMin", nextFilters.ageMin);
   if (nextFilters.ageMax) params.set("ageMax", nextFilters.ageMax);

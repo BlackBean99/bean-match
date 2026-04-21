@@ -1,5 +1,8 @@
+import Image from "next/image";
 import { createParticipantRoundSelectionsAction } from "@/app/round-actions";
-import { openLevelLabels, type ParticipantRoundData } from "@/lib/domain";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
+import { type ParticipantRoundData } from "@/lib/domain";
 
 type ParticipantRoundSelectionProps = ParticipantRoundData;
 
@@ -21,17 +24,24 @@ export function ParticipantRoundSelection({
     actor.openLevel === "FULL_OPEN" &&
     !isTestMode &&
     remainingSelectionCount > 0;
+  const selectionRoleLabel = actor?.genderCode === "MALE" ? "소개팅녀" : actor?.genderCode === "FEMALE" ? "소개팅남" : "상대";
+  const heading = isTestMode ? "테스트 라운드 미리보기" : `${selectionRoleLabel} 선택`;
+  const candidateGuide =
+    candidates.length > 0
+      ? `지금 보이는 ${candidates.length}명 중 최대 ${selectionLimit}명까지 선택할 수 있습니다.`
+      : `지금 선택 가능한 ${selectionRoleLabel}이 없습니다.`;
 
   return (
-    <main className="min-h-screen bg-white px-5 py-8 text-zinc-950">
-      <section className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="rounded-lg border border-red-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-bold text-[#E00E0E]">Blackbean Match Round</p>
-          <h1 className="mt-2 text-3xl font-bold text-zinc-950">{round?.title ?? "라운드 선택"}</h1>
+    <main className="min-h-screen bg-zinc-50 px-4 py-5 text-zinc-950 sm:px-5 sm:py-8">
+      <section className="mx-auto grid w-full max-w-4xl gap-4 sm:gap-6">
+        <header className="rounded-lg border border-red-100 bg-white p-4 shadow-sm sm:p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#E00E0E]">Blackbean Match</p>
+          <h1 className="mt-2 text-2xl font-bold text-zinc-950 sm:text-3xl">{heading}</h1>
           <p className="mt-2 text-sm leading-6 text-zinc-600">
-            FULL_OPEN 라운드 참여자는 이 링크에서 후보를 확인하고 최대 2명까지 선택합니다. 선택 후 변경은 운영자 확인
-            전까지 직접 수정할 수 없습니다.
+            {actor ? `${actor.name}님, 마음에 드는 ${selectionRoleLabel}을 최대 ${selectionLimit}명까지 선택해 주세요.` : `마음에 드는 ${selectionRoleLabel}을 최대 ${selectionLimit}명까지 선택해 주세요.`}
           </p>
+          <p className="mt-1 text-sm leading-6 text-zinc-500">{candidateGuide}</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-500">선택은 한 번 제출하면 직접 바꿀 수 없습니다.</p>
           {isTestMode ? (
             <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-[#E00E0E]">
               관리자 테스트 모드입니다. 후보 노출과 화면 동작만 확인하며 선택 데이터는 저장하지 않습니다.
@@ -40,60 +50,77 @@ export function ParticipantRoundSelection({
           {loadError ? <p className="mt-3 text-xs font-semibold text-red-700">{loadError}</p> : null}
         </header>
 
-        <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-3">
-          <Metric label="내 상태" value={actor ? `${actor.name} · ${actor.status}` : "사용자 없음"} />
-          <Metric label="오픈 레벨" value={actor ? openLevelLabels[actor.openLevel] : "-"} />
-          <Metric label="남은 선택" value={`${remainingSelectionCount}/${selectionLimit}`} />
+        <section className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm sm:grid-cols-3">
+          <Metric label="접속한 사람" value={actor ? actor.name : "사용자 없음"} />
+          <Metric label="내 정보" value={actor ? `${actor.gender} · ${formatAge(actor)} · ${actor.jobTitle}` : "-"} />
+          <Metric label="선택 가능" value={`${remainingSelectionCount}/${selectionLimit}`} />
         </section>
 
         <form action={createParticipantRoundSelectionsAction} className="grid gap-4">
-          <input type="hidden" name="roundId" value={round?.id ?? ""} />
-          <input type="hidden" name="fromUserId" value={actor?.id ?? ""} />
-          <div className="grid gap-4 md:grid-cols-2">
-            {candidates.length === 0 ? (
-              <p className="rounded-lg border border-zinc-200 p-5 text-sm text-zinc-500">현재 노출 가능한 후보가 없습니다.</p>
-            ) : (
-              candidates.map((candidate) => (
-                <label
-                  key={candidate.id}
-                  className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm has-[:checked]:border-[#FF3131] has-[:checked]:bg-red-50"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-bold text-zinc-950">{candidate.name}</p>
-                      <p className="mt-1 text-sm text-zinc-500">
-                        {candidate.gender} · {candidate.age || candidate.ageText || "나이 미입력"} ·{" "}
-                        {candidate.heightCm || "-"}cm · {candidate.jobTitle || "직업 미입력"}
-                      </p>
+          <FormPendingFieldset className="grid gap-4">
+            <input type="hidden" name="roundId" value={round?.id ?? ""} />
+            <input type="hidden" name="fromUserId" value={actor?.id ?? ""} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {candidates.length === 0 ? (
+                <p className="rounded-lg border border-zinc-200 bg-white p-5 text-sm text-zinc-500">지금 선택할 수 있는 후보가 없습니다.</p>
+              ) : (
+                candidates.map((candidate) => (
+                  <label
+                    key={candidate.id}
+                    className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm has-[:checked]:border-[#FF3131] has-[:checked]:bg-red-50/60 sm:p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative h-24 w-20 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 sm:h-28 sm:w-24">
+                        {candidate.mainPhotoUrl ? (
+                          <Image
+                            src={candidate.mainPhotoUrl}
+                            alt={`${candidate.name} 사진`}
+                            fill
+                            sizes="(max-width: 640px) 80px, 96px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[11px] font-semibold text-zinc-400">사진 없음</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-lg font-bold text-zinc-950">{candidate.name}</p>
+                            <p className="mt-1 text-sm text-zinc-500">
+                              {formatAge(candidate)} · {candidate.heightCm > 0 ? `${candidate.heightCm}cm` : "키 비공개"}
+                            </p>
+                            <p className="mt-1 truncate text-sm text-zinc-600">{candidate.jobTitle || "직업 미입력"}</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            name="toUserId"
+                            value={candidate.id}
+                            defaultChecked={candidate.alreadySelected}
+                            disabled={candidate.alreadySelected || isTestMode || !canSubmit}
+                            className="mt-1 h-5 w-5 shrink-0 accent-[#FF3131]"
+                          />
+                        </div>
+                        {candidate.selfIntro ? (
+                          <p className="mt-3 line-clamp-4 text-sm leading-6 text-zinc-700">{candidate.selfIntro}</p>
+                        ) : null}
+                        {candidate.alreadySelected ? (
+                          <p className="mt-3 text-xs font-semibold text-[#E00E0E]">이미 선택 완료</p>
+                        ) : null}
+                      </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      name="toUserId"
-                      value={candidate.id}
-                      defaultChecked={candidate.alreadySelected}
-                      disabled={candidate.alreadySelected || isTestMode || !canSubmit}
-                      className="mt-1 h-5 w-5 accent-[#FF3131]"
-                    />
-                  </div>
-                  {candidate.selfIntro ? <p className="text-sm leading-6 text-zinc-700">{candidate.selfIntro}</p> : null}
-                  {candidate.idealTypeDescription ? (
-                    <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs leading-5 text-zinc-600">
-                      이상형: {candidate.idealTypeDescription}
-                    </p>
-                  ) : null}
-                  {candidate.alreadySelected ? (
-                    <p className="text-xs font-semibold text-[#E00E0E]">이미 선택한 후보입니다.</p>
-                  ) : null}
-                </label>
-              ))
-            )}
-          </div>
-          <button
-            disabled={!canSubmit}
-            className="w-fit rounded-lg bg-[#FF3131] px-5 py-3 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
-          >
-            {isTestMode ? "테스트 모드 - 저장 안 함" : "선택 저장"}
-          </button>
+                  </label>
+                ))
+              )}
+            </div>
+            <FormSubmitButton
+              label={isTestMode ? "테스트 모드 - 저장 안 함" : `${selectionRoleLabel} 선택 저장`}
+              pendingLabel={isTestMode ? "테스트 처리 중..." : "선택 저장 중..."}
+              disabled={!canSubmit}
+              className="w-full rounded-lg bg-[#FF3131] px-5 py-3 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300 sm:w-fit"
+            />
+          </FormPendingFieldset>
         </form>
       </section>
     </main>
@@ -107,4 +134,11 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 font-bold text-zinc-950">{value}</p>
     </div>
   );
+}
+
+function formatAge(user: NonNullable<ParticipantRoundData["actor"]>) {
+  if (user.age > 0 && user.ageText) return `${user.age}세`;
+  if (user.age > 0) return `${user.age}세`;
+  if (user.ageText) return user.ageText;
+  return "나이 비공개";
 }

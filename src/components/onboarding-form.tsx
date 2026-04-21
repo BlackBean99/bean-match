@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { joinCurrentRoundAction } from "@/app/round-actions";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
 
 type OnboardingFormProps = {
   invitorId?: string;
@@ -20,25 +22,26 @@ export function OnboardingForm({ invitorId }: OnboardingFormProps) {
         </p>
       ) : null}
       <form action={joinCurrentRoundAction} className="mt-6 grid gap-4">
-        {invitorId ? <input type="hidden" name="invitorUserId" value={invitorId} /> : null}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="데이터 ID">
-            <input name="userId" inputMode="numeric" className={inputClassName} placeholder="예: 123" required />
-          </Field>
-          <Field label="이름">
-            <input name="name" className={inputClassName} required />
-          </Field>
-        </div>
-        <label className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-zinc-700">
-          <input name="fullOpenConsent" type="checkbox" className="mt-1 h-4 w-4 accent-[#FF3131]" required />
-          <span>
-            현재 라운드 참여를 위해 전체 노출(FULL_OPEN)에 동의합니다. 제한 노출 또는 운영자 큐레이션 상태에서는
-            라운드 선택에 참여할 수 없습니다.
-          </span>
-        </label>
-        <button className="rounded-lg bg-[#FF3131] px-4 py-3 text-sm font-bold text-white hover:bg-[#E00E0E]">
-          현재 라운드 참여하기
-        </button>
+        <FormPendingFieldset className="grid gap-4">
+          {invitorId ? <input type="hidden" name="invitorUserId" value={invitorId} /> : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="데이터 ID">
+              <input name="userId" inputMode="numeric" className={inputClassName} placeholder="예: 123" required />
+            </Field>
+            <Field label="이름">
+              <input name="name" className={inputClassName} required />
+            </Field>
+          </div>
+          <label className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-zinc-700">
+            <input name="fullOpenConsent" type="checkbox" className="mt-1 h-4 w-4 accent-[#FF3131]" required />
+            <span>현재 라운드 참여를 위해 전체 공개에 동의합니다.</span>
+          </label>
+          <FormSubmitButton
+            label="현재 라운드 참여하기"
+            pendingLabel="입장 처리 중..."
+            className="rounded-lg bg-[#FF3131] px-4 py-3 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
+          />
+        </FormPendingFieldset>
       </form>
     </section>
   );
