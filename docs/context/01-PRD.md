@@ -85,6 +85,7 @@
   - 현재 라운드 참여를 위해 `FULL_OPEN` 전체 노출에 동의해야 한다.
   - 재진입 시 새 사용자를 만들지 않고 기존 사용자 상태와 엔트리 큐를 갱신한다.
 - 사용자 라운드 선택: `/rounds/{roundId}/participants/{userId}`
+- 참가자는 라운드에서 최대 2명을 선택하거나, 이번 라운드 패스를 남길 수 있다.
 - 모집인 초대: `/invite/{invitorId}` 만 공유하며, 모집인은 매칭 관리 URL을 공유받지 않는다.
 - 관리자 운영: `/users`, `/rounds`, `/matches`, `/users/{userId}` 를 내부 운영 URL로 사용한다.
 - 관리자 테스트 참여: `/rounds/{roundId}/test` 를 사용하며 실제 선택 데이터에는 반영하지 않는다.

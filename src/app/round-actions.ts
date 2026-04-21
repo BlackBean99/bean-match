@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { OpenLevel, RoundStatus } from "@/lib/domain";
 import {
   createOnboardingUser,
+  createRoundPass,
   createRound,
   createRoundSelection,
   createRoundSelections,
@@ -56,6 +57,16 @@ export async function createParticipantRoundSelectionsAction(formData: FormData)
     .map((value) => BigInt(value));
 
   await createRoundSelections(roundId, fromUserId, toUserIds);
+  revalidatePath(`/rounds/${roundId.toString()}/participants/${fromUserId.toString()}`);
+  revalidateRounds();
+}
+
+export async function createParticipantRoundPassAction(formData: FormData) {
+  const roundId = parseNamedId(formData, "roundId");
+  const fromUserId = parseNamedId(formData, "fromUserId");
+  const passReason = readString(formData, "passReason");
+
+  await createRoundPass(roundId, fromUserId, passReason);
   revalidatePath(`/rounds/${roundId.toString()}/participants/${fromUserId.toString()}`);
   revalidateRounds();
 }

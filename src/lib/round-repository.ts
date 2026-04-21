@@ -3,13 +3,14 @@ import {
   type DashboardEntryQueueItem,
   type DashboardRound,
   type DashboardRoundSelection,
+  type DashboardUserDetail,
   type DashboardUser,
   type EntryQueueStatus,
   type OpenLevel,
   type ParticipantRoundData,
   type RoundStatus,
 } from "@/lib/domain";
-import { getMemberDashboardData } from "@/lib/member-repository";
+import { getMemberDashboardData, getUserDetail } from "@/lib/member-repository";
 
 type RoundRow = {
   id: number;
@@ -34,6 +35,14 @@ type EntryQueueRow = {
   status: EntryQueueStatus;
   joined_at: string;
   memo: string | null;
+};
+
+type RoundPassRow = {
+  id: number;
+  round_id: number;
+  user_id: number;
+  reason: string | null;
+  created_at: string;
 };
 
 export type RoundDashboardData = {
@@ -86,10 +95,11 @@ export async function getRoundDashboardData(): Promise<RoundDashboardData> {
   }
 
   try {
-    const [roundRows, selectionRows, queueRows] = await Promise.all([
+    const [roundRows, selectionRows, queueRows, passRows] = await Promise.all([
       supabaseRest<RoundRow[]>("/rounds?select=*&order=start_at.desc,id.desc&limit=20"),
       supabaseRest<RoundSelectionRow[]>("/round_selections?select=*&order=created_at.desc,id.desc&limit=200"),
       supabaseRest<EntryQueueRow[]>("/entry_queue?select=*&order=joined_at.asc,id.asc&limit=100"),
+      supabaseRest<RoundPassRow[]>("/round_passes?select=*&order=created_at.desc,id.desc&limit=200"),
     ]);
     const usersById = new Map(memberData.allUsers.map((user) => [user.id, user]));
     const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
@@ -98,12 +108,13 @@ export async function getRoundDashboardData(): Promise<RoundDashboardData> {
     );
     const selections = selectionRows.map((selection) => toDashboardSelection(selection, usersById, selectionRows));
     const selectionsByRoundId = groupSelectionsByRoundId(selectionRows);
+    const passesByRoundId = groupPassesByRoundId(passRows as unknown as RoundPassRow[]);
 
     return {
       users: memberData.allUsers,
       candidates,
       rounds: roundRows.map((round) =>
-        toDashboardRound(round, candidates.length, selectionsByRoundId.get(round.id) ?? []),
+        toDashboardRound(round, candidates.length, selectionsByRoundId.get(round.id) ?? [], passesByRoundId.get(round.id)?.length ?? 0),
       ),
       selections,
       entryQueue: queueRows.map((row) => ({
@@ -189,6 +200,39 @@ export async function createRoundSelections(roundId: bigint, fromUserId: bigint,
   }
 }
 
+export async function createRoundPass(roundId: bigint, userId: bigint, reason: string | null) {
+  const [round, user, existingSelections, existingPasses] = await Promise.all([
+    getRoundOrNull(roundId),
+    getRoundEntryUser(userId),
+    supabaseRest<RoundSelectionRow[]>(
+      `/round_selections?select=id&round_id=eq.${roundId.toString()}&from_user_id=eq.${userId.toString()}&limit=1`,
+    ),
+    supabaseRest<RoundPassRow[]>(
+      `/round_passes?select=id&round_id=eq.${roundId.toString()}&user_id=eq.${userId.toString()}&limit=1`,
+    ),
+  ]);
+
+  if (!round) throw new Error("라운드를 찾을 수 없습니다.");
+  if (round.status !== "OPEN") throw new Error("현재는 패스 의사를 남길 수 없는 라운드입니다.");
+  if (!user || user.status !== "READY" || user.open_level !== "FULL_OPEN") {
+    throw new Error("현재 라운드 참여 조건을 만족한 사용자만 패스 의사를 남길 수 있습니다.");
+  }
+  if (existingSelections.length > 0) throw new Error("이미 선택을 제출한 사용자는 패스 의사를 남길 수 없습니다.");
+  if (existingPasses.length > 0) return existingPasses[0];
+
+  const [roundPass] = await supabaseRest<RoundPassRow[]>("/round_passes?select=*", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      round_id: Number(roundId),
+      user_id: Number(userId),
+      reason: reason?.trim() || null,
+    }),
+  });
+
+  return roundPass;
+}
+
 export async function createOnboardingUser(input: OnboardingInput) {
   const [user] = await supabaseRest<{ id: number }[]>("/users?select=id", {
     method: "POST",
@@ -270,6 +314,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      hasPassed: false,
       isTestMode: false,
       databaseConnected: false,
       loadError: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
@@ -277,19 +322,26 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
   }
 
   try {
-    const [round, selectionRows] = await Promise.all([
+    const [round, selectionRows, passRows] = await Promise.all([
       getRoundOrNull(roundId),
       supabaseRest<RoundSelectionRow[]>(
         `/round_selections?select=*&round_id=eq.${roundId.toString()}&order=created_at.asc,id.asc`,
       ),
+      supabaseRest<RoundPassRow[]>(
+        `/round_passes?select=*&round_id=eq.${roundId.toString()}&user_id=eq.${userId.toString()}&limit=1`,
+      ),
     ]);
+    const roundPass = passRows[0] ?? null;
     if (!actor || actor.status !== "READY" || actor.openLevel !== "FULL_OPEN") {
       return {
         actor,
-        round: round ? toDashboardRound(round, 0, selectionRows) : null,
+        round: round ? toDashboardRound(round, 0, selectionRows, roundPass ? 1 : 0) : null,
         candidates: [],
         selectedCount: 0,
         selectionLimit: round?.selection_limit ?? 2,
+        hasPassed: Boolean(roundPass),
+        passedAt: roundPass ? formatDateTime(new Date(roundPass.created_at)) : undefined,
+        passReason: roundPass?.reason ?? undefined,
         isTestMode: false,
         databaseConnected: true,
         loadError: "현재 라운드 참여가 완료된 사용자만 후보를 볼 수 있습니다.",
@@ -300,7 +352,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
     const selectedToUserIds = new Set(
       selectionRows.filter((selection) => selection.from_user_id === Number(userId)).map((selection) => selection.to_user_id),
     );
-    const candidates = memberData.allUsers
+    const candidateUsers = memberData.allUsers
       .filter(
         (user) =>
           user.id !== Number(userId) &&
@@ -308,15 +360,18 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
           user.openLevel === "FULL_OPEN" &&
           isVisibleRoundCandidateForActor(actor, user) &&
           !activeIntroUserIds.has(user.id),
-      )
-      .map((user) => ({ ...user, alreadySelected: selectedToUserIds.has(user.id) }));
+      );
+    const candidates = await hydrateRoundCandidates(candidateUsers, selectedToUserIds);
 
     return {
       actor,
-      round: round ? toDashboardRound(round, candidates.length, selectionRows) : null,
+      round: round ? toDashboardRound(round, candidates.length, selectionRows, roundPass ? 1 : 0) : null,
       candidates,
       selectedCount: selectedToUserIds.size,
       selectionLimit: round?.selection_limit ?? 2,
+      hasPassed: Boolean(roundPass),
+      passedAt: roundPass ? formatDateTime(new Date(roundPass.created_at)) : undefined,
+      passReason: roundPass?.reason ?? undefined,
       isTestMode: false,
       databaseConnected: true,
       loadError: null,
@@ -328,6 +383,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      hasPassed: false,
       isTestMode: false,
       databaseConnected: false,
       loadError: error instanceof Error ? error.message : "Participant round query failed.",
@@ -346,6 +402,7 @@ export async function getAdminTestRoundData(roundId: bigint): Promise<Participan
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      hasPassed: false,
       isTestMode: true,
       databaseConnected: false,
       loadError: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
@@ -360,22 +417,23 @@ export async function getAdminTestRoundData(roundId: bigint): Promise<Participan
       ),
     ]);
     const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
-    const candidates = memberData.allUsers
+    const candidateUsers = memberData.allUsers
       .filter(
         (user) =>
           user.status === "READY" &&
           user.openLevel === "FULL_OPEN" &&
           isVisibleRoundCandidateForActor(testActor, user) &&
           !activeIntroUserIds.has(user.id),
-      )
-      .map((user) => ({ ...user, alreadySelected: false }));
+      );
+    const candidates = await hydrateRoundCandidates(candidateUsers, new Set<number>());
 
     return {
       actor: testActor,
-      round: round ? toDashboardRound(round, candidates.length, selectionRows) : null,
+      round: round ? toDashboardRound(round, candidates.length, selectionRows, 0) : null,
       candidates,
       selectedCount: 0,
       selectionLimit: round?.selection_limit ?? 2,
+      hasPassed: false,
       isTestMode: true,
       databaseConnected: true,
       loadError: null,
@@ -387,6 +445,7 @@ export async function getAdminTestRoundData(roundId: bigint): Promise<Participan
       candidates: [],
       selectedCount: 0,
       selectionLimit: 2,
+      hasPassed: false,
       isTestMode: true,
       databaseConnected: false,
       loadError: error instanceof Error ? error.message : "Admin test round query failed.",
@@ -506,7 +565,35 @@ function groupSelectionsByRoundId(rows: RoundSelectionRow[]) {
   return map;
 }
 
-function toDashboardRound(round: RoundRow, participantCount: number, selections: RoundSelectionRow[]): DashboardRound {
+function groupPassesByRoundId(rows: RoundPassRow[]) {
+  const map = new Map<number, RoundPassRow[]>();
+  for (const row of rows) {
+    map.set(row.round_id, [...(map.get(row.round_id) ?? []), row]);
+  }
+  return map;
+}
+
+async function hydrateRoundCandidates(candidates: DashboardUser[], selectedToUserIds: Set<number>) {
+  const details = await Promise.all(candidates.map((candidate) => getUserDetail(BigInt(candidate.id))));
+  const detailsById = new Map<number, DashboardUserDetail>();
+
+  for (const detail of details) {
+    if (detail) detailsById.set(detail.id, detail);
+  }
+
+  return candidates.map((candidate) => ({
+    ...candidate,
+    alreadySelected: selectedToUserIds.has(candidate.id),
+    photos: detailsById.get(candidate.id)?.photos ?? [],
+  }));
+}
+
+function toDashboardRound(
+  round: RoundRow,
+  participantCount: number,
+  selections: RoundSelectionRow[],
+  passCount: number,
+): DashboardRound {
   return {
     id: round.id,
     title: round.title,
@@ -517,6 +604,7 @@ function toDashboardRound(round: RoundRow, participantCount: number, selections:
     participantCount,
     selectionCount: selections.length,
     mutualCount: countMutualSelections(selections),
+    passCount,
   };
 }
 

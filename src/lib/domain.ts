@@ -121,6 +121,7 @@ export type DashboardRound = {
   participantCount: number;
   selectionCount: number;
   mutualCount: number;
+  passCount: number;
 };
 
 export type DashboardRoundSelection = {
@@ -136,6 +137,7 @@ export type DashboardRoundSelection = {
 
 export type ParticipantRoundCandidate = DashboardUser & {
   alreadySelected: boolean;
+  photos: DashboardUserPhoto[];
 };
 
 export type ParticipantRoundData = {
@@ -144,6 +146,9 @@ export type ParticipantRoundData = {
   candidates: ParticipantRoundCandidate[];
   selectedCount: number;
   selectionLimit: number;
+  hasPassed: boolean;
+  passedAt?: string;
+  passReason?: string;
   isTestMode: boolean;
   databaseConnected: boolean;
   loadError: string | null;
