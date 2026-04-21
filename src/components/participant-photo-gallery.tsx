@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
 import type { DashboardUserPhoto } from "@/lib/domain";
 
@@ -31,6 +31,11 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const selectedPhoto = galleryPhotos[selectedIndex] ?? null;
 
+  function blockCardSelection(event: MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   if (!selectedPhoto) {
     return (
       <div className="flex h-full items-center justify-center text-[11px] font-semibold text-zinc-400">
@@ -43,7 +48,10 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
     <>
       <button
         type="button"
-        onClick={() => setIsViewerOpen(true)}
+        onClick={(event) => {
+          blockCardSelection(event);
+          setIsViewerOpen(true);
+        }}
         className="relative block h-full w-full overflow-hidden rounded-md"
       >
         <Image
@@ -58,7 +66,11 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
           <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
             {selectedIndex + 1}/{galleryPhotos.length}
           </span>
-        ) : null}
+        ) : (
+          <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
+            사진 보기
+          </span>
+        )}
       </button>
 
       {galleryPhotos.length > 1 ? (
@@ -67,7 +79,10 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
             <button
               key={`${photo.id}-${index}`}
               type="button"
-              onClick={() => setSelectedIndex(index)}
+              onClick={(event) => {
+                blockCardSelection(event);
+                setSelectedIndex(index);
+              }}
               className={`relative h-12 w-10 shrink-0 overflow-hidden rounded-md border ${
                 index === selectedIndex ? "border-[#FF3131]" : "border-zinc-200"
               }`}
@@ -90,11 +105,25 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
           role="dialog"
           aria-modal="true"
+          onClick={(event) => {
+            blockCardSelection(event);
+            setIsViewerOpen(false);
+          }}
         >
-          <div className="w-full max-w-md overflow-hidden rounded-lg bg-white">
+          <div
+            className="w-full max-w-md overflow-hidden rounded-lg bg-white"
+            onClick={(event) => blockCardSelection(event)}
+          >
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
               <p className="truncate text-sm font-bold text-zinc-950">{name} 사진</p>
-              <button type="button" onClick={() => setIsViewerOpen(false)} className="text-sm font-bold text-zinc-500">
+              <button
+                type="button"
+                onClick={(event) => {
+                  blockCardSelection(event);
+                  setIsViewerOpen(false);
+                }}
+                className="text-sm font-bold text-zinc-500"
+              >
                 닫기
               </button>
             </div>
@@ -112,7 +141,10 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
               <div className="flex items-center justify-between gap-2 border-t border-zinc-200 px-4 py-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedIndex((selectedIndex - 1 + galleryPhotos.length) % galleryPhotos.length)}
+                  onClick={(event) => {
+                    blockCardSelection(event);
+                    setSelectedIndex((selectedIndex - 1 + galleryPhotos.length) % galleryPhotos.length);
+                  }}
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700"
                 >
                   이전
@@ -122,7 +154,10 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
                 </p>
                 <button
                   type="button"
-                  onClick={() => setSelectedIndex((selectedIndex + 1) % galleryPhotos.length)}
+                  onClick={(event) => {
+                    blockCardSelection(event);
+                    setSelectedIndex((selectedIndex + 1) % galleryPhotos.length);
+                  }}
                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700"
                 >
                   다음
