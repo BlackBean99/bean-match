@@ -1,6 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  CopyLinkButton,
+} from "@/components/copy-link-button";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
+import {
   createRoundAction,
   createRoundSelectionAction,
   updateRoundStatusAction,
@@ -61,7 +66,7 @@ export function RoundDashboard({
 
       <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <CreateRoundPanel disabled={!databaseConnected} />
-        <RoundList rounds={rounds} candidates={candidates} />
+        <RoundList rounds={rounds} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -70,7 +75,7 @@ export function RoundDashboard({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <CandidateTable candidates={candidates} />
+        <CandidateTable candidates={candidates} activeRound={activeRound} />
         <EntryQueueTable items={entryQueue} />
       </section>
     </div>
@@ -82,35 +87,35 @@ function CreateRoundPanel({ disabled }: { disabled: boolean }) {
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-zinc-950">라운드 생성</h2>
       <form action={createRoundAction} className="mt-4 grid gap-3">
-        <Field label="라운드 이름">
-          <input name="title" defaultValue={defaultRoundTitle()} className={inputClassName} required />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="시작">
-            <input name="startAt" type="datetime-local" className={inputClassName} required />
+        <FormPendingFieldset className="grid gap-3">
+          <Field label="라운드 이름">
+            <input name="title" defaultValue={defaultRoundTitle()} className={inputClassName} required />
           </Field>
-          <Field label="종료">
-            <input name="endAt" type="datetime-local" className={inputClassName} required />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="시작">
+              <input name="startAt" type="datetime-local" className={inputClassName} required />
+            </Field>
+            <Field label="종료">
+              <input name="endAt" type="datetime-local" className={inputClassName} required />
+            </Field>
+          </div>
+          <Field label="상태">
+            <select name="status" defaultValue="DRAFT" className={inputClassName}>
+              {roundStatusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {roundStatusLabels[status]}
+                </option>
+              ))}
+            </select>
           </Field>
-        </div>
-        <Field label="상태">
-          <select name="status" defaultValue="DRAFT" className={inputClassName}>
-            {roundStatusOptions.map((status) => (
-              <option key={status} value={status}>
-                {roundStatusLabels[status]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <button disabled={disabled} className={primaryButtonClassName}>
-          라운드 만들기
-        </button>
+          <FormSubmitButton label="라운드 만들기" pendingLabel="생성 중..." disabled={disabled} className={primaryButtonClassName} />
+        </FormPendingFieldset>
       </form>
     </section>
   );
 }
 
-function RoundList({ rounds, candidates }: { rounds: DashboardRound[]; candidates: DashboardUser[] }) {
+function RoundList({ rounds }: { rounds: DashboardRound[] }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-zinc-950">라운드 운영</h2>
@@ -140,25 +145,24 @@ function RoundList({ rounds, candidates }: { rounds: DashboardRound[]; candidate
                 <Link className="font-bold text-[#E00E0E]" href={`/rounds/${round.id}/test`}>
                   관리자 테스트 참여 URL
                 </Link>
-                <p>참가자 URL 형식: /rounds/{round.id}/participants/{"{userId}"}</p>
-                {round.status === "OPEN" && candidates.length > 0 ? (
-                  <Link className="font-bold text-zinc-800" href={`/rounds/${round.id}/participants/${candidates[0].id}`}>
-                    샘플 참가자 URL: {candidates[0].name}
-                  </Link>
-                ) : null}
+                <p>참가 링크는 아래 후보별 복사 버튼으로 바로 전달할 수 있습니다.</p>
               </div>
               <form action={updateRoundStatusAction} className="mt-3 flex flex-wrap gap-2">
-                <input type="hidden" name="roundId" value={round.id} />
-                <select name="status" defaultValue={round.status} className={smallInputClassName}>
-                  {roundStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {roundStatusLabels[status]}
-                    </option>
-                  ))}
-                </select>
-                <button className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-700">
-                  상태 변경
-                </button>
+                <FormPendingFieldset className="flex flex-wrap gap-2">
+                  <input type="hidden" name="roundId" value={round.id} />
+                  <select name="status" defaultValue={round.status} className={smallInputClassName}>
+                    {roundStatusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {roundStatusLabels[status]}
+                      </option>
+                    ))}
+                  </select>
+                  <FormSubmitButton
+                    label="상태 변경"
+                    pendingLabel="변경 중..."
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-700 disabled:text-zinc-300"
+                  />
+                </FormPendingFieldset>
               </form>
             </article>
           ))
@@ -184,39 +188,39 @@ function SelectionPanel({
       <h2 className="text-lg font-bold text-zinc-950">선택 기록 입력</h2>
       <p className="mt-1 text-sm text-zinc-500">한 사용자는 한 라운드에서 최대 2명만 선택할 수 있고 변경할 수 없습니다.</p>
       <form action={createRoundSelectionAction} className="mt-4 grid gap-3">
-        <Field label="라운드">
-          <select name="roundId" defaultValue={activeRound?.id ?? ""} className={inputClassName} required>
-            {activeRound ? null : <option value="">라운드를 먼저 생성하세요</option>}
-            {activeRound ? <option value={activeRound.id}>{activeRound.title}</option> : null}
-          </select>
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="선택한 사용자">
-            <select name="fromUserId" className={inputClassName} required>
-              <option value="">선택</option>
-              {candidates.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name} · {openLevelLabels[user.openLevel]}
-                </option>
-              ))}
+        <FormPendingFieldset className="grid gap-3">
+          <Field label="라운드">
+            <select name="roundId" defaultValue={activeRound?.id ?? ""} className={inputClassName} required>
+              {activeRound ? null : <option value="">라운드를 먼저 생성하세요</option>}
+              {activeRound ? <option value={activeRound.id}>{activeRound.title}</option> : null}
             </select>
           </Field>
-          <Field label="선택된 후보">
-            <select name="toUserId" className={inputClassName} required>
-              <option value="">선택</option>
-              {users
-                .filter((user) => user.status === "READY")
-                .map((user) => (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="선택한 사용자">
+              <select name="fromUserId" className={inputClassName} required>
+                <option value="">선택</option>
+                {candidates.map((user) => (
                   <option key={user.id} value={user.id}>
-                    {user.name} · {user.gender}
+                    {user.name} · {openLevelLabels[user.openLevel]}
                   </option>
                 ))}
-            </select>
-          </Field>
-        </div>
-        <button disabled={disabled || !activeRound} className={primaryButtonClassName}>
-          선택 저장
-        </button>
+              </select>
+            </Field>
+            <Field label="선택된 후보">
+              <select name="toUserId" className={inputClassName} required>
+                <option value="">선택</option>
+                {users
+                  .filter((user) => user.status === "READY")
+                  .map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name} · {user.gender}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
+          <FormSubmitButton label="선택 저장" pendingLabel="저장 중..." disabled={disabled || !activeRound} className={primaryButtonClassName} />
+        </FormPendingFieldset>
       </form>
     </section>
   );
@@ -256,22 +260,30 @@ function SelectionTable({ selections }: { selections: DashboardRoundSelection[] 
   );
 }
 
-function CandidateTable({ candidates }: { candidates: DashboardUser[] }) {
+function CandidateTable({ candidates, activeRound }: { candidates: DashboardUser[]; activeRound: DashboardRound | null }) {
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-zinc-950">현재 노출 후보</h2>
       <div className="mt-3 grid gap-2">
         {candidates.map((user) => (
-          <div key={user.id} className="flex items-center justify-between rounded-lg border border-zinc-100 px-3 py-2">
+          <div key={user.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3 py-2">
             <div>
               <p className="text-sm font-bold text-zinc-950">{user.name}</p>
               <p className="text-xs text-zinc-500">
                 {user.gender} · {user.age || user.ageText || "나이 미입력"} · {user.heightCm || "-"}cm
               </p>
             </div>
-            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-[#E00E0E]">
-              {openLevelLabels[user.openLevel]}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-[#E00E0E]">
+                {openLevelLabels[user.openLevel]}
+              </span>
+              {activeRound ? (
+                <CopyLinkButton
+                  url={`${process.env.AUTH_URL || "http://localhost:3000"}/rounds/${activeRound.id}/participants/${user.id}`}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-700 hover:border-red-200 hover:text-[#E00E0E]"
+                />
+              ) : null}
+            </div>
           </div>
         ))}
       </div>

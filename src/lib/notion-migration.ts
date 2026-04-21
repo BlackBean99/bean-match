@@ -20,7 +20,7 @@ export async function runNotionMigration(): Promise<MigrationState> {
 
     return {
       status: "success",
-      message: `동기화 완료: 생성 ${result.created}건, 업데이트 ${result.updated}건, 건너뜀 ${result.skipped}건`,
+      message: `동기화 완료: 생성 ${result.created}건, 업데이트 ${result.updated}건, 건너뜀 ${result.skipped}건${result.sourceSummary ? ` (${result.sourceSummary})` : ""}`,
     };
   } catch (error) {
     return {
@@ -31,12 +31,18 @@ export async function runNotionMigration(): Promise<MigrationState> {
 }
 
 function parseMigrationOutput(stdout: string) {
-  const parsed = JSON.parse(stdout || "{}") as { users?: { action?: string }[] };
+  const parsed = JSON.parse(stdout || "{}") as { users?: { action?: string; source?: string }[] };
   const users = parsed.users ?? [];
+  const sourceCounts = new Map<string, number>();
+  for (const user of users) {
+    if (!user.source) continue;
+    sourceCounts.set(user.source, (sourceCounts.get(user.source) ?? 0) + 1);
+  }
 
   return {
     created: users.filter((user) => user.action === "created").length,
     updated: users.filter((user) => user.action === "updated").length,
     skipped: users.filter((user) => user.action === "skipped").length,
+    sourceSummary: [...sourceCounts.entries()].map(([source, count]) => `${source} ${count}건`).join(", "),
   };
 }

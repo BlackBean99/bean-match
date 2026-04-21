@@ -8,6 +8,8 @@ import {
   setMainUserPhotoAction,
   updateUserPhotoAction,
 } from "@/app/actions";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -111,40 +113,58 @@ function PhotoCard({ userId, photo }: { userId: number; photo: DashboardUserPhot
         <details>
           <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">사진 수정</summary>
           <form action={updateUserPhotoAction} className="mt-3 grid gap-3">
-            <input type="hidden" name="userId" value={userId} />
-            <input type="hidden" name="photoId" value={photo.id} />
-            <Field label="URL">
-              <input name="url" type="url" defaultValue={photo.sourceUrl} className={inputClassName} />
-            </Field>
-            <Field label="새 파일">
-              <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className={inputClassName} />
-            </Field>
-            <Field label="파일명">
-              <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
-            </Field>
-            <Field label="순서">
-              <input name="sortOrder" type="number" defaultValue={photo.sortOrder} className={inputClassName} />
-            </Field>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-              <input type="checkbox" name="isMain" defaultChecked={photo.isMain} />
-              대표 사진
-            </label>
-            <button className={primaryButtonClassName}>저장</button>
+            <FormPendingFieldset className="grid gap-3">
+              <input type="hidden" name="userId" value={userId} />
+              <input type="hidden" name="photoId" value={photo.id} />
+              <Field label="URL">
+                <input name="url" type="url" defaultValue={photo.sourceUrl} className={inputClassName} />
+              </Field>
+              <Field label="새 파일">
+                <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className={inputClassName} />
+              </Field>
+              <Field label="파일명">
+                <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
+              </Field>
+              <Field label="순서">
+                <input name="sortOrder" type="number" defaultValue={photo.sortOrder} className={inputClassName} />
+              </Field>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                <input type="checkbox" name="isMain" defaultChecked={photo.isMain} />
+                대표 사진
+              </label>
+              <FormSubmitButton
+                label="저장"
+                pendingLabel="저장 중..."
+                className={`${primaryButtonClassName} disabled:cursor-not-allowed disabled:bg-zinc-300`}
+              />
+            </FormPendingFieldset>
           </form>
         </details>
 
         <div className="flex gap-3">
           {!photo.isMain ? (
             <form action={setMainUserPhotoAction}>
-              <input type="hidden" name="userId" value={userId} />
-              <input type="hidden" name="photoId" value={photo.id} />
-              <button className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E]">대표 지정</button>
+              <FormPendingFieldset className="contents">
+                <input type="hidden" name="userId" value={userId} />
+                <input type="hidden" name="photoId" value={photo.id} />
+                <FormSubmitButton
+                  label="대표 지정"
+                  pendingLabel="변경 중..."
+                  className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E] disabled:text-zinc-300"
+                />
+              </FormPendingFieldset>
             </form>
           ) : null}
           <form action={deleteUserPhotoAction}>
-            <input type="hidden" name="userId" value={userId} />
-            <input type="hidden" name="photoId" value={photo.id} />
-            <button className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E]">삭제</button>
+            <FormPendingFieldset className="contents">
+              <input type="hidden" name="userId" value={userId} />
+              <input type="hidden" name="photoId" value={photo.id} />
+              <FormSubmitButton
+                label="삭제"
+                pendingLabel="삭제 중..."
+                className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
+              />
+            </FormPendingFieldset>
           </form>
         </div>
       </div>

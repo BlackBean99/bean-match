@@ -28,6 +28,15 @@ select {
   font: inherit;
 }
 
+fieldset[disabled] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+form:has(fieldset[disabled]) {
+  opacity: 0.72;
+}
+
 .photo-skeleton::before,
 .photo-skeleton::after {
   content: "";

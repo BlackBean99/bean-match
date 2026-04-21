@@ -13,17 +13,7 @@ const MAIN_DATA_SOURCE_ID =
 const INVITOR_DATA_SOURCE_ID = process.env.NOTION_INVITOR_DATA_SOURCE_ID;
 const MATCHING_HISTORY_DATA_SOURCE_ID = process.env.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID;
 const write = process.argv.includes("--write");
-const notionSources = [
-  MAIN_DATA_SOURCE_ID
-    ? { id: MAIN_DATA_SOURCE_ID, name: "메인DB", sourceType: "main", defaultRoles: ["PARTICIPANT"] }
-    : null,
-  INVITOR_DATA_SOURCE_ID
-    ? { id: INVITOR_DATA_SOURCE_ID, name: "소개모집인", sourceType: "invitor", defaultRoles: ["INVITOR"] }
-    : null,
-  MATCHING_HISTORY_DATA_SOURCE_ID
-    ? { id: MATCHING_HISTORY_DATA_SOURCE_ID, name: "Matching History", sourceType: "matching_history" }
-    : null,
-].filter(Boolean);
+let notionSources;
 
 const genderMap = new Map([
   ["female", "FEMALE"],
@@ -96,6 +86,10 @@ const introStatusValues = new Set([
 ]);
 
 const introStatusMap = new Map([
+  ["success", "SUCCESS"],
+  ["fail", "FAILED"],
+  ["failed", "FAILED"],
+  ["retry", "FAILED"],
   ["제안 전달", "OFFERED"],
   ["제안", "OFFERED"],
   ["A 관심", "A_INTERESTED"],
@@ -130,6 +124,75 @@ class NotionApiError extends Error {
   }
 }
 
+async function buildNotionSources() {
+  const matchingHistoryId =
+    MATCHING_HISTORY_DATA_SOURCE_ID || (await discoverMatchingHistoryDataSourceId());
+
+  return [
+    MAIN_DATA_SOURCE_ID
+      ? { id: MAIN_DATA_SOURCE_ID, name: "메인DB", sourceType: "main", defaultRoles: ["PARTICIPANT"] }
+      : null,
+    INVITOR_DATA_SOURCE_ID
+      ? { id: INVITOR_DATA_SOURCE_ID, name: "소개모집인", sourceType: "invitor", defaultRoles: ["INVITOR"] }
+      : null,
+    matchingHistoryId
+      ? { id: matchingHistoryId, name: "Matching History", sourceType: "matching_history" }
+      : null,
+  ].filter(Boolean);
+}
+
+async function discoverMatchingHistoryDataSourceId() {
+  try {
+    const response = await notionFetch(
+      "/search",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          query: "Matching History",
+          filter: { property: "object", value: "data_source" },
+          page_size: 10,
+        }),
+      },
+      "2025-09-03",
+    );
+    const exact = (response.results || []).find((item) => titleForSearchResult(item) === "Matching History");
+    const match = exact || (response.results || []).find((item) => titleForSearchResult(item).includes("Matching History"));
+    if (match?.id) return match.id;
+  } catch (error) {
+    if (!(error instanceof NotionApiError)) throw error;
+  }
+
+  try {
+    const response = await notionFetch("/search", {
+      method: "POST",
+      body: JSON.stringify({
+        query: "Matching History",
+        filter: { property: "object", value: "database" },
+        page_size: 10,
+      }),
+    });
+    const exact = (response.results || []).find((item) => titleForSearchResult(item) === "Matching History");
+    const match = exact || (response.results || []).find((item) => titleForSearchResult(item).includes("Matching History"));
+    return match?.id ?? null;
+  } catch (error) {
+    if (error instanceof NotionApiError) return null;
+    throw error;
+  }
+}
+
+function titleForSearchResult(item) {
+  return richText(item?.title || []) || "";
+}
+
+function normalizePersonName(name) {
+  return (name || "")
+    .replace(/^내친구\s*-\s*/, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+notionSources = await buildNotionSources();
+
 try {
   if (notionSources.length === 0) {
     throw new Error("Missing required environment variable: NOTION_MAIN_DATA_SOURCE_ID");
@@ -156,7 +219,7 @@ try {
         });
         continue;
       }
-      const checksum = sha256(JSON.stringify(input));
+      const checksum = sha256(stringifyForChecksum(stableInputForChecksum(input, source)));
       const rawChecksum = sha256(JSON.stringify(page));
       const existingSync = await findSyncRecord(page.id);
 
@@ -177,10 +240,21 @@ try {
         continue;
       }
 
-      const result =
-        source.sourceType === "matching_history"
-          ? await writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source)
-          : await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
+      let result;
+      try {
+        result =
+          source.sourceType === "matching_history"
+            ? await writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source)
+            : await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
+      } catch (error) {
+        results.push({
+          pageId: page.id,
+          source: source.name,
+          action: "skipped",
+          reason: error instanceof Error ? error.message : "Write failed",
+        });
+        continue;
+      }
 
       results.push({
         pageId: page.id,
@@ -242,11 +316,16 @@ async function resolveUserIdForName(name) {
 
   if (prisma) {
     const user = await prisma.user.findFirst({ where: { name: trimmed }, select: { id: true } });
-    return user?.id ?? null;
+    if (user?.id) return user.id;
+    const users = await prisma.user.findMany({ select: { id: true, name: true } });
+    return users.find((candidate) => normalizePersonName(candidate.name) === normalizePersonName(trimmed))?.id ?? null;
   }
 
   const rows = await supabaseRest(`/users?select=id&name=eq.${encodeURIComponent(trimmed)}&limit=1`);
-  return rows?.[0]?.id ? BigInt(rows[0].id) : null;
+  if (rows?.[0]?.id) return BigInt(rows[0].id);
+  const users = await supabaseRest("/users?select=id,name&limit=2000");
+  const user = users.find((candidate) => normalizePersonName(candidate.name) === normalizePersonName(trimmed));
+  return user?.id ? BigInt(user.id) : null;
 }
 
 async function resolveUserNameForUserId(userId) {
@@ -393,16 +472,19 @@ async function writeIntroCaseFromNotion(existingSync, input, page, checksum, raw
     return prisma.$transaction(async (tx) => {
       await upsertRawNotionRecordWithPrisma(tx, page, rawChecksum, source);
 
-      if (!existingSync) {
+      const existingPairIntroCaseId =
+        existingSync?.entityId ?? (await findIntroCaseIdForParticipantPairWithPrisma(tx, personAId, personBId));
+
+      if (!existingPairIntroCaseId) {
         const blocked = await hasActiveIntroConflictWithPrisma(tx, [personAId, personBId]);
         if (blocked) {
           throw new Error("Active intro already exists for one of the participants; cannot create a new active intro.");
         }
       }
 
-      const introCase = existingSync
+      const introCase = existingPairIntroCaseId
         ? await tx.introCase.update({
-            where: { id: existingSync.entityId },
+            where: { id: existingPairIntroCaseId },
             data: {
               status: input.status,
               memo: input.memo ?? null,
@@ -423,7 +505,7 @@ async function writeIntroCaseFromNotion(existingSync, input, page, checksum, raw
             },
           });
 
-      if (existingSync) {
+      if (existingPairIntroCaseId) {
         await tx.introCaseParticipant.deleteMany({ where: { introCaseId: introCase.id } });
         await tx.introCaseParticipant.createMany({
           data: [
@@ -462,7 +544,10 @@ async function writeIntroCaseFromNotion(existingSync, input, page, checksum, raw
 
   await upsertRawNotionRecordWithSupabase(page, rawChecksum, source);
 
-  if (!existingSync) {
+  const existingPairIntroCaseId =
+    existingSync?.entityId ?? (await findIntroCaseIdForParticipantPairWithSupabase(personAId, personBId));
+
+  if (!existingPairIntroCaseId) {
     const blocked = await hasActiveIntroConflictWithSupabase([
       safeNumberFromBigInt(personAId, "personAId"),
       safeNumberFromBigInt(personBId, "personBId"),
@@ -472,8 +557,8 @@ async function writeIntroCaseFromNotion(existingSync, input, page, checksum, raw
     }
   }
 
-  const introRows = existingSync
-    ? await supabaseRest(`/intro_cases?id=eq.${existingSync.entityId.toString()}&select=*`, {
+  const introRows = existingPairIntroCaseId
+    ? await supabaseRest(`/intro_cases?id=eq.${existingPairIntroCaseId.toString()}&select=*`, {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({
@@ -642,9 +727,9 @@ async function mapMatchingHistoryPage(page) {
   const props = page.properties || {};
 
   const status = enumValue(
-    selectProp(findProperty(props, ["Status", "status", "상태"])),
+    selectProp(findProperty(props, ["Status", "status", "상태", "Success Signal", "success signal", "결과"])),
     introStatusValues,
-    "OFFERED",
+    "FAILED",
     introStatusMap,
   );
 
@@ -658,10 +743,10 @@ async function mapMatchingHistoryPage(page) {
   );
 
   const personA = await resolveParticipantFromProperty(
-    findProperty(props, ["Person A", "A", "참여자 A", "참여자1", "남자", "user_a", "User A", "participant_a"]),
+    findProperty(props, ["Person A", "A", "참여자 A", "참여자1", "대상", "남자", "user_a", "User A", "participant_a"]),
   );
   const personB = await resolveParticipantFromProperty(
-    findProperty(props, ["Person B", "B", "참여자 B", "참여자2", "여자", "user_b", "User B", "participant_b"]),
+    findProperty(props, ["Person B", "B", "참여자 B", "참여자2", "피소개", "피소개인", "여자", "user_b", "User B", "participant_b"]),
   );
 
   if (!personA?.userId || !personB?.userId) {
@@ -731,6 +816,23 @@ async function hasActiveIntroConflictWithPrisma(tx, participantIds) {
   return false;
 }
 
+async function findIntroCaseIdForParticipantPairWithPrisma(tx, personAId, personBId) {
+  const rows = await tx.introCaseParticipant.findMany({
+    where: { userId: { in: [personAId, personBId] } },
+    select: { introCaseId: true, userId: true },
+  });
+  const byIntroCaseId = new Map();
+  for (const row of rows) {
+    const key = row.introCaseId.toString();
+    byIntroCaseId.set(key, new Set([...(byIntroCaseId.get(key) ?? []), row.userId.toString()]));
+  }
+  const pair = new Set([personAId.toString(), personBId.toString()]);
+  for (const [introCaseId, userIds] of byIntroCaseId) {
+    if (userIds.size === 2 && [...pair].every((userId) => userIds.has(userId))) return BigInt(introCaseId);
+  }
+  return null;
+}
+
 async function hasActiveIntroConflictWithSupabase(participantIds) {
   for (const userId of participantIds) {
     const parts = await supabaseRest(
@@ -743,6 +845,23 @@ async function hasActiveIntroConflictWithSupabase(participantIds) {
     if (Array.isArray(cases) && cases.length > 0) return true;
   }
   return false;
+}
+
+async function findIntroCaseIdForParticipantPairWithSupabase(personAId, personBId) {
+  const a = safeNumberFromBigInt(personAId, "personAId");
+  const b = safeNumberFromBigInt(personBId, "personBId");
+  const parts = await supabaseRest(
+    `/intro_case_participants?select=intro_case_id,user_id&user_id=in.(${a},${b})&limit=1000`,
+  );
+  const byIntroCaseId = new Map();
+  for (const row of parts || []) {
+    const key = row.intro_case_id;
+    byIntroCaseId.set(key, new Set([...(byIntroCaseId.get(key) ?? []), row.user_id]));
+  }
+  for (const [introCaseId, userIds] of byIntroCaseId) {
+    if (userIds.size === 2 && userIds.has(a) && userIds.has(b)) return BigInt(introCaseId);
+  }
+  return null;
 }
 
 async function syncUserStatusesForIntroWithPrisma(tx, participantIds) {
@@ -901,15 +1020,31 @@ function normalizeGender(value) {
 
 function enumValue(value, allowed, fallback, aliases = new Map()) {
   if (!value) return fallback;
-  const alias = aliases.get(value.trim());
+  const trimmed = value.trim();
+  const alias = aliases.get(trimmed) || aliases.get(trimmed.toLowerCase());
   if (alias) return alias;
 
-  const normalized = value.trim().toUpperCase().replaceAll(" ", "_").replaceAll("-", "_");
+  const normalized = trimmed.toUpperCase().replaceAll(" ", "_").replaceAll("-", "_");
   return allowed.has(normalized) ? normalized : fallback;
 }
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function stringifyForChecksum(value) {
+  return JSON.stringify(value, (_key, item) => (typeof item === "bigint" ? item.toString() : item));
+}
+
+function stableInputForChecksum(input, source) {
+  if (source.sourceType !== "main" && source.sourceType !== "invitor") return input;
+  return {
+    ...input,
+    photos: (input.photos || []).map((photo) => ({
+      name: photo.name,
+      sourceType: photo.sourceType,
+    })),
+  };
 }
 
 async function supabaseRest(path, init = {}) {
@@ -920,25 +1055,36 @@ async function supabaseRest(path, init = {}) {
     throw new Error("DATABASE_URL or SUPABASE_SERVICE_ROLE_KEY is required for sync state.");
   }
 
-  const response = await fetch(`${url}/rest/v1${path}`, {
-    ...init,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
+  let response;
+  let text = "";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    response = await fetch(`${url}/rest/v1${path}`, {
+      ...init,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        ...init.headers,
+      },
+    });
+    if (response.ok || ![429, 502, 503, 504].includes(response.status)) break;
+    text = await response.text();
+    await sleep(400 * (attempt + 1));
+  }
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Supabase REST ${response.status}: ${text}`);
+  if (!response?.ok) {
+    text = text || (response ? await response.text() : "");
+    throw new Error(`Supabase REST ${response?.status ?? "unknown"}: ${text}`);
   }
 
   if (response.status === 204) return null;
 
-  const text = await response.text();
+  text = await response.text();
   return text ? JSON.parse(text) : null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function toSupabaseUserPayload(user) {

@@ -645,6 +645,18 @@ export async function createIntroCase(input: IntroCaseInput) {
   }
 
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const existingIntroCaseId = await findSupabaseIntroCaseIdForParticipantPair(
+      Number(input.personAId),
+      Number(input.personBId),
+    );
+    if (existingIntroCaseId) {
+      throw new Error("이미 매칭 이력이 있는 두 사용자는 다시 매칭할 수 없습니다.");
+    }
+    const activeConflict = await hasSupabaseActiveIntroConflict([Number(input.personAId), Number(input.personBId)]);
+    if (activeConflict) {
+      throw new Error("소개 진행 중인 사용자는 새 매칭을 생성할 수 없습니다.");
+    }
+
     const [introCase] = await supabaseRest<SupabaseIntroCaseRow[]>("/intro_cases?select=*", {
       method: "POST",
       headers: { Prefer: "return=representation" },
@@ -681,6 +693,15 @@ export async function createIntroCase(input: IntroCaseInput) {
   assertDatabaseUrl();
 
   return prisma.$transaction(async (tx) => {
+    const existingIntroCaseId = await findPrismaIntroCaseIdForParticipantPair(tx, input.personAId, input.personBId);
+    if (existingIntroCaseId) {
+      throw new Error("이미 매칭 이력이 있는 두 사용자는 다시 매칭할 수 없습니다.");
+    }
+    const activeConflict = await hasPrismaActiveIntroConflict(tx, [input.personAId, input.personBId]);
+    if (activeConflict) {
+      throw new Error("소개 진행 중인 사용자는 새 매칭을 생성할 수 없습니다.");
+    }
+
     const introCase = await tx.introCase.create({
       data: {
         status: input.status,
@@ -1691,6 +1712,86 @@ async function syncUserStatusesAfterIntroChange(userIds: number[]) {
   }
 }
 
+async function findSupabaseIntroCaseIdForParticipantPair(personAId: number, personBId: number) {
+  const participants = await supabaseRest<Pick<SupabaseIntroParticipantRow, "intro_case_id" | "user_id">[]>(
+    `/intro_case_participants?select=intro_case_id,user_id&user_id=in.(${personAId},${personBId})&limit=1000`,
+  );
+  const userIdsByIntroCaseId = new Map<number, Set<number>>();
+  for (const participant of participants) {
+    userIdsByIntroCaseId.set(
+      participant.intro_case_id,
+      new Set([...(userIdsByIntroCaseId.get(participant.intro_case_id) ?? []), participant.user_id]),
+    );
+  }
+
+  for (const [introCaseId, userIds] of userIdsByIntroCaseId) {
+    if (userIds.size === 2 && userIds.has(personAId) && userIds.has(personBId)) return introCaseId;
+  }
+
+  return null;
+}
+
+async function hasSupabaseActiveIntroConflict(userIds: number[]) {
+  for (const userId of userIds) {
+    const participants = await supabaseRest<Pick<SupabaseIntroParticipantRow, "intro_case_id">[]>(
+      `/intro_case_participants?select=intro_case_id&user_id=eq.${userId}&limit=200`,
+    );
+    const introCaseIds = participants.map((participant) => participant.intro_case_id);
+    if (introCaseIds.length === 0) continue;
+    const activeCases = await supabaseRest<Pick<SupabaseIntroCaseRow, "id">[]>(
+      `/intro_cases?select=id&id=in.(${introCaseIds.join(",")})&status=in.(${Array.from(activeIntroStatusSet).join(",")})&limit=1`,
+    );
+    if (activeCases.length > 0) return true;
+  }
+
+  return false;
+}
+
+async function findPrismaIntroCaseIdForParticipantPair(
+  tx: Prisma.TransactionClient,
+  personAId: bigint,
+  personBId: bigint,
+) {
+  const participants = await tx.introCaseParticipant.findMany({
+    where: { userId: { in: [personAId, personBId] } },
+    select: { introCaseId: true, userId: true },
+  });
+  const userIdsByIntroCaseId = new Map<string, Set<string>>();
+  for (const participant of participants) {
+    const introCaseId = participant.introCaseId.toString();
+    userIdsByIntroCaseId.set(
+      introCaseId,
+      new Set([...(userIdsByIntroCaseId.get(introCaseId) ?? []), participant.userId.toString()]),
+    );
+  }
+
+  for (const [introCaseId, userIds] of userIdsByIntroCaseId) {
+    if (
+      userIds.size === 2 &&
+      userIds.has(personAId.toString()) &&
+      userIds.has(personBId.toString())
+    ) {
+      return BigInt(introCaseId);
+    }
+  }
+
+  return null;
+}
+
+async function hasPrismaActiveIntroConflict(tx: Prisma.TransactionClient, userIds: bigint[]) {
+  for (const userId of userIds) {
+    const activeCount = await tx.introCaseParticipant.count({
+      where: {
+        userId,
+        introCase: { status: { in: Array.from(activeIntroStatusSet) } },
+      },
+    });
+    if (activeCount > 0) return true;
+  }
+
+  return false;
+}
+
 async function syncUserStatusesAfterIntroChangeWithPrisma(
   tx: Prisma.TransactionClient,
   userIds: bigint[],
@@ -1725,6 +1826,7 @@ function defaultFilters(): MemberFilterState {
   return {
     view: "pool",
     recommendationFor: "",
+    introStatus: "ALL",
     gender: "ALL",
     ageMin: "",
     ageMax: "",

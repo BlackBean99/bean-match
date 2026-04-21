@@ -292,7 +292,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
         selectionLimit: round?.selection_limit ?? 2,
         isTestMode: false,
         databaseConnected: true,
-        loadError: "READY + FULL_OPEN 사용자만 현재 라운드 후보를 볼 수 있습니다.",
+        loadError: "현재 라운드 참여가 완료된 사용자만 후보를 볼 수 있습니다.",
       };
     }
 
@@ -306,6 +306,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
           user.id !== Number(userId) &&
           user.status === "READY" &&
           user.openLevel === "FULL_OPEN" &&
+          isVisibleRoundCandidateForActor(actor, user) &&
           !activeIntroUserIds.has(user.id),
       )
       .map((user) => ({ ...user, alreadySelected: selectedToUserIds.has(user.id) }));
@@ -360,7 +361,13 @@ export async function getAdminTestRoundData(roundId: bigint): Promise<Participan
     ]);
     const activeIntroUserIds = activeIntroUserIdSet(memberData.introCases);
     const candidates = memberData.allUsers
-      .filter((user) => user.status === "READY" && user.openLevel === "FULL_OPEN" && !activeIntroUserIds.has(user.id))
+      .filter(
+        (user) =>
+          user.status === "READY" &&
+          user.openLevel === "FULL_OPEN" &&
+          isVisibleRoundCandidateForActor(testActor, user) &&
+          !activeIntroUserIds.has(user.id),
+      )
       .map((user) => ({ ...user, alreadySelected: false }));
 
     return {
@@ -472,8 +479,8 @@ function createAdminTestActor(): DashboardUser {
     name: "관리자 테스트 계정",
     age: 0,
     ageSortValue: 0,
-    gender: "비공개",
-    genderCode: "UNDISCLOSED",
+    gender: "남성",
+    genderCode: "MALE",
     heightCm: 0,
     jobTitle: "운영 테스트",
     status: "READY",
@@ -482,6 +489,13 @@ function createAdminTestActor(): DashboardUser {
     hasMainPhoto: false,
     lastChangedAt: "test",
   };
+}
+
+function isVisibleRoundCandidateForActor(actor: DashboardUser | null, candidate: DashboardUser) {
+  if (!actor) return true;
+  if (actor.genderCode === "MALE") return candidate.genderCode === "FEMALE";
+  if (actor.genderCode === "FEMALE") return candidate.genderCode === "MALE";
+  return candidate.genderCode === "FEMALE" || candidate.genderCode === "MALE";
 }
 
 function groupSelectionsByRoundId(rows: RoundSelectionRow[]) {
