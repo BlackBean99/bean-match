@@ -16,7 +16,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const data = await getMemberDashboardData(filters, { includeRoles: false });
 
   return (
-    <AdminShell title="매칭 관리" description="특정 사용자 기준 상대 추천과 매칭 기록을 관리합니다." active="matches">
+    <AdminShell title="매칭 풀 관리" description="등록된 회원을 관리하고 매칭 기회를 빠르게 구성합니다." active="matches">
       <MatchesDashboard {...data} filters={filters} />
     </AdminShell>
   );

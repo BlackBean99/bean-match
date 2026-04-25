@@ -14,7 +14,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const data = await getMemberDashboardData(filters, { includeIntroCases: false });
 
   return (
-    <AdminShell title="사용자 풀" description="전체 사용자 정보를 목록형으로 보고 수정합니다." active="users">
+    <AdminShell title="회원 관리" description="등록 회원을 필터링하고 핵심 프로필 정보를 빠르게 검토합니다." active="users">
       <UsersDashboard {...data} filters={filters} />
     </AdminShell>
   );
