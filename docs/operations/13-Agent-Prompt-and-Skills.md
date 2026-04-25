@@ -27,7 +27,7 @@ Non-negotiable rules:
 - A participant can select at most 2 candidates in one round.
 - INVITOR users only drive onboarding via invite links and do not control matching or communication.
 - Keep all work scoped to short-lived branches and PRs into main.
-- Validate with lint, typecheck, build, and schema checks when relevant.
+- Validate with lint, typecheck, build, `npm run start`, and schema checks when relevant.
 ```
 
 ## RPI Skill
@@ -36,7 +36,7 @@ Use the RPI workflow for every non-trivial change.
 - **Read**: inspect docs, current branch, status, and affected code.
 - **Plan**: define scope, risk, validation, and rollback.
 - **Implement**: change only the scoped files.
-- **Inspect**: run validation, review diffs, push, open PR, and communicate status.
+- **Inspect**: run validation, including `npm run start` production boot checks for web changes, review diffs, push, open PR, and communicate status.
 
 ## GitHub Skill
 Use for GitHub work:
@@ -72,5 +72,14 @@ Current repository state:
 - No Dockerfile
 - No Netlify, Railway, Render, or Fly config
 - Local runtime is Next.js via `npm run dev`, `npm run build`, and `npm run start`
+
+For agent-delivered web changes, production verification is mandatory:
+
+```sh
+npm run lint
+npm run typecheck
+npm run build
+npm run start
+```
 
 If an external host is used, document its project URL, branch, build command, output mode, and environment variable names here before relying on it for shared URLs.
