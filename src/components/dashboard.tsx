@@ -12,6 +12,7 @@ import {
 } from "@/components/admin-ui";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { IntroCaseCreateForm } from "@/components/intro-case-create-form";
 import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
 import { NavigationSubmitButton } from "@/components/navigation-submit-button";
 import {
@@ -28,7 +29,6 @@ import {
 } from "@/lib/domain";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  createIntroCaseAction,
   createMemberAction,
   deleteIntroCaseAction,
   deleteMemberAction,
@@ -542,20 +542,28 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
 }
 
 function IntroCreatePanel({ users, disabled }: { users: DashboardUser[]; disabled: boolean }) {
+  const eligibleUsers = users.filter((user) => user.status === "READY");
+
   return (
     <details className="overflow-hidden rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]" open>
       <summary className="cursor-pointer text-lg font-bold text-zinc-950">매칭 기록 생성</summary>
-      <form action={createIntroCaseAction} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
-        <FormPendingFieldset className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2">
-          <IntroCaseFields users={users} />
-          <FormSubmitButton
-            label="매칭 기록 추가"
-            pendingLabel="추가 중..."
-            disabled={disabled}
-            className={`${primaryButtonClassName} sm:col-span-2`}
-          />
-        </FormPendingFieldset>
-      </form>
+      <p className="mt-3 text-sm leading-6 text-zinc-500">
+        신규 매칭은 현재 `READY` 상태 사용자만 선택할 수 있습니다. 이미 진행 중이거나 기존 매칭 이력이 있는 조합은 추가되지 않습니다.
+      </p>
+      <IntroCaseCreateForm
+        users={eligibleUsers}
+        invitors={users}
+        introStatuses={introStatusOrder.map((status) => ({ value: status, label: introStatusLabels[status] }))}
+        inputClassName={inputClassName}
+        fieldClassName="grid gap-1 text-xs font-semibold text-zinc-600"
+        buttonClassName={primaryButtonClassName}
+        disabled={disabled || eligibleUsers.length < 2}
+      />
+      {eligibleUsers.length < 2 ? (
+        <p className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+          매칭을 추가하려면 `READY` 상태 사용자가 최소 2명 필요합니다.
+        </p>
+      ) : null}
     </details>
   );
 }
@@ -725,36 +733,6 @@ function MemberFields({ user, compact = false }: { user?: DashboardUser; compact
         </div>
       </fieldset>
     </div>
-  );
-}
-
-function IntroCaseFields({ users }: { users: DashboardUser[] }) {
-  return (
-    <>
-      <Field label="참여자 A">
-        <UserSelect name="personAId" users={users} required />
-      </Field>
-      <Field label="참여자 B">
-        <UserSelect name="personBId" users={users} required />
-      </Field>
-      <Field label="주선자">
-        <UserSelect name="invitorUserId" users={users} />
-      </Field>
-      <Field label="상태">
-        <select name="status" defaultValue="OFFERED" className={inputClassName}>
-          {introStatusOrder.map((status) => (
-            <option key={status} value={status}>
-              {introStatusLabels[status]}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="sm:col-span-2">
-        <Field label="메모">
-        <textarea name="memo" rows={3} className={inputClassName} />
-        </Field>
-      </div>
-    </>
   );
 }
 
