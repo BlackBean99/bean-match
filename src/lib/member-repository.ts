@@ -24,6 +24,9 @@ type MemberInput = {
   gender: Gender;
   status: UserStatus;
   openLevel: OpenLevel;
+  exposureConsent: boolean;
+  newMemberNotificationsEnabled: boolean;
+  exposurePaused: boolean;
   birthDate: Date | null;
   ageText: string | null;
   heightCm: number | null;
@@ -42,6 +45,9 @@ type SupabaseUserRow = {
   status: UserStatus;
   open_level: OpenLevel | null;
   main_photo_id: number | null;
+  exposure_consent: boolean;
+  new_member_notifications_enabled: boolean;
+  exposure_paused: boolean;
   birth_date: string | null;
   age_text: string | null;
   phone: string | null;
@@ -210,6 +216,9 @@ async function getMemberDashboardDataFromPrisma(
         idealTypeDescription: user.idealTypeDescription ?? "",
         status: user.status,
         openLevel: user.openLevel,
+        exposureConsent: user.exposureConsent,
+        newMemberNotificationsEnabled: user.newMemberNotificationsEnabled,
+        exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
         mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
@@ -241,7 +250,7 @@ async function getMemberDashboardDataFromSupabaseRest(
 ): Promise<MemberDashboardData> {
   try {
     const users = await supabaseRest<SupabaseUserRow[]>(
-      "/users?select=id,name,gender,status,open_level,main_photo_id,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
+      "/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
     );
     const userIds = users.map((user) => user.id);
     const [roles, introCases] = await Promise.all([
@@ -285,6 +294,9 @@ async function getMemberDashboardDataFromSupabaseRest(
         status: user.status,
         // 정책: 사진을 제공한 사람은 디폴트로 FULL_OPEN. (명시적 open_level이 있으면 그 값을 우선)
         openLevel: user.open_level ?? (user.main_photo_id ? "FULL_OPEN" : "PRIVATE"),
+        exposureConsent: user.exposure_consent,
+        newMemberNotificationsEnabled: user.new_member_notifications_enabled,
+        exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
         mainPhotoUrl: photoDisplayUrl(user.main_photo_id),
@@ -339,6 +351,10 @@ export async function createMember(input: MemberInput) {
         gender: input.gender,
         status: input.status,
         openLevel: input.openLevel,
+        exposureConsent: input.exposureConsent,
+        newMemberNotificationsEnabled: input.newMemberNotificationsEnabled,
+        exposurePaused: input.exposurePaused,
+        exposurePausedAt: input.exposurePaused ? new Date() : null,
         birthDate: input.birthDate,
         ageText: input.ageText,
         heightCm: input.heightCm,
@@ -402,6 +418,9 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       idealTypeDescription: user.idealTypeDescription ?? "",
       status: user.status,
       openLevel: user.openLevel,
+      exposureConsent: user.exposureConsent,
+      newMemberNotificationsEnabled: user.newMemberNotificationsEnabled,
+      exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
       mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
@@ -445,6 +464,9 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     idealTypeDescription: user.ideal_type_description ?? "",
     status: user.status,
     openLevel: user.open_level ?? "PRIVATE",
+    exposureConsent: user.exposure_consent,
+    newMemberNotificationsEnabled: user.new_member_notifications_enabled,
+    exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
     mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
@@ -655,6 +677,13 @@ export async function createIntroCase(input: IntroCaseInput) {
   }
 
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const participants = await supabaseRest<Pick<SupabaseUserRow, "id" | "status">[]>(
+      `/users?select=id,status&id=in.(${Number(input.personAId)},${Number(input.personBId)})`,
+    );
+    if (participants.length !== 2 || participants.some((participant) => participant.status !== "READY")) {
+      throw new Error("새 소개는 READY 상태 사용자끼리만 생성할 수 있습니다.");
+    }
+
     const existingIntroCaseId = await findSupabaseIntroCaseIdForParticipantPair(
       Number(input.personAId),
       Number(input.personBId),
@@ -703,6 +732,14 @@ export async function createIntroCase(input: IntroCaseInput) {
   assertDatabaseUrl();
 
   return prisma.$transaction(async (tx) => {
+    const participants = await tx.user.findMany({
+      where: { id: { in: [input.personAId, input.personBId] } },
+      select: { id: true, status: true },
+    });
+    if (participants.length !== 2 || participants.some((participant) => participant.status !== "READY")) {
+      throw new Error("새 소개는 READY 상태 사용자끼리만 생성할 수 있습니다.");
+    }
+
     const existingIntroCaseId = await findPrismaIntroCaseIdForParticipantPair(tx, input.personAId, input.personBId);
     if (existingIntroCaseId) {
       throw new Error("이미 매칭 이력이 있는 두 사용자는 다시 매칭할 수 없습니다.");
@@ -825,6 +862,10 @@ export async function updateMember(id: bigint, input: MemberInput) {
         gender: input.gender,
         status: input.status,
         openLevel: input.openLevel,
+        exposureConsent: input.exposureConsent,
+        newMemberNotificationsEnabled: input.newMemberNotificationsEnabled,
+        exposurePaused: input.exposurePaused,
+        exposurePausedAt: input.exposurePaused ? new Date() : null,
         birthDate: input.birthDate,
         ageText: input.ageText,
         heightCm: input.heightCm,
@@ -1079,6 +1120,10 @@ function toSupabaseUserPayload(input: MemberInput, includePhone: boolean) {
     gender: input.gender,
     status: input.status,
     open_level: input.openLevel,
+    exposure_consent: input.exposureConsent,
+    new_member_notifications_enabled: input.newMemberNotificationsEnabled,
+    exposure_paused: input.exposurePaused,
+    exposure_paused_at: input.exposurePaused ? new Date().toISOString() : null,
     birth_date: input.birthDate ? input.birthDate.toISOString().slice(0, 10) : null,
     age_text: input.ageText,
     height_cm: input.heightCm,

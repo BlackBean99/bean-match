@@ -24,6 +24,10 @@ erDiagram
         VARCHAR age_text
         VARCHAR phone
         BOOLEAN contact_visible
+        BOOLEAN exposure_consent
+        BOOLEAN new_member_notifications_enabled
+        BOOLEAN exposure_paused
+        TIMESTAMP exposure_paused_at
         INT height_cm
         VARCHAR job_title
         VARCHAR company_name
@@ -114,6 +118,43 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    INTERESTS {
+        BIGINT id PK
+        BIGINT from_user_id FK
+        BIGINT to_user_id FK
+        VARCHAR source
+        VARCHAR status
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        TIMESTAMP expires_at
+    }
+
+    INTRO_CANDIDATES {
+        BIGINT id PK
+        BIGINT user_a_id FK
+        BIGINT user_b_id FK
+        TEXT reason
+        VARCHAR source
+        VARCHAR status
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+        TIMESTAMP approved_at
+        TIMESTAMP rejected_at
+        TIMESTAMP converted_at
+    }
+
+    NOTIFICATIONS {
+        BIGINT id PK
+        BIGINT user_id FK
+        BIGINT subject_user_id FK
+        VARCHAR type
+        VARCHAR title
+        TEXT body
+        VARCHAR link_path
+        TIMESTAMP created_at
+        TIMESTAMP read_at
+    }
+
     ROUNDS {
         BIGINT id PK
         VARCHAR title
@@ -168,6 +209,11 @@ erDiagram
     USERS ||--o{ INTRO_CASE_PARTICIPANTS : joins
     USERS ||--o{ INTRO_CASES : invites
     USERS ||--o{ INTRO_CASE_EVENTS : acts
+    USERS ||--o{ INTERESTS : sends
+    USERS ||--o{ INTERESTS : receives
+    USERS ||--o{ INTRO_CANDIDATES : pairs
+    USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ NOTIFICATIONS : subjects
     USERS ||--o{ USER_STATE_HISTORY : changes
     USERS ||--o{ USERS : invites
     USERS ||--o{ ROUND_SELECTIONS : selects
@@ -256,11 +302,30 @@ erDiagram
 - 이미 선택을 제출한 사용자는 패스를 남길 수 없음
 
 ### 3.12 ENTRY_QUEUE
-신규 온보딩 사용자를 다음 라운드에 넣기 전까지 보관하는 큐.
+신규 온보딩 사용자를 자동 노출 준비 상태로 반영하는 큐.
 - `WAITING`
 - `READY`
 - `PROMOTED`
 - `CANCELLED`
+
+### 3.13 INTERESTS
+자동 노출 풀에서 사용자가 남긴 관심 표시 기록.
+- `from_user_id`: 관심을 보낸 사용자
+- `to_user_id`: 관심을 받은 사용자
+- `source`: 신규 가입자 브라우징 / 기존 회원 알림 / 운영자 수동 생성
+- `status`: 활성 / 철회 / 만료 / 소개 전환
+
+### 3.14 INTRO_CANDIDATES
+상호 관심이 생겨 운영자 검토가 필요한 소개 후보.
+- `user_a_id`, `user_b_id`: 정렬된 페어
+- `reason`: 후보 생성 근거
+- `status`: 검토 대기 / 승인 / 반려 / 소개 전환 완료
+
+### 3.15 NOTIFICATIONS
+자동 노출 풀에서 쓰는 in-app 알림.
+- `user_id`: 알림을 받는 사용자
+- `subject_user_id`: 알림 대상이 된 신규 멤버
+- `type`: 현재는 `NEW_ELIGIBLE_MEMBER`
 
 ---
 

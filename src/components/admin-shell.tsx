@@ -16,9 +16,9 @@ const navItems: Array<{
   badge?: string;
 }> = [
   { key: "matches", href: "/matches", label: "매칭 풀 관리", badge: "핵심" },
-  { key: "rounds", href: "/rounds", label: "매칭 제안 관리" },
+  { key: "rounds", href: "/rounds", label: "자동 노출 운영", badge: "신규" },
   { key: "users", href: "/users", label: "회원 관리" },
-  { key: "onboarding", href: "/onboarding", label: "온보딩 플로우" },
+  { key: "onboarding", href: "/onboarding", label: "참여 링크" },
 ];
 
 export function AdminShell({ title, description, active, children }: AdminShellProps) {

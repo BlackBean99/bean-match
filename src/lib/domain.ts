@@ -24,8 +24,37 @@ export const introStatusLabels = {
   CANCELLED: "취소",
 } as const;
 
+export const interestSourceLabels = {
+  NEW_MEMBER_BROWSE: "신규 가입자 탐색",
+  NEW_MEMBER_BROADCAST: "신규 가입 알림",
+  ADMIN_CREATED: "운영자 생성",
+} as const;
+
+export const interestStatusLabels = {
+  ACTIVE: "활성",
+  WITHDRAWN: "철회",
+  EXPIRED: "만료",
+  CONVERTED_TO_INTRO: "소개 전환",
+} as const;
+
+export const introCandidateStatusLabels = {
+  PENDING_ADMIN_REVIEW: "관리자 검토 대기",
+  APPROVED: "승인",
+  REJECTED: "반려",
+  CONVERTED_TO_INTRO_CASE: "소개 전환 완료",
+} as const;
+
+export const introCandidateSourceLabels = {
+  MUTUAL_INTEREST: "상호 관심",
+  ADMIN_CREATED: "운영자 생성",
+} as const;
+
 export type UserStatus = keyof typeof userStatusLabels;
 export type IntroStatus = keyof typeof introStatusLabels;
+export type InterestSource = keyof typeof interestSourceLabels;
+export type InterestStatus = keyof typeof interestStatusLabels;
+export type IntroCandidateStatus = keyof typeof introCandidateStatusLabels;
+export type IntroCandidateSource = keyof typeof introCandidateSourceLabels;
 
 export const activeIntroStatuses: IntroStatus[] = [
   "OFFERED",
@@ -54,6 +83,9 @@ export type DashboardUser = {
   idealTypeDescription?: string;
   status: UserStatus;
   openLevel: OpenLevel;
+  exposureConsent: boolean;
+  newMemberNotificationsEnabled: boolean;
+  exposurePaused: boolean;
   roles: string[];
   hasMainPhoto: boolean;
   mainPhotoUrl?: string;
@@ -65,9 +97,9 @@ export type RoundStatus = "DRAFT" | "OPEN" | "CLOSED" | "MATCHING" | "COMPLETED"
 export type EntryQueueStatus = "WAITING" | "READY" | "PROMOTED" | "CANCELLED";
 
 export const openLevelLabels: Record<OpenLevel, string> = {
-  PRIVATE: "Operator 매칭",
-  SEMI_OPEN: "제한 노출",
-  FULL_OPEN: "전체 라운드",
+  PRIVATE: "운영자 검토 전용",
+  SEMI_OPEN: "제한 자동 노출",
+  FULL_OPEN: "전체 자동 노출",
 };
 
 export const roundStatusLabels: Record<RoundStatus, string> = {
@@ -80,7 +112,7 @@ export const roundStatusLabels: Record<RoundStatus, string> = {
 
 export const entryQueueStatusLabels: Record<EntryQueueStatus, string> = {
   WAITING: "대기",
-  READY: "다음 라운드 준비",
+  READY: "자동 노출 준비",
   PROMOTED: "라운드 반영",
   CANCELLED: "취소",
 };
@@ -109,6 +141,64 @@ export type DashboardUserPhoto = {
 
 export type DashboardUserDetail = DashboardUser & {
   photos: DashboardUserPhoto[];
+};
+
+export type DashboardInterest = {
+  id: number;
+  fromUserId: number;
+  toUserId: number;
+  fromUserName: string;
+  toUserName: string;
+  source: InterestSource;
+  status: InterestStatus;
+  createdAt: string;
+  createdAtIso?: string;
+  expiresAt?: string;
+  isMutual: boolean;
+};
+
+export type DashboardIntroCandidate = {
+  id: number;
+  userAId: number;
+  userBId: number;
+  userAName: string;
+  userBName: string;
+  reason: string;
+  source: IntroCandidateSource;
+  status: IntroCandidateStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DashboardExposureQueueItem = {
+  userId: number;
+  userName: string;
+  readyAt: string;
+  openLevel: OpenLevel;
+  outgoingInterestCount: number;
+  incomingInterestCount: number;
+  mutualInterestCount: number;
+  exposureCount: number;
+  exposurePaused: boolean;
+};
+
+export type DashboardExposureSignalUser = {
+  userId: number;
+  userName: string;
+  count: number;
+  detail: string;
+};
+
+export type DashboardExposureData = {
+  users: DashboardUser[];
+  queue: DashboardExposureQueueItem[];
+  interests: DashboardInterest[];
+  introCandidates: DashboardIntroCandidate[];
+  highDemandUsers: DashboardExposureSignalUser[];
+  noInterestUsers: DashboardExposureSignalUser[];
+  lowExposureUsers: DashboardExposureSignalUser[];
+  databaseConnected: boolean;
+  loadError: string | null;
 };
 
 export type DashboardRound = {
@@ -140,6 +230,30 @@ export type ParticipantRoundCandidate = DashboardUser & {
   photos: DashboardUserPhoto[];
 };
 
+export type ParticipantExposureCandidate = DashboardUser & {
+  photos: DashboardUserPhoto[];
+  alreadyInterested: boolean;
+  activeIncomingInterestCount: number;
+  exposureCount: number;
+};
+
+export type ParticipantNewMemberNotification = {
+  id: number;
+  createdAt: string;
+  title: string;
+  body: string;
+  interestSent: boolean;
+  subject: ParticipantExposureCandidate;
+};
+
+export type ParticipantInterestSelection = {
+  id: number;
+  toUserId: number;
+  toUserName: string;
+  source: InterestSource;
+  createdAt: string;
+};
+
 export type ParticipantRoundData = {
   actor: DashboardUser | null;
   round: DashboardRound | null;
@@ -150,6 +264,19 @@ export type ParticipantRoundData = {
   passedAt?: string;
   passReason?: string;
   isTestMode: boolean;
+  databaseConnected: boolean;
+  loadError: string | null;
+};
+
+export type ParticipantExposureData = {
+  actor: DashboardUser | null;
+  browseCandidates: ParticipantExposureCandidate[];
+  browseSelections: ParticipantInterestSelection[];
+  newMemberNotifications: ParticipantNewMemberNotification[];
+  browseLimit: number;
+  existingMemberInterestLimit: number;
+  browseSubmitted: boolean;
+  canBrowse: boolean;
   databaseConnected: boolean;
   loadError: string | null;
 };
