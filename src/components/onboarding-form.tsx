@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { joinCurrentRoundAction } from "@/app/round-actions";
+import { joinAutoExposureAction } from "@/app/exposure-actions";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 
@@ -11,9 +11,9 @@ export function OnboardingForm({ invitorId }: OnboardingFormProps) {
   return (
     <section className="mx-auto w-full max-w-3xl rounded-lg border border-red-100 bg-white p-6 shadow-sm">
       <p className="text-sm font-bold text-[#E00E0E]">Blackbean Match</p>
-      <h1 className="mt-2 text-3xl font-bold text-zinc-950">라운드 참여 정보 입력</h1>
+      <h1 className="mt-2 text-3xl font-bold text-zinc-950">자동 노출 참여 정보 입력</h1>
       <p className="mt-2 text-sm leading-6 text-zinc-600">
-        모집인이 먼저 만든 사용자 데이터의 ID와 본인 이름을 입력하면 기존 정보를 바탕으로 현재 라운드 참여 상태를
+        모집인이 먼저 만든 사용자 데이터의 ID와 본인 이름을 입력하면 기존 정보를 바탕으로 자동 노출 풀 참여 상태를
         갱신합니다.
       </p>
       {invitorId ? (
@@ -21,7 +21,7 @@ export function OnboardingForm({ invitorId }: OnboardingFormProps) {
           모집인 초대 링크로 들어왔습니다. 가입 출처는 운영자에게만 기록됩니다.
         </p>
       ) : null}
-      <form action={joinCurrentRoundAction} className="mt-6 grid gap-4">
+      <form action={joinAutoExposureAction} className="mt-6 grid gap-4">
         <FormPendingFieldset className="grid gap-4">
           {invitorId ? <input type="hidden" name="invitorUserId" value={invitorId} /> : null}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -32,12 +32,28 @@ export function OnboardingForm({ invitorId }: OnboardingFormProps) {
               <input name="name" className={inputClassName} required />
             </Field>
           </div>
+          <Field label="노출 레벨">
+            <select name="openLevel" defaultValue="FULL_OPEN" className={inputClassName}>
+              <option value="FULL_OPEN">전체 자동 노출</option>
+              <option value="SEMI_OPEN">제한 자동 노출</option>
+              <option value="PRIVATE">운영자 수동 검토만</option>
+            </select>
+          </Field>
           <label className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-zinc-700">
-            <input name="fullOpenConsent" type="checkbox" className="mt-1 h-4 w-4 accent-[#FF3131]" required />
-            <span>현재 라운드 참여를 위해 전체 공개에 동의합니다.</span>
+            <input name="exposureConsent" type="checkbox" className="mt-1 h-4 w-4 accent-[#FF3131]" />
+            <span>자동 노출 풀에서 상대 회원에게 프로필이 보이는 것에 동의합니다.</span>
+          </label>
+          <label className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-700">
+            <input
+              name="newMemberNotificationsEnabled"
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[#FF3131]"
+              defaultChecked
+            />
+            <span>새로운 멤버가 내 풀에 들어오면 알림을 받겠습니다.</span>
           </label>
           <FormSubmitButton
-            label="현재 라운드 참여하기"
+            label="자동 노출 풀 입장하기"
             pendingLabel="입장 처리 중..."
             className="rounded-lg bg-[#FF3131] px-4 py-3 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
           />

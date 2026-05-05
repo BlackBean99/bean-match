@@ -82,6 +82,35 @@ enum IntroResponseStatus {
   DECLINED
 }
 
+enum InterestSource {
+  NEW_MEMBER_BROWSE
+  NEW_MEMBER_BROADCAST
+  ADMIN_CREATED
+}
+
+enum InterestStatus {
+  ACTIVE
+  WITHDRAWN
+  EXPIRED
+  CONVERTED_TO_INTRO
+}
+
+enum IntroCandidateSource {
+  MUTUAL_INTEREST
+  ADMIN_CREATED
+}
+
+enum IntroCandidateStatus {
+  PENDING_ADMIN_REVIEW
+  APPROVED
+  REJECTED
+  CONVERTED_TO_INTRO_CASE
+}
+
+enum NotificationType {
+  NEW_ELIGIBLE_MEMBER
+}
+
 model User {
   id                   BigInt                 @id @default(autoincrement())
   name                 String                 @db.VarChar(50)
@@ -92,6 +121,10 @@ model User {
   ageText              String?                @map("age_text") @db.VarChar(30)
   phone                String?                @db.VarChar(30)
   contactVisible       Boolean                @default(false) @map("contact_visible")
+  exposureConsent      Boolean                @default(false) @map("exposure_consent")
+  newMemberNotificationsEnabled Boolean       @default(true) @map("new_member_notifications_enabled")
+  exposurePaused       Boolean                @default(false) @map("exposure_paused")
+  exposurePausedAt     DateTime?              @map("exposure_paused_at")
   heightCm             Int?                   @map("height_cm")
   jobTitle             String?                @map("job_title") @db.VarChar(100)
   companyName          String?                @map("company_name") @db.VarChar(100)
@@ -118,6 +151,12 @@ model User {
   actedStateChanges    UserStateHistory[]     @relation("UserStateHistoryActor")
   roundSelectionsFrom  RoundSelection[]        @relation("RoundSelectionFromUser")
   roundSelectionsTo    RoundSelection[]        @relation("RoundSelectionToUser")
+  interestsFrom        Interest[]             @relation("InterestFromUser")
+  interestsTo          Interest[]             @relation("InterestToUser")
+  introCandidatesA     IntroCandidate[]       @relation("IntroCandidateUserA")
+  introCandidatesB     IntroCandidate[]       @relation("IntroCandidateUserB")
+  notifications        Notification[]         @relation("NotificationRecipient")
+  notificationSubjects Notification[]         @relation("NotificationSubjectUser")
   entryQueues          EntryQueue[]
 
   @@map("users")
@@ -167,6 +206,62 @@ model EntryQueue {
   @@unique([userId, status])
   @@index([status, joinedAt])
   @@map("entry_queue")
+}
+
+model Interest {
+  id         BigInt         @id @default(autoincrement())
+  fromUserId BigInt         @map("from_user_id")
+  toUserId   BigInt         @map("to_user_id")
+  source     InterestSource
+  status     InterestStatus @default(ACTIVE)
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+  expiresAt  DateTime?      @map("expires_at")
+  fromUser   User           @relation("InterestFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User           @relation("InterestToUser", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId, source])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+  @@map("interests")
+}
+
+model IntroCandidate {
+  id          BigInt               @id @default(autoincrement())
+  userAId     BigInt               @map("user_a_id")
+  userBId     BigInt               @map("user_b_id")
+  reason      String
+  source      IntroCandidateSource
+  status      IntroCandidateStatus @default(PENDING_ADMIN_REVIEW)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  approvedAt  DateTime?            @map("approved_at")
+  rejectedAt  DateTime?            @map("rejected_at")
+  convertedAt DateTime?            @map("converted_at")
+  userA       User                 @relation("IntroCandidateUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB       User                 @relation("IntroCandidateUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([status, createdAt])
+  @@map("intro_candidates")
+}
+
+model Notification {
+  id            BigInt           @id @default(autoincrement())
+  userId        BigInt           @map("user_id")
+  subjectUserId BigInt?          @map("subject_user_id")
+  type          NotificationType
+  title         String           @db.VarChar(120)
+  body          String
+  linkPath      String?          @map("link_path") @db.VarChar(255)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  readAt        DateTime?        @map("read_at")
+  user          User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  subjectUser   User?            @relation("NotificationSubjectUser", fields: [subjectUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([subjectUserId])
+  @@map("notifications")
 }
 
 model UserRoleAssignment {

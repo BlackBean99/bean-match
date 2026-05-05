@@ -693,6 +693,27 @@ function MemberFields({ user, compact = false }: { user?: DashboardUser; compact
           ))}
         </select>
       </Field>
+      <fieldset className={compact ? "grid gap-2" : "grid gap-2 md:col-span-2"}>
+        <legend className="text-xs font-semibold text-zinc-600">자동 노출 설정</legend>
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex items-center gap-2 rounded-2xl bg-[#f4f5f8] px-3 py-2 text-xs text-zinc-700">
+            <input type="checkbox" name="exposureConsent" defaultChecked={user?.exposureConsent ?? true} />
+            프로필 노출 동의
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-2xl bg-[#f4f5f8] px-3 py-2 text-xs text-zinc-700">
+            <input
+              type="checkbox"
+              name="newMemberNotificationsEnabled"
+              defaultChecked={user?.newMemberNotificationsEnabled ?? true}
+            />
+            신규 멤버 알림 수신
+          </label>
+          <label className="inline-flex items-center gap-2 rounded-2xl bg-[#f4f5f8] px-3 py-2 text-xs text-zinc-700">
+            <input type="checkbox" name="exposurePaused" defaultChecked={user?.exposurePaused ?? false} />
+            자동 노출 일시중지
+          </label>
+        </div>
+      </fieldset>
       <Field label="나이">
         <input name="ageText" defaultValue={user?.ageText} placeholder="예: 95, 98, 30" className={inputClassName} />
       </Field>

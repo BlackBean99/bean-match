@@ -38,14 +38,13 @@
 - `POST /api/intro-cases/{id}/responses` : 참여자 응답 등록
 - `POST /api/intro-cases/{id}/result` : 결과 확인 등록
 
-### 2.6 Round / Selection
-- `GET /rounds/{roundId}/participants/{userId}` : 참가자가 라운드 후보를 보고 최대 2명을 선택하는 공유 URL
-- `POST /rounds/{roundId}/participants/{userId}` : 라운드 선택 저장. 실제 구현은 Server Action을 사용한다.
-- `POST /rounds/{roundId}/participants/{userId}/pass` : 이번 라운드에서 선택하지 않겠다는 의사 저장. 실제 구현은 Server Action을 사용한다.
-- `GET /invite/{invitorId}` : 모집인 초대 링크. 라운드 참여 진입 폼에 `invitorId`를 전달한다.
-- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 라운드 참여 진입 URL
-- `GET /rounds/{roundId}/test` : 관리자 테스트 참여 URL. 실제 선택 데이터는 저장하지 않는다.
-- `GET /rounds` : 관리자 라운드 운영 화면
+### 2.6 Auto Exposure / Interest
+- `GET /invite/{invitorId}` : 모집인 초대 링크. 자동 노출 참여 진입 폼에 `invitorId`를 전달한다.
+- `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 자동 노출 참여 진입 URL
+- `GET /pool/{userId}` : 참가자 개인 풀 URL. 신규 가입자는 브라우징 관심을 제출하고, 기존 회원은 새 멤버 알림을 확인한다.
+- `POST /pool/{userId}/browse-interests` : 신규 가입자가 최대 3명의 관심을 제출한다. 현재 구현은 Server Action을 사용한다.
+- `POST /pool/{userId}/broadcast-interests` : 기존 회원이 새 멤버 알림 카드에 관심을 표시한다. 현재 구현은 Server Action을 사용한다.
+- `GET /rounds` : 관리자 자동 노출 운영 화면
 - `GET /users` : 관리자 사용자 풀 화면
 - `GET /matches` : 관리자 매칭 조율 화면
 
@@ -158,22 +157,22 @@
 5. 참여자 매핑 생성
 6. 두 사용자 상태를 `PROGRESSING` 으로 전환
 
-### 라운드 선택
-1. 라운드가 `OPEN` 상태인지 검증
-2. 선택한 사용자가 `READY` + `FULL_OPEN` 인지 검증
-3. 선택 대상이 `READY` 상태인지 검증
-4. 자기 자신 선택 금지
-5. 사용자당 라운드 선택 수가 2명을 넘지 않는지 검증
-6. 선택 기록은 직접 수정하지 않고 운영자 판단 대상으로 남김
+### 관심 제출
+1. 관심을 보내는 사용자와 받는 사용자가 모두 `READY` 조건을 만족하는지 검증
+2. `PROGRESSING`, `HOLD`, `ARCHIVED`, `BLOCKED` 사용자는 자동 노출 대상에서 제외
+3. `SEMI_OPEN` 또는 `FULL_OPEN` + 프로필 노출 동의 사용자만 후보로 노출
+4. 신규 가입자는 최대 3명, 기존 회원은 새 멤버당 최대 1회 관심 표시
+5. 상호 관심이 생기면 `IntroCandidate` 를 생성하고 즉시 `IntroCase` 로 연결하지 않음
+6. 관심 데이터는 `ACTIVE/WITHDRAWN/EXPIRED/CONVERTED_TO_INTRO` 상태로만 갱신
 
-### 라운드 참여 진입
+### 자동 노출 참여 진입
 1. 사용자가 기존 데이터 ID와 이름을 입력
 2. 서버가 ID와 이름이 같은 사용자 데이터를 조회
-3. `PROGRESSING`, `STOP_REQUESTED`, `ARCHIVED`, `BLOCKED` 상태면 거절
-4. 현재 `OPEN` 라운드가 없으면 거절
-5. 사용자를 `READY` + `FULL_OPEN` 으로 갱신
-6. `entry_queue` 의 `READY` row를 생성하거나 기존 row를 갱신
-7. `/rounds/{roundId}/participants/{userId}` 로 이동
+3. `PROGRESSING`, `HOLD`, `STOP_REQUESTED`, `ARCHIVED`, `BLOCKED` 상태면 거절
+4. 사용자의 자동 노출 레벨, 노출 동의, 신규 멤버 알림 수신 여부를 갱신
+5. 사용자를 `READY` 로 두고 자동 노출 큐를 갱신
+6. 새 멤버가 자동 노출 대상이면 기존 eligible 사용자에게 in-app 알림 생성
+7. `/pool/{userId}` 로 이동
 
 ---
 

@@ -174,11 +174,18 @@ function parseMemberForm(formData: FormData) {
     throw new Error("Name is required.");
   }
 
+  const openLevel = readEnum(formData, "openLevel", openLevelValues, "PRIVATE");
+  const exposureConsent = formData.get("exposureConsent") === "on" || openLevel !== "PRIVATE";
+  const newMemberNotificationsEnabled = exposureConsent && formData.get("newMemberNotificationsEnabled") !== "off";
+
   return {
     name,
     gender: readEnum(formData, "gender", genderValues, Gender.UNDISCLOSED),
     status: readEnum(formData, "status", statusValues, UserStatus.INCOMPLETE),
-    openLevel: readEnum(formData, "openLevel", openLevelValues, "PRIVATE"),
+    openLevel,
+    exposureConsent,
+    newMemberNotificationsEnabled,
+    exposurePaused: formData.get("exposurePaused") === "on",
     birthDate: readDate(formData, "birthDate"),
     ageText: readString(formData, "ageText"),
     heightCm: readNumber(formData, "heightCm"),
