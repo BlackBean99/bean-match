@@ -9,8 +9,8 @@ export default async function RoundsPage() {
 
   return (
     <AdminShell
-      title="라운드 운영"
-      description="주 2회 라운드, 선택 제한, 노출 제어, 운영자 조율 흐름을 관리합니다."
+      title="매칭 제안 관리"
+      description="라운드 기반 노출과 선택 제한, 운영자 조율 흐름을 현재 기준에 맞춰 관리합니다."
       active="rounds"
     >
       <RoundDashboard {...data} />

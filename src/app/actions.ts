@@ -25,6 +25,18 @@ const roleValues = new Set(Object.values(UserRole));
 const introStatusValues = new Set(Object.values(IntroCaseStatus));
 const openLevelValues = new Set<OpenLevel>(["PRIVATE", "SEMI_OPEN", "FULL_OPEN"]);
 
+export type IntroCaseActionState = {
+  error: string | null;
+  success: string | null;
+  values: {
+    personAId: string;
+    personBId: string;
+    invitorUserId: string;
+    status: string;
+    memo: string;
+  };
+};
+
 export async function createMemberAction(formData: FormData) {
   await createMember(parseMemberForm(formData));
   revalidatePath("/");
@@ -71,6 +83,43 @@ export async function bulkApplyRoundParticipationDefaultsAction(formData: FormDa
 export async function createIntroCaseAction(formData: FormData) {
   await createIntroCase(parseIntroCaseForm(formData));
   revalidatePath("/");
+}
+
+export async function createIntroCaseWithStateAction(
+  _prevState: IntroCaseActionState,
+  formData: FormData,
+): Promise<IntroCaseActionState> {
+  const values = {
+    personAId: readString(formData, "personAId") ?? "",
+    personBId: readString(formData, "personBId") ?? "",
+    invitorUserId: readString(formData, "invitorUserId") ?? "",
+    status: readString(formData, "status") ?? IntroCaseStatus.OFFERED,
+    memo: readString(formData, "memo") ?? "",
+  };
+
+  try {
+    await createIntroCase(parseIntroCaseForm(formData));
+    revalidatePath("/");
+    revalidatePath("/matches");
+
+    return {
+      error: null,
+      success: "매칭 기록이 추가되었습니다.",
+      values: {
+        personAId: "",
+        personBId: "",
+        invitorUserId: "",
+        status: IntroCaseStatus.OFFERED,
+        memo: "",
+      },
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "매칭 기록 추가 중 오류가 발생했습니다.",
+      success: null,
+      values,
+    };
+  }
 }
 
 export async function updateIntroCaseAction(formData: FormData) {

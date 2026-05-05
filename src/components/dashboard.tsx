@@ -1,8 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import {
+  AdminMutedSection,
+  AdminSection,
+  AdminStatCard,
+  AdminTableSection,
+  adminInputClassName,
+  adminPrimaryButtonClassName,
+  adminSecondaryButtonClassName,
+} from "@/components/admin-ui";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { IntroCaseCreateForm } from "@/components/intro-case-create-form";
 import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
 import { NavigationSubmitButton } from "@/components/navigation-submit-button";
 import {
@@ -19,7 +29,6 @@ import {
 } from "@/lib/domain";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  createIntroCaseAction,
   createMemberAction,
   deleteIntroCaseAction,
   deleteMemberAction,
@@ -73,17 +82,28 @@ type DashboardProps = {
 };
 
 export function UsersDashboard({ users, databaseConnected, loadError, filters }: DashboardProps) {
+  const openCount = users.filter((user) => user.openLevel === "FULL_OPEN").length;
+  const waitingCount = users.filter((user) => user.status === "INCOMPLETE" || user.status === "HOLD").length;
+
   return (
-    <>
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        <FilterForm filters={filters} />
+    <div className="grid gap-5">
+      <section className="grid gap-4 xl:grid-cols-4">
+        <AdminStatCard label="전체 회원 수" value={users.length} detail="현재 필터에 포함된 회원 기준입니다." />
+        <AdminStatCard label="프로필 오픈 가능" value={openCount} tone="green" detail="FULL_OPEN 동의 기준" />
+        <AdminStatCard label="검토 필요" value={waitingCount} tone="amber" detail="미완료 또는 보류 상태" />
+        <AdminStatCard label="운영 연결" value={databaseConnected ? "ON" : "OFF"} tone="blue" detail={loadError ?? "Supabase 연결 상태"} />
       </section>
-      <section className="space-y-4">
+
+      <AdminSection className="p-4 sm:p-5">
+        <FilterForm filters={filters} />
+      </AdminSection>
+
+      <section className="space-y-5">
         <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
         <MemberCreatePanel disabled={!databaseConnected} />
         <MemberTable users={users} editable={databaseConnected} />
       </section>
-    </>
+    </div>
   );
 }
 
@@ -92,14 +112,24 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
   const recommendations = selectedUser ? getOppositeGenderRecommendations(selectedUser, allUsers, introCases) : [];
   const filteredIntroCases =
     filters.introStatus === "ALL" ? introCases : introCases.filter((introCase) => introCase.status === filters.introStatus);
+  const profileOpenCount = allUsers.filter((user) => user.openLevel === "FULL_OPEN").length;
+  const activeCaseCount = introCases.filter((introCase) => activeIntroStatuses.includes(introCase.status)).length;
 
   return (
-    <>
+    <div className="grid gap-5">
+      <section className="grid gap-4 xl:grid-cols-4">
+        <AdminStatCard label="전체 풀" value={allUsers.length} detail="매칭 검토가 가능한 전체 회원" />
+        <AdminStatCard label="프로필 오픈 동의" value={profileOpenCount} tone="green" detail="FULL_OPEN 기준" />
+        <AdminStatCard label="매칭 대기" value={activeCaseCount} tone="amber" detail="활성 소개 상태 기준" />
+        <AdminStatCard label="추천 후보" value={recommendations.length} tone="blue" detail={selectedUser ? `${selectedUser.name} 기준` : "기준 사용자를 선택하세요"} />
+      </section>
+
       <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+
+      <AdminSection className="p-4 sm:p-5">
         <DashboardTabs filters={filters} />
         <FilterForm filters={filters} showIntroStatus />
-      </section>
+      </AdminSection>
 
       {filters.view === "graph" ? (
         <MatchNetworkDashboard users={allUsers} introCases={introCases} initialStatusFilter={filters.introStatus} />
@@ -117,7 +147,7 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
           </section>
         </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -133,63 +163,49 @@ export function Dashboard({ users, allUsers, introCases, databaseConnected, load
   const maleRecommendations = selectedUser ? getOppositeGenderRecommendations(selectedUser, allUsers, introCases) : [];
 
   return (
-    <main className="min-h-screen bg-white text-zinc-950">
-      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-5 py-6">
-        <header className="rounded-lg border border-red-100 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#E00E0E]">Blackbean Match Ops</p>
-              <h1 className="mt-2 text-3xl font-bold text-zinc-950">소개팅 풀 운영</h1>
-              <p className="mt-2 text-sm text-zinc-600">
-                사용자 정보, 필터링, 소개 진행 기록을 한 화면에서 관리합니다.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Metric label="필터 결과" value={users.length} />
-              <Metric label="소개 가능" value={readyCount} />
-              <Metric label="매칭 진행" value={progressingCount + activeMatchCount} />
-            </div>
-          </div>
-          <p className={databaseConnected ? "mt-4 text-sm font-semibold text-[#E00E0E]" : "mt-4 text-sm text-zinc-500"}>
-            {databaseConnected ? "Supabase 연결됨" : "Supabase 연결 대기"}
-          </p>
-          {loadError ? <p className="mt-2 text-xs text-zinc-500">{loadError}</p> : null}
-        </header>
+    <div className="grid gap-5">
+      <section className="grid gap-4 xl:grid-cols-4">
+        <AdminStatCard label="필터 결과" value={users.length} detail="현재 목록 기준" />
+        <AdminStatCard label="소개 가능" value={readyCount} tone="green" />
+        <AdminStatCard label="매칭 진행" value={progressingCount + activeMatchCount} tone="amber" />
+        <AdminStatCard label="추천 후보" value={maleRecommendations.length} tone="blue" />
+      </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <DashboardTabs filters={filters} />
-          <FilterForm filters={filters} showIntroStatus={filters.view !== "pool"} />
-        </section>
+      <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
 
-        {filters.view === "recommend" ? (
-          <RecommendationPanel
-            users={allUsers}
-            selectedUser={selectedUser}
-            recommendations={maleRecommendations}
-            filters={filters}
-          />
-        ) : null}
+      <AdminSection className="p-4 sm:p-5">
+        <DashboardTabs filters={filters} />
+        <FilterForm filters={filters} showIntroStatus={filters.view !== "pool"} />
+      </AdminSection>
 
-        <section className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-          <div className="space-y-4">
-            <MemberCreatePanel disabled={!databaseConnected} />
-            <MemberTable users={users} editable={databaseConnected} />
-          </div>
+      {filters.view === "recommend" ? (
+        <RecommendationPanel
+          users={allUsers}
+          selectedUser={selectedUser}
+          recommendations={maleRecommendations}
+          filters={filters}
+        />
+      ) : null}
 
-          <div className="space-y-4">
-            <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
-            <IntroCaseTable introCases={introCases} editable={databaseConnected} />
-          </div>
-        </section>
-      </div>
-    </main>
+      <section className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
+        <div className="space-y-5">
+          <MemberCreatePanel disabled={!databaseConnected} />
+          <MemberTable users={users} editable={databaseConnected} />
+        </div>
+
+        <div className="space-y-5">
+          <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
+          <IntroCaseTable introCases={introCases} editable={databaseConnected} />
+        </div>
+      </section>
+    </div>
   );
 }
 
 function ConnectionStatus({ databaseConnected, loadError }: { databaseConnected: boolean; loadError: string | null }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm">
-      <p className={databaseConnected ? "font-semibold text-[#E00E0E]" : "text-zinc-500"}>
+    <div className="rounded-[24px] border border-white/80 bg-white/90 px-5 py-4 text-sm shadow-[0_20px_50px_rgba(15,23,42,0.06)]">
+      <p className={databaseConnected ? "font-semibold text-[#e63a68]" : "text-zinc-500"}>
         {databaseConnected ? "Supabase 연결됨" : "Supabase 연결 대기"}
       </p>
       {loadError ? <p className="mt-2 text-xs text-zinc-500">{loadError}</p> : null}
@@ -197,20 +213,11 @@ function ConnectionStatus({ databaseConnected, loadError }: { databaseConnected:
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-32 rounded-lg border border-red-100 bg-red-50 px-4 py-3">
-      <p className="text-xs font-semibold text-zinc-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-[#E00E0E]">{value}</p>
-    </div>
-  );
-}
-
 function DashboardTabs({ filters }: { filters: MemberFilterState }) {
   const tabClassName = (active: boolean) =>
     active
-      ? "rounded-lg bg-[#FF3131] px-4 py-2 text-sm font-bold text-white"
-      : "rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-600 hover:border-red-200 hover:text-[#E00E0E]";
+      ? "rounded-2xl bg-[linear-gradient(135deg,#ff4f7a,#ff6a3d)] px-4 py-2.5 text-sm font-bold text-white shadow-[0_16px_30px_rgba(255,79,122,0.24)]"
+      : "rounded-2xl border border-[#ececf2] bg-white px-4 py-2.5 text-sm font-bold text-zinc-500 transition hover:border-[#ffc6d5] hover:text-[#e63a68]";
 
   return (
     <div className="mb-4 flex flex-wrap gap-2">
@@ -229,7 +236,7 @@ function DashboardTabs({ filters }: { filters: MemberFilterState }) {
 
 function FilterForm({ filters, showIntroStatus = false }: { filters: MemberFilterState; showIntroStatus?: boolean }) {
   return (
-    <form className={showIntroStatus ? "grid gap-3 md:grid-cols-8" : "grid gap-3 md:grid-cols-7"} method="get">
+    <form className={showIntroStatus ? "grid gap-3 xl:grid-cols-8" : "grid gap-3 xl:grid-cols-7"} method="get">
       <input type="hidden" name="view" value={filters.view} />
       <input type="hidden" name="recommendationFor" value={filters.recommendationFor} />
       {showIntroStatus ? (
@@ -281,9 +288,9 @@ function FilterForm({ filters, showIntroStatus = false }: { filters: MemberFilte
         <NavigationSubmitButton
           label="적용"
           pendingLabel="적용 중..."
-          className="h-10 rounded-lg bg-[#FF3131] px-4 text-sm font-bold text-white hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className={adminPrimaryButtonClassName}
         />
-        <Link className="flex h-10 items-center rounded-lg border border-zinc-300 px-4 text-sm font-semibold text-zinc-700" href="/">
+        <Link className={adminSecondaryButtonClassName} href="/">
           초기화
         </Link>
       </div>
@@ -303,9 +310,9 @@ function RecommendationPanel({
   filters: MemberFilterState;
 }) {
   return (
-    <section className="rounded-lg border border-red-100 bg-red-50/70 p-4 shadow-sm">
+    <AdminMutedSection className="p-4 sm:p-5">
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <div className="rounded-lg border border-red-100 bg-white p-4">
+        <div className="rounded-[24px] border border-white/80 bg-white p-5">
           <h2 className="text-lg font-bold text-zinc-950">상대 추천 매칭</h2>
           <p className="mt-1 text-sm leading-6 text-zinc-600">
             기준 사용자를 선택하면 소개 가능 상태의 상대 이성 후보를 키, 나이, 프로필 완성도 기준으로 정렬합니다.
@@ -326,15 +333,15 @@ function RecommendationPanel({
           </form>
         </div>
 
-        <div className="min-w-0 overflow-hidden rounded-lg border border-red-100 bg-white">
-          <div className="flex items-center justify-between border-b border-red-100 px-4 py-3">
+        <div className="min-w-0 overflow-hidden rounded-[24px] border border-white/80 bg-white">
+          <div className="flex items-center justify-between border-b border-[#ffe0e8] px-4 py-3">
             <div>
               <p className="text-sm font-bold text-zinc-950">
                 {selectedUser ? `${selectedUser.name} 기준 추천` : "기준 사용자를 선택하세요"}
               </p>
               <p className="mt-1 text-xs text-zinc-500">이미 진행 중인 사용자와 같은 성별 사용자는 제외합니다.</p>
             </div>
-            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#E00E0E]">
+            <span className="rounded-full bg-[#fff1f5] px-3 py-1 text-xs font-bold text-[#e63a68]">
               {recommendations.length}명
             </span>
           </div>
@@ -359,9 +366,9 @@ function RecommendationPanel({
                   </tr>
                 ) : (
                   recommendations.map((user) => (
-                    <tr key={user.id} className="hover:bg-red-50/50">
+                    <tr key={user.id} className="hover:bg-[#fff7fa]">
                       <td className="px-3 py-3">
-                        <span className="rounded-full bg-[#FF3131] px-2.5 py-1 text-xs font-bold text-white">
+                        <span className="rounded-full bg-[linear-gradient(135deg,#ff4f7a,#ff6a3d)] px-2.5 py-1 text-xs font-bold text-white">
                           {recommendationLabel(selectedUser, user)}
                         </span>
                       </td>
@@ -380,14 +387,14 @@ function RecommendationPanel({
           </div>
         </div>
       </div>
-    </section>
+    </AdminMutedSection>
   );
 }
 
 function MemberCreatePanel({ disabled }: { disabled: boolean }) {
   return (
-    <details className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer text-sm font-bold text-[#E00E0E]">사용자 등록</summary>
+    <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+      <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">회원 추가</summary>
       <form action={createMemberAction} className="mt-4 grid gap-4">
         <FormPendingFieldset className="grid gap-4">
           <MemberFields />
@@ -400,14 +407,14 @@ function MemberCreatePanel({ disabled }: { disabled: boolean }) {
 
 function MemberTable({ users, editable }: { users: DashboardUser[]; editable: boolean }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+    <AdminTableSection>
+      <div className="flex items-center justify-between border-b border-[#f1f5f9] px-5 py-4">
         <h2 className="text-lg font-bold text-zinc-950">사용자 목록</h2>
         <p className="text-xs text-zinc-500">연락처는 목록에 표시하지 않습니다.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1160px] table-fixed border-collapse text-left text-sm">
-          <thead className="bg-zinc-50 text-xs font-bold uppercase text-zinc-500">
+          <thead className="bg-[#fafafc] text-xs font-bold uppercase text-zinc-500">
             <tr>
               <th className="w-16 px-3 py-3">사진</th>
               <th className="w-36 px-3 py-3">이름</th>
@@ -434,13 +441,13 @@ function MemberTable({ users, editable }: { users: DashboardUser[]; editable: bo
           </tbody>
         </table>
       </div>
-    </section>
+    </AdminTableSection>
   );
 }
 
 function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean }) {
   return (
-    <tr className="align-middle hover:bg-red-50/50">
+    <tr className="align-middle hover:bg-[#fff7fa]">
       <td className="px-3 py-2">
         <div
           className={
@@ -456,7 +463,6 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
               fill
               sizes="48px"
               className="relative z-10 object-cover"
-              unoptimized
             />
           ) : (
             <div className="flex h-full items-center justify-center text-[10px] text-zinc-400">없음</div>
@@ -505,29 +511,29 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
       <td className="px-3 py-2">
         {editable ? (
           <div className="flex items-center gap-3">
-          <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E]">
-            자세히
-          </Link>
-          <details className="relative w-14">
-            <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">수정</summary>
-            <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
-              <FormPendingFieldset className="grid gap-3">
-                <input type="hidden" name="id" value={user.id} />
-                <MemberFields user={user} compact />
-                <FormSubmitButton label="저장" pendingLabel="저장 중..." className={primaryButtonClassName} />
-              </FormPendingFieldset>
-            </form>
-            <form action={deleteMemberAction} className="mt-2">
-              <FormPendingFieldset className="contents">
-                <input type="hidden" name="id" value={user.id} />
-                <FormSubmitButton
-                  label="삭제"
-                  pendingLabel="삭제 중..."
-                  className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
-                />
-              </FormPendingFieldset>
-            </form>
-          </details>
+            <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
+              자세히
+            </Link>
+            <details className="relative w-14">
+              <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
+              <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+                <FormPendingFieldset className="grid gap-3">
+                  <input type="hidden" name="id" value={user.id} />
+                  <MemberFields user={user} compact />
+                  <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
+                </FormPendingFieldset>
+              </form>
+              <form action={deleteMemberAction} className="mt-2">
+                <FormPendingFieldset className="contents">
+                  <input type="hidden" name="id" value={user.id} />
+                  <FormSubmitButton
+                    label="삭제"
+                    pendingLabel="삭제 중..."
+                    className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                  />
+                </FormPendingFieldset>
+              </form>
+            </details>
           </div>
         ) : null}
       </td>
@@ -536,20 +542,28 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
 }
 
 function IntroCreatePanel({ users, disabled }: { users: DashboardUser[]; disabled: boolean }) {
+  const eligibleUsers = users.filter((user) => user.status === "READY");
+
   return (
-    <details className="overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm" open>
+    <details className="overflow-hidden rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]" open>
       <summary className="cursor-pointer text-lg font-bold text-zinc-950">매칭 기록 생성</summary>
-      <form action={createIntroCaseAction} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
-        <FormPendingFieldset className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2">
-          <IntroCaseFields users={users} />
-          <FormSubmitButton
-            label="매칭 기록 추가"
-            pendingLabel="추가 중..."
-            disabled={disabled}
-            className={`${primaryButtonClassName} sm:col-span-2`}
-          />
-        </FormPendingFieldset>
-      </form>
+      <p className="mt-3 text-sm leading-6 text-zinc-500">
+        신규 매칭은 현재 `READY` 상태 사용자만 선택할 수 있습니다. 이미 진행 중이거나 기존 매칭 이력이 있는 조합은 추가되지 않습니다.
+      </p>
+      <IntroCaseCreateForm
+        users={eligibleUsers}
+        invitors={users}
+        introStatuses={introStatusOrder.map((status) => ({ value: status, label: introStatusLabels[status] }))}
+        inputClassName={inputClassName}
+        fieldClassName="grid gap-1 text-xs font-semibold text-zinc-600"
+        buttonClassName={primaryButtonClassName}
+        disabled={disabled || eligibleUsers.length < 2}
+      />
+      {eligibleUsers.length < 2 ? (
+        <p className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+          매칭을 추가하려면 `READY` 상태 사용자가 최소 2명 필요합니다.
+        </p>
+      ) : null}
     </details>
   );
 }
@@ -562,13 +576,13 @@ function IntroCaseTable({
   editable: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 px-4 py-3">
+    <AdminTableSection>
+      <div className="border-b border-[#f1f5f9] px-5 py-4">
         <h2 className="text-lg font-bold text-zinc-950">매칭 기록</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] table-fixed text-left text-sm">
-          <thead className="bg-zinc-50 text-xs font-bold uppercase text-zinc-500">
+          <thead className="bg-[#fafafc] text-xs font-bold uppercase text-zinc-500">
             <tr>
               <th className="w-16 px-3 py-3">ID</th>
               <th className="w-32 px-3 py-3">상태</th>
@@ -587,7 +601,7 @@ function IntroCaseTable({
               </tr>
             ) : (
               introCases.map((introCase) => (
-                <tr key={introCase.id} className="align-top hover:bg-red-50/50">
+                <tr key={introCase.id} className="align-top hover:bg-[#fff7fa]">
                   <td className="px-3 py-3 font-semibold text-zinc-700">#{introCase.id}</td>
                   <td className="px-3 py-3">
                     <IntroStatusBadge status={introCase.status} />
@@ -604,8 +618,8 @@ function IntroCaseTable({
                   <td className="px-3 py-3">
                     {editable ? (
                       <details className="relative w-16">
-                        <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">수정</summary>
-                        <form action={updateIntroCaseAction} className="absolute right-0 z-20 mt-3 grid w-72 gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
+                        <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
+                        <form action={updateIntroCaseAction} className="absolute right-0 z-20 mt-3 grid w-72 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
                           <FormPendingFieldset className="grid gap-3">
                             <input type="hidden" name="id" value={introCase.id} />
                             <Field label="상태">
@@ -620,7 +634,7 @@ function IntroCaseTable({
                             <Field label="메모">
                               <textarea name="memo" defaultValue={introCase.memo} rows={3} className={inputClassName} />
                             </Field>
-                            <FormSubmitButton label="저장" pendingLabel="저장 중..." className={primaryButtonClassName} />
+                            <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
                           </FormPendingFieldset>
                         </form>
                         <form action={deleteIntroCaseAction} className="mt-2">
@@ -629,7 +643,7 @@ function IntroCaseTable({
                             <FormSubmitButton
                               label="삭제"
                               pendingLabel="삭제 중..."
-                              className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
+                              className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
                             />
                           </FormPendingFieldset>
                         </form>
@@ -642,7 +656,7 @@ function IntroCaseTable({
           </tbody>
         </table>
       </div>
-    </section>
+    </AdminTableSection>
   );
 }
 
@@ -711,7 +725,7 @@ function MemberFields({ user, compact = false }: { user?: DashboardUser; compact
         <legend className="text-xs font-semibold text-zinc-600">역할</legend>
         <div className="flex flex-wrap gap-2">
           {roleOptions.map((role) => (
-            <label key={role} className="inline-flex items-center gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-700">
+            <label key={role} className="inline-flex items-center gap-2 rounded-2xl bg-[#f4f5f8] px-3 py-2 text-xs text-zinc-700">
               <input type="checkbox" name="roles" value={role} defaultChecked={user ? user.roles.includes(role) : role === "PARTICIPANT"} />
               {role}
             </label>
@@ -719,36 +733,6 @@ function MemberFields({ user, compact = false }: { user?: DashboardUser; compact
         </div>
       </fieldset>
     </div>
-  );
-}
-
-function IntroCaseFields({ users }: { users: DashboardUser[] }) {
-  return (
-    <>
-      <Field label="참여자 A">
-        <UserSelect name="personAId" users={users} required />
-      </Field>
-      <Field label="참여자 B">
-        <UserSelect name="personBId" users={users} required />
-      </Field>
-      <Field label="주선자">
-        <UserSelect name="invitorUserId" users={users} />
-      </Field>
-      <Field label="상태">
-        <select name="status" defaultValue="OFFERED" className={inputClassName}>
-          {introStatusOrder.map((status) => (
-            <option key={status} value={status}>
-              {introStatusLabels[status]}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="sm:col-span-2">
-        <Field label="메모">
-        <textarea name="memo" rows={3} className={inputClassName} />
-        </Field>
-      </div>
-    </>
   );
 }
 
@@ -786,7 +770,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function IntroStatusBadge({ status }: { status: IntroStatus }) {
   return (
-    <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-[#E00E0E]">
+    <span className="inline-flex rounded-full border border-[#ffd5df] bg-[#fff1f5] px-2.5 py-1 text-xs font-bold text-[#e63a68]">
       {introStatusLabels[status]}
     </span>
   );
@@ -897,8 +881,5 @@ function dashboardHref(filters: MemberFilterState, overrides: Partial<MemberFilt
   return query ? `${pathname}?${query}` : pathname;
 }
 
-const inputClassName =
-  "w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100 disabled:bg-zinc-100";
-
-const primaryButtonClassName =
-  "rounded-lg bg-[#FF3131] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#E00E0E] disabled:cursor-not-allowed disabled:bg-zinc-300";
+const inputClassName = adminInputClassName;
+const primaryButtonClassName = adminPrimaryButtonClassName;
