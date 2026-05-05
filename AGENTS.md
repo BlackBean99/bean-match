@@ -17,6 +17,9 @@ Build and operate the intro platform according to the repository docs.
 11. docs/operations/10-Commit-PR-Merge-Policy.md
 12. docs/operations/11-Code-Complete-and-Definition-of-Done.md
 13. docs/operations/12-Agent-Autonomy-Runbook.md
+14. docs/operations/14-Multi-Agent-Orchestration-Model.md
+15. docs/operations/15-Agent-Task-Contract.md
+16. docs/operations/16-Agent-Team-Usage-Guide.md
 
 ## Non-Negotiable Rules
 - Never create a new intro for a user in `PROGRESSING`.
@@ -33,6 +36,21 @@ Build and operate the intro platform according to the repository docs.
 4. Validate with lint/typecheck/test/build
 5. Commit with conventional commits
 6. Open PR with summary, impact, validation, and rollback
+
+## Multi-Agent Governance
+- Human Owner is the final approver.
+- Principal Engineer Agent owns planning, delegation, conflict resolution, and final integration.
+- Specialist agents work only through task cards with explicit inputs, constraints, outputs, and approval gates.
+- Specialist agents do not peer-delegate to one another by default.
+
+## Approval Gates
+Human approval is required for:
+- DB schema changes
+- migration files
+- auth/session/token changes
+- personal data exposure policy changes
+- infrastructure or deployment changes
+- data deletion or destructive scripts
 
 ## Auto Merge Rules
 Allowed only if:
