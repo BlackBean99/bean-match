@@ -1,0 +1,54 @@
+{
+  "task_id": "MATCH-102",
+  "requester_role": "Principal Engineer Agent",
+  "role": "Backend Engineer Agent",
+  "objective": "Create the matching offer API for round-selected users.",
+  "context": [
+    "README.md",
+    "docs/context/01-PRD.md",
+    "docs/context/02-Domain-State-FSM.md",
+    "docs/context/04-API-File-Storage-and-Security.md",
+    "docs/operations/15-Agent-Task-Contract.md"
+  ],
+  "inputs": [
+    "PRD section 3.2",
+    "ERD file",
+    "Existing round action patterns"
+  ],
+  "constraints": [
+    "Do not change existing auth flow.",
+    "Do not modify production migration files.",
+    "Add unit or integration validation.",
+    "Never expose contact information before CONNECTED."
+  ],
+  "expected_outputs": [
+    "implementation diff",
+    "test result",
+    "risk notes",
+    "follow-up questions"
+  ],
+  "approval_required_for": [
+    "schema change",
+    "auth logic change",
+    "data deletion",
+    "external API integration"
+  ],
+  "validation": [
+    "npm run lint",
+    "npm run typecheck",
+    "npm run build"
+  ],
+  "status_contract": {
+    "allowed_values": [
+      "planned",
+      "in_progress",
+      "blocked",
+      "review",
+      "done"
+    ],
+    "required_blocker_fields": [
+      "blocker_summary",
+      "decision_needed"
+    ]
+  }
+}

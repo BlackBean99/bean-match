@@ -56,9 +56,10 @@ npm run sync:notion -- --write
 
 ### 4. 문서 구조
 - `docs/context/`: 제품 요구사항, FSM, ERD, API, 보안, 운영 정책, 디자인, 기술 스펙
-- `docs/operations/`: 에이전트 운영 모델, Git/PR/merge 정책, Definition of Done, 자율 실행 runbook
+- `docs/operations/`: 에이전트 운영 모델, Git/PR/merge 정책, Definition of Done, 자율 실행 runbook, 멀티 에이전트 운영 가이드
 - `docs/history/`: 이전 요구사항과 맥락 기록
 - `AGENTS.md`: 에이전트가 작업 전 읽어야 하는 루트 지침
+- `.agent/`: Principal Engineer 중심 멀티 에이전트 역할 프롬프트와 템플릿
 - `CONTRIBUTING.md`: 기여 절차와 커밋 규칙
 - `CODEOWNERS`: 코드 오너 정책
 
@@ -81,4 +82,7 @@ npm run sync:notion -- --write
 - `docs/operations/11-Code-Complete-and-Definition-of-Done.md`
 - `docs/operations/12-Agent-Autonomy-Runbook.md`
 - `docs/operations/13-Agent-Prompt-and-Skills.md`
+- `docs/operations/14-Multi-Agent-Orchestration-Model.md`
+- `docs/operations/15-Agent-Task-Contract.md`
+- `docs/operations/16-Agent-Team-Usage-Guide.md`
 - `docs/history/20260414_Requirement_Document.md`

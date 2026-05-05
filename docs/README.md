@@ -21,6 +21,9 @@
 - `operations/11-Code-Complete-and-Definition-of-Done.md`: 완료 기준
 - `operations/12-Agent-Autonomy-Runbook.md`: 에이전트 자율 실행 절차
 - `operations/13-Agent-Prompt-and-Skills.md`: 프로젝트 에이전트 프롬프트와 스킬 기준
+- `operations/14-Multi-Agent-Orchestration-Model.md`: Principal Engineer 중심 멀티 에이전트 구조
+- `operations/15-Agent-Task-Contract.md`: 에이전트 작업 카드 계약 규격
+- `operations/16-Agent-Team-Usage-Guide.md`: 실제 실행 가이드
 
 ## History
 - `history/20260414_Requirement_Document.md`: 2026-04-14 요구사항 기록
@@ -28,5 +31,6 @@
 ## Root Documents
 - `../README.md`: 프로젝트 사용가이드
 - `../AGENTS.md`: 에이전트 작업 지침
+- `../.agent/README.md`: 역할 프롬프트와 템플릿 진입점
 - `../CONTRIBUTING.md`: 기여 가이드
 - `../CODEOWNERS`: 코드 오너 정책
