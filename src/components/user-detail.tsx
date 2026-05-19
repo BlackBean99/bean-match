@@ -8,76 +8,92 @@ import {
   setMainUserPhotoAction,
   updateUserPhotoAction,
 } from "@/app/actions";
+import { ReadOnlyTokenManager } from "@/components/readonly-token-manager";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
+import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
 
 type UserDetailProps = {
+  readOnlyTokenManager: ReadOnlyBrowseTokenManagerData;
   user: DashboardUserDetail;
 };
 
-export function UserDetail({ user }: UserDetailProps) {
+export function UserDetail({ user, readOnlyTokenManager }: UserDetailProps) {
+  const accessUrl = `${process.env.AUTH_URL || "http://localhost:3000"}${readOnlyTokenManager.accessPath}`;
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
-      <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <Link href="/users" className="text-sm font-bold text-[#E00E0E]">
-          사용자 목록으로
-        </Link>
-        <div className="mt-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-zinc-950">{user.name}</h2>
-            <p className="mt-1 text-xs font-semibold text-zinc-500">UserId {user.id}</p>
-            <p className="mt-2 text-sm text-zinc-600">
-              {user.gender} · {formatAge(user)} · {user.heightCm > 0 ? `${user.heightCm}cm` : "키 미입력"}
-            </p>
-            <p className="mt-1 text-sm text-zinc-600">
-              {user.jobTitle}
-              {user.companyName ? ` · ${user.companyName}` : ""}
-            </p>
-            <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
+    <div className="grid gap-6">
+      <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
+        <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <Link href="/users" className="text-sm font-bold text-[#E00E0E]">
+            사용자 목록으로
+          </Link>
+          <div className="mt-5 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-zinc-950">{user.name}</h2>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">UserId {user.id}</p>
+              <p className="mt-2 text-sm text-zinc-600">
+                {user.gender} · {formatAge(user)} · {user.heightCm > 0 ? `${user.heightCm}cm` : "키 미입력"}
+              </p>
+              <p className="mt-1 text-sm text-zinc-600">
+                {user.jobTitle}
+                {user.companyName ? ` · ${user.companyName}` : ""}
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
+            </div>
+            <StatusBadge status={user.status} />
           </div>
-          <StatusBadge status={user.status} />
-        </div>
-        <div className="mt-5 space-y-4 text-sm leading-6 text-zinc-700">
-          <ProfileText label="자기소개" value={user.selfIntro} />
-          <ProfileText label="이상형" value={user.idealTypeDescription} />
-          <div>
-            <p className="text-xs font-bold text-zinc-500">역할</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {user.roles.map((role) => (
-                <span key={role} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-600">
-                  {role}
-                </span>
-              ))}
+          <div className="mt-5 space-y-4 text-sm leading-6 text-zinc-700">
+            <ProfileText label="자기소개" value={user.selfIntro} />
+            <ProfileText label="이상형" value={user.idealTypeDescription} />
+            <div>
+              <p className="text-xs font-bold text-zinc-500">역할</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {user.roles.map((role) => (
+                  <span key={role} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-600">
+                    {role}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-zinc-950">사진</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Notion 사진 URL과 직접 업로드한 Supabase Storage 사진을 함께 관리합니다.
-            </p>
+        <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-zinc-950">사진</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Notion 사진 URL과 직접 업로드한 Supabase Storage 사진을 함께 관리합니다.
+              </p>
+            </div>
+            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#E00E0E]">
+              {user.photos.length}장
+            </span>
           </div>
-          <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#E00E0E]">
-            {user.photos.length}장
-          </span>
-        </div>
 
-        <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} />
+          <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} />
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {user.photos.length === 0 ? (
-            <p className="rounded-lg border border-zinc-200 p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
-          ) : (
-            user.photos.map((photo) => <PhotoCard key={photo.id} userId={user.id} photo={photo} />)
-          )}
-        </div>
-      </section>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {user.photos.length === 0 ? (
+              <p className="rounded-lg border border-zinc-200 p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
+            ) : (
+              user.photos.map((photo) => <PhotoCard key={photo.id} userId={user.id} photo={photo} />)
+            )}
+          </div>
+        </section>
+      </div>
+
+      <ReadOnlyTokenManager
+        accessUrl={accessUrl}
+        databaseConnected={readOnlyTokenManager.databaseConnected}
+        loadError={readOnlyTokenManager.loadError}
+        tokens={readOnlyTokenManager.tokens}
+        userId={user.id}
+        userName={user.name}
+      />
     </div>
   );
 }
