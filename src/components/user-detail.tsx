@@ -16,6 +16,7 @@ import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
 import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
+import { getAppBaseUrl } from "@/lib/runtime-env";
 
 type UserDetailProps = {
   onboardingAccessTokenManager: OnboardingAccessTokenManagerData;
@@ -30,7 +31,7 @@ export function UserDetail({
   user,
   readOnlyTokenManager,
 }: UserDetailProps) {
-  const baseUrl = process.env.AUTH_URL || "http://localhost:3000";
+  const baseUrl = getAppBaseUrl();
   const accessUrl = `${baseUrl}${readOnlyTokenManager.accessPath}`;
 
   return (
@@ -54,7 +55,7 @@ export function UserDetail({
               <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
               {readOnly ? (
                 <p className="mt-2 inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
-                  읽기 전용
+                  열람 전용
                 </p>
               ) : null}
             </div>
@@ -157,7 +158,7 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
         </div>
 
         {readOnly ? (
-          <p className="text-xs text-zinc-500">읽기 전용 프로필이라 사진 수정 기능이 비활성화되어 있습니다.</p>
+          <p className="text-xs text-zinc-500">열람 전용 프로필이라 사진 수정 기능이 비활성화되어 있습니다.</p>
         ) : (
           <>
             <details>

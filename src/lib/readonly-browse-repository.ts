@@ -1,7 +1,19 @@
 import { createHash, randomBytes } from "node:crypto";
-import { type DashboardUser, type DashboardUserPhoto, activeIntroStatuses } from "@/lib/domain";
+import { type InterestSource, type InterestStatus } from "@prisma/client";
+import {
+  type DashboardUser,
+  type DashboardUserPhoto,
+  type ParticipantInterestSelection,
+  activeIntroStatuses,
+} from "@/lib/domain";
 import { getMemberDashboardData } from "@/lib/member-repository";
 import { hasDatabaseUrl, prisma } from "@/lib/prisma";
+import {
+  getAppBaseUrl,
+  getSupabaseServerKey,
+  getSupabaseUrl,
+} from "@/lib/runtime-env";
+import { MAX_NEW_USER_MARKS } from "@/lib/auto-exposure-repository";
 
 const READ_ONLY_BROWSE_TOKEN_PREFIX = "bbro_";
 const READ_ONLY_BROWSE_TOUCH_WINDOW_MS = 15 * 60 * 1000;
@@ -75,6 +87,10 @@ export type ReadOnlyBrowsePageData = {
   actor: DashboardUser | null;
   authorized: boolean;
   candidates: ReadOnlyBrowseCandidate[];
+  browseSelections: ParticipantInterestSelection[];
+  browseLimit: number;
+  browseSubmitted: boolean;
+  canSubmitInterests: boolean;
   databaseConnected: boolean;
   loadError: string | null;
   tokenLabel: string | null;
@@ -242,6 +258,10 @@ export async function getReadOnlyBrowsePageData(
       actor: null,
       authorized: false,
       candidates: [],
+      browseSelections: [],
+      browseLimit: MAX_NEW_USER_MARKS,
+      browseSubmitted: false,
+      canSubmitInterests: false,
       databaseConnected: false,
       loadError: "지금은 링크 정보를 확인할 수 없습니다.",
       tokenLabel: null,
@@ -256,6 +276,10 @@ export async function getReadOnlyBrowsePageData(
       actor: null,
       authorized: false,
       candidates: [],
+      browseSelections: [],
+      browseLimit: MAX_NEW_USER_MARKS,
+      browseSubmitted: false,
+      canSubmitInterests: false,
       databaseConnected: validation.reason !== "database_unavailable",
       loadError: validation.reason === "database_unavailable" ? "지금은 링크 정보를 확인할 수 없습니다." : null,
       tokenLabel: null,
@@ -272,6 +296,10 @@ export async function getReadOnlyBrowsePageData(
       actor,
       authorized: true,
       candidates: [],
+      browseSelections: [],
+      browseLimit: MAX_NEW_USER_MARKS,
+      browseSubmitted: false,
+      canSubmitInterests: false,
       databaseConnected: false,
       loadError: memberData.loadError,
       tokenLabel: validation.label,
@@ -285,11 +313,19 @@ export async function getReadOnlyBrowsePageData(
       actor: null,
       authorized: true,
       candidates: [],
+      browseSelections: [],
+      browseLimit: MAX_NEW_USER_MARKS,
+      browseSubmitted: false,
+      canSubmitInterests: false,
       databaseConnected: false,
       loadError: "열람 대상 사용자를 찾을 수 없습니다.",
       tokenLabel: validation.label,
     };
   }
+
+  const outgoingBrowse = await loadReadOnlyBrowseInterests(userId).catch(() => []);
+  const browseSelections = outgoingBrowse.map((interest) => toParticipantInterestSelection(interest, memberData.allUsers));
+  const browseSubmitted = outgoingBrowse.length > 0;
 
   const activeIntroUserIds = new Set(
     memberData.introCases
@@ -320,6 +356,15 @@ export async function getReadOnlyBrowsePageData(
     actor,
     authorized: true,
     candidates,
+    browseSelections,
+    browseLimit: MAX_NEW_USER_MARKS,
+    browseSubmitted,
+    canSubmitInterests:
+      actor.status === "READY" &&
+      actor.openLevel !== "PRIVATE" &&
+      actor.exposureConsent &&
+      !actor.exposurePaused &&
+      !activeIntroUserIds.has(actor.id),
     databaseConnected: true,
     loadError: null,
     tokenLabel: validation.label,
@@ -527,18 +572,6 @@ function hasReadOnlyBrowseStorageConfig() {
   return hasDatabaseUrl() || Boolean(getSupabaseUrl() && getSupabaseServerKey());
 }
 
-function getAppBaseUrl() {
-  return process.env.AUTH_URL || "http://localhost:3000";
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-}
-
 async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${getSupabaseUrl()}/rest/v1${path}`, {
     ...init,
@@ -665,6 +698,68 @@ function toUserPhotoRecord(
     isMain: photo.isMain,
     uploadedAt: photo.uploadedAt.toISOString(),
   };
+}
+
+type ReadOnlyBrowseInterestRow = {
+  id: number;
+  from_user_id: number;
+  to_user_id: number;
+  source: InterestSource;
+  status: InterestStatus;
+  created_at: string;
+};
+
+async function loadReadOnlyBrowseInterests(userId: bigint) {
+  if (hasDatabaseUrl()) {
+    const interests = await prisma.interest.findMany({
+      where: {
+        fromUserId: userId,
+        source: "NEW_MEMBER_BROWSE",
+        status: { not: "WITHDRAWN" },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: MAX_NEW_USER_MARKS,
+      select: {
+        id: true,
+        fromUserId: true,
+        toUserId: true,
+        source: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return interests.map((interest) => ({
+      id: Number(interest.id),
+      from_user_id: Number(interest.fromUserId),
+      to_user_id: Number(interest.toUserId),
+      source: interest.source,
+      status: interest.status,
+      created_at: interest.createdAt.toISOString(),
+    })) satisfies ReadOnlyBrowseInterestRow[];
+  }
+
+  const interests = await supabaseRest<ReadOnlyBrowseInterestRow[]>(
+    `/interests?select=id,from_user_id,to_user_id,source,status,created_at&from_user_id=eq.${userId.toString()}&source=eq.NEW_MEMBER_BROWSE&status=neq.WITHDRAWN&order=created_at.desc,id.desc&limit=${MAX_NEW_USER_MARKS}`,
+  );
+  return interests;
+}
+
+function toParticipantInterestSelection(
+  interest: ReadOnlyBrowseInterestRow,
+  users: DashboardUser[],
+): ParticipantInterestSelection {
+  return {
+    id: interest.id,
+    toUserId: interest.to_user_id,
+    toUserName: userNameById(users, interest.to_user_id),
+    source: interest.source,
+    createdAt: formatShortDateTime(interest.created_at),
+  };
+}
+
+function userNameById(users: DashboardUser[], userId: number) {
+  return users.find((user) => user.id === userId)?.name ?? `User ${userId}`;
 }
 
 function isSupabaseReadOnlyBrowseTokenRow(token: object): token is SupabaseReadOnlyBrowseTokenRow {

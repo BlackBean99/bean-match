@@ -52,10 +52,10 @@ export function ReadOnlyTokenManager({
       <AdminSection className="grid gap-5 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-bold text-[#e63a68]">Read-only browse access</p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">리드 온리 토큰 관리</h2>
+            <p className="text-sm font-bold text-[#e63a68]">Profile browse access</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">프로필 열람 토큰 관리</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">
-              {userName}님 전용 읽기 전용 열람 토큰을 발급합니다. 토큰으로 들어간 사용자는 같은 성별을 제외한 소개 가능 후보만 읽기 전용으로 볼 수 있고, 연락처는 노출되지 않습니다.
+              {userName}님 전용 프로필 열람 토큰을 발급합니다. 토큰으로 들어간 사용자는 선택 가능한 후보만 볼 수 있고, 연락처는 노출되지 않습니다.
             </p>
           </div>
           <div className="rounded-[24px] border border-[#ffd5df] bg-[#fff7fa] p-4">
@@ -174,7 +174,7 @@ export function ReadOnlyTokenManager({
               {tokens.length === 0 ? (
                 <tr>
                   <td className="px-3 py-6 text-center text-zinc-500" colSpan={7}>
-                    발급된 리드 온리 토큰이 없습니다.
+                    발급된 프로필 열람 토큰이 없습니다.
                   </td>
                 </tr>
               ) : (

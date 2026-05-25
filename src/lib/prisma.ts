@@ -1,12 +1,9 @@
 import { PrismaClient } from "@prisma/client";
+export { hasDatabaseUrl } from "@/lib/runtime-env";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
-
-export function hasDatabaseUrl() {
-  return Boolean(process.env.DATABASE_URL);
-}
 
 export const prisma =
   globalForPrisma.prisma ??

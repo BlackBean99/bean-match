@@ -27,6 +27,7 @@ import {
   type DashboardUser,
   type RoundStatus,
 } from "@/lib/domain";
+import { getAppBaseUrl } from "@/lib/runtime-env";
 
 type RoundDashboardProps = {
   users: DashboardUser[];
@@ -287,7 +288,7 @@ function CandidateTable({ candidates, activeRound }: { candidates: DashboardUser
               </span>
               {activeRound ? (
                 <CopyLinkButton
-                  url={`${process.env.AUTH_URL || "http://localhost:3000"}/rounds/${activeRound.id}/participants/${user.id}`}
+                  url={`${getAppBaseUrl()}/rounds/${activeRound.id}/participants/${user.id}`}
                   className="rounded-2xl border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-700 hover:border-[#ffc6d5] hover:text-[#e63a68]"
                 />
               ) : null}

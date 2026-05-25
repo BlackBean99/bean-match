@@ -53,9 +53,9 @@ export function ReadOnlyBrowseInterestForm({
     <section className="grid gap-4">
       <div className="flex flex-col gap-3 rounded-[28px] border border-[#ece7e4] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] sm:flex-row sm:items-end sm:justify-between sm:p-6">
         <div>
-          <h2 className="text-[1.45rem] font-semibold tracking-[-0.03em] text-zinc-950">상대 프로필</h2>
+          <h2 className="text-[1.45rem] font-semibold tracking-[-0.03em] text-zinc-950">이성 프로필</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-600">
-            마음에 드는 상대를 최대 {browseLimit}명까지 선택해 제출해 주세요.
+            마음에 드는 사람을 최대 {browseLimit}명까지 선택해 제출해 주세요.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -94,7 +94,7 @@ export function ReadOnlyBrowseInterestForm({
               {browseSubmitted
                 ? "관심 선택이 저장되었습니다."
                 : canSubmitInterests
-                  ? "지금 보여드릴 수 있는 상대 프로필이 없습니다."
+                  ? "지금 보여드릴 수 있는 이성 프로필이 없습니다."
                   : "현재는 관심 제출이 열려 있지 않습니다."}
             </p>
           ) : (
@@ -179,7 +179,7 @@ export function ReadOnlyBrowseInterestForm({
               선택은 최대 {browseLimit}명까지 저장됩니다. 제출이 끝나면 바로 다시 수정할 수 없습니다.
             </p>
             <FormSubmitButton
-              label="관심 제출"
+              label="선택 제출"
               pendingLabel="저장 중..."
               disabled={!canInteract || browseCandidates.length === 0 || selectedIds.length === 0}
               className="inline-flex h-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#da7a37,#ee9b55)] px-5 text-sm font-semibold text-white shadow-[0_18px_35px_rgba(217,122,50,0.24)] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"

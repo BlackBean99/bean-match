@@ -1,6 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getUserDetail } from "@/lib/member-repository";
 import { hasDatabaseUrl, prisma } from "@/lib/prisma";
+import {
+  getAppBaseUrl,
+  getSupabaseServerKey,
+  getSupabaseUrl,
+} from "@/lib/runtime-env";
 
 const ONBOARDING_ACCESS_TOKEN_PREFIX = "bboa_";
 const ONBOARDING_ACCESS_TOUCH_WINDOW_MS = 15 * 60 * 1000;
@@ -345,18 +350,6 @@ async function assertUserExists(userId: bigint) {
 
 function hasOnboardingAccessStorageConfig() {
   return hasDatabaseUrl() || Boolean(getSupabaseUrl() && getSupabaseServerKey());
-}
-
-function getAppBaseUrl() {
-  return process.env.AUTH_URL || "http://localhost:3000";
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T> {

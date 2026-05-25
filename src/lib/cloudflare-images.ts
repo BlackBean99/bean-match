@@ -1,3 +1,9 @@
+import {
+  getCloudflareImagesAccountId,
+  getCloudflareImagesToken,
+  getCloudflareImagesVariant,
+} from "@/lib/runtime-env";
+
 type CloudflareImageResult = {
   id: string;
   variants?: string[];
@@ -100,9 +106,8 @@ async function getCloudflareImage(accountId: string, imageId: string) {
 }
 
 async function getCloudflareAccountId() {
-  if (process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID) {
-    return process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID;
-  }
+  const configuredAccountId = getCloudflareImagesAccountId();
+  if (configuredAccountId) return configuredAccountId;
   if (discoveredAccountIdCache.resolved) {
     return discoveredAccountIdCache.value;
   }
@@ -135,12 +140,4 @@ async function getCloudflareAccountId() {
 
 function isCloudflareImagesConfigured() {
   return Boolean(getCloudflareImagesToken()) && !cloudflareImagesAvailability.disabled;
-}
-
-function getCloudflareImagesToken() {
-  return process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CloudFlare_Token || "";
-}
-
-function getCloudflareImagesVariant() {
-  return process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 }

@@ -41,6 +41,7 @@ npm run start
 ```
 
 `npm run start` 검증은 `next dev` 와 별개로, 실제 프로덕션 빌드 산출물이 정상 부팅되고 주요 경로가 500 없이 열리는지 확인하기 위한 필수 절차입니다.
+Cloudflare Pages로 배포할 때는 로컬 `.env.local` 값을 빌드 산출물에 굳히지 말고, Pages Variables and Secrets를 런타임에서 읽도록 설정합니다.
 
 Notion 데이터를 Supabase로 동기화할 때는 먼저 dry-run을 실행합니다.
 

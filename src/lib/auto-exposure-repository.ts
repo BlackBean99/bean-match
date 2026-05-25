@@ -26,6 +26,7 @@ import {
   type ParticipantNewMemberNotification,
 } from "@/lib/domain";
 import { createIntroCase, getMemberDashboardData } from "@/lib/member-repository";
+import { getSupabaseServerKey, getSupabaseUrl } from "@/lib/runtime-env";
 
 export const MAX_NEW_USER_MARKS = 3;
 export const MAX_EXISTING_USER_MARKS_PER_NEW_MEMBER = 1;
@@ -162,6 +163,10 @@ export async function getParticipantExposureData(userId: bigint): Promise<Partic
   } catch (error) {
     return emptyParticipantExposureData(actor, error instanceof Error ? error.message : "Participant exposure query failed.");
   }
+}
+
+function hasAutomationDataConfig() {
+  return hasDatabaseUrl() || Boolean(getSupabaseUrl() && getSupabaseServerKey());
 }
 
 export async function joinAutoExposureWithExistingUser(input: JoinAutoExposureInput) {
@@ -1308,18 +1313,6 @@ function toReadyEntryRow(row: {
     ready_at: row.ready_at ?? row.readyAt?.toISOString() ?? null,
     joined_at: row.joined_at ?? row.joinedAt?.toISOString() ?? new Date().toISOString(),
   };
-}
-
-function hasAutomationDataConfig() {
-  return hasDatabaseUrl() || Boolean(getSupabaseUrl() && getSupabaseServerKey());
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T> {

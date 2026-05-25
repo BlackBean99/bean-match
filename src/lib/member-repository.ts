@@ -10,6 +10,11 @@ import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { prisma, hasDatabaseUrl } from "@/lib/prisma";
 import {
+  getPhotoBucketName,
+  getSupabaseServerKey,
+  getSupabaseUrl,
+} from "@/lib/runtime-env";
+import {
   activeIntroStatuses,
   type DashboardIntroCase,
   type DashboardUser,
@@ -131,7 +136,6 @@ const introCaseInclude = {
 } satisfies Prisma.IntroCaseInclude;
 
 const activeIntroStatusSet = new Set<IntroCaseStatus>(activeIntroStatuses as IntroCaseStatus[]);
-const photoBucketName = process.env.SUPABASE_PHOTO_BUCKET || "user-photos";
 const photoUploadMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const maxPhotoUploadBytes = 10 * 1024 * 1024;
 
@@ -485,6 +489,7 @@ export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<U
   const body = Buffer.from(await file.arrayBuffer());
 
   await ensureSupabasePhotoBucket();
+  const photoBucketName = getPhotoBucketName();
   await supabaseStorage(`/object/${photoBucketName}/${encodePathSegments(filePath)}`, {
     method: "POST",
     headers: {
@@ -1083,6 +1088,7 @@ async function supabaseStorage<T>(path: string, init: RequestInit = {}): Promise
 }
 
 async function ensureSupabasePhotoBucket() {
+  const photoBucketName = getPhotoBucketName();
   const response = await fetch(`${getSupabaseUrl()}/storage/v1/bucket/${photoBucketName}`, {
     headers: {
       apikey: getSupabaseServerKey(),
@@ -1364,14 +1370,6 @@ function findNotionFilesProperty(properties: Record<string, NotionProperty> | un
   }
 
   return Object.values(properties).find((property) => property.type === "files")?.files ?? null;
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 type EntryQueueUpsertStatus = "WAITING" | "READY";

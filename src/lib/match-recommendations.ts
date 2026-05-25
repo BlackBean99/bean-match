@@ -6,6 +6,7 @@ import {
   type DashboardUser,
   type MemberFilterState,
 } from "@/lib/domain";
+import { getSupabaseServerKey, getSupabaseUrl } from "@/lib/runtime-env";
 
 type GenderCode = NonNullable<DashboardUser["genderCode"]>;
 
@@ -623,14 +624,6 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
 
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 function formatSupabaseNetworkError(target: string, error: unknown) {

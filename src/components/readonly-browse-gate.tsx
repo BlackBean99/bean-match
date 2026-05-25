@@ -24,9 +24,9 @@ export function ReadOnlyBrowseGate({ disabled, initialMessage, userId }: ReadOnl
       <section className="mx-auto grid w-full max-w-2xl gap-4">
         <header className="rounded-[28px] border border-red-100 bg-white p-5 shadow-sm sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#E00E0E]">Blackbean Match</p>
-          <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950">소개 링크 확인</h1>
+          <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950">프로필 열람 링크 확인</h1>
           <p className="mt-3 text-sm leading-6 text-zinc-600">
-            안내받은 링크가 맞는지 확인해 주세요. 링크가 유효하면 같은 성별을 제외한 소개 가능 후보를 볼 수 있고, 연락처는 연결되기 전까지 공개되지 않습니다.
+            안내받은 링크가 맞는지 확인해 주세요. 링크가 유효하면 선택 가능한 후보를 볼 수 있고, 연락처는 연결되기 전까지 공개되지 않습니다.
           </p>
         </header>
 

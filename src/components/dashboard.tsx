@@ -603,7 +603,7 @@ function MemberRow({
             </details>
           </div>
         ) : (
-          <span className="text-xs font-semibold text-zinc-400">읽기 전용</span>
+          <span className="text-xs font-semibold text-zinc-400">열람 전용</span>
         )}
       </td>
     </tr>

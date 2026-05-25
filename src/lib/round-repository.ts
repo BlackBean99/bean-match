@@ -11,6 +11,7 @@ import {
   type RoundStatus,
 } from "@/lib/domain";
 import { getMemberDashboardData, getUserDetail } from "@/lib/member-repository";
+import { getSupabaseServerKey, getSupabaseUrl } from "@/lib/runtime-env";
 
 type RoundRow = {
   id: number;
@@ -672,14 +673,6 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
 
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-}
-
-function getSupabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 }
 
 function formatDateTime(date: Date) {
