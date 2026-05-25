@@ -87,9 +87,9 @@ type DashboardProps = {
   filters: MemberFilterState;
 };
 
-export function UsersDashboard({ users, databaseConnected, loadError, filters }: DashboardProps) {
+export function UsersDashboard({ users, allUsers, databaseConnected, loadError, filters }: DashboardProps) {
   const participantUsers = users.filter(isParticipantUser);
-  const invitorUsers = users.filter(isInvitorUser);
+  const invitorUsers = allUsers.filter(isInvitorUser);
   const openCount = participantUsers.filter((user) => user.openLevel === "FULL_OPEN").length;
   const waitingCount = participantUsers.filter((user) => user.status === "INCOMPLETE" || user.status === "HOLD").length;
 
@@ -123,7 +123,7 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
             </span>
           </summary>
           <p className="mt-3 text-sm leading-6 text-zinc-500">
-            `INVITOR` 역할이 있는 회원은 참가자 역할과 함께 있어도 여기 포함됩니다. 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
+            `INVITOR` 역할이 있는 회원은 상태 필터와 무관하게 여기 포함됩니다. 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
           </p>
           <div className="mt-4">
             <MemberTable users={invitorUsers} editable={databaseConnected} allowDelete={false} />
