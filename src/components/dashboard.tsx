@@ -69,6 +69,12 @@ const genderOptions = [
   ["UNDISCLOSED", "비공개"],
 ] as const;
 
+const roleLabels: Record<string, string> = {
+  PARTICIPANT: "참가자",
+  INVITOR: "모집인",
+  ADMIN: "운영자",
+};
+
 const roleOptions = ["PARTICIPANT", "INVITOR", "ADMIN"] as const;
 const openLevelOptions: OpenLevel[] = ["PRIVATE", "SEMI_OPEN", "FULL_OPEN"];
 
@@ -83,7 +89,7 @@ type DashboardProps = {
 
 export function UsersDashboard({ users, databaseConnected, loadError, filters }: DashboardProps) {
   const participantUsers = users.filter(isParticipantUser);
-  const invitorOnlyUsers = users.filter(isInvitorOnlyUser);
+  const invitorUsers = users.filter(isInvitorUser);
   const openCount = participantUsers.filter((user) => user.openLevel === "FULL_OPEN").length;
   const waitingCount = participantUsers.filter((user) => user.status === "INCOMPLETE" || user.status === "HOLD").length;
 
@@ -95,14 +101,14 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
         <AdminStatCard label="검토 필요" value={waitingCount} tone="amber" detail="미완료 또는 보류 상태" />
         <AdminStatCard
           label="모집인"
-          value={invitorOnlyUsers.length}
+          value={invitorUsers.length}
           tone="blue"
-          detail="기본 목록에서는 숨기고 별도 목록에서 수정할 수 있습니다."
+          detail="기본 목록과 별도 목록 모두에서 확인할 수 있습니다."
         />
       </section>
 
       <AdminSection className="p-4 sm:p-5">
-        <FilterForm filters={filters} showUserStatus />
+        <FilterForm filters={filters} showUserStatus resetHref="/users" />
       </AdminSection>
 
       <section className="space-y-5">
@@ -111,16 +117,16 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
         <MemberTable users={participantUsers} editable={databaseConnected} />
         <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">
-            모집인만 보기
+            모집인 보기
             <span className="ml-2 rounded-full bg-[#fff1f5] px-2 py-0.5 text-[11px] font-bold text-[#e63a68]">
-              {invitorOnlyUsers.length}
+              {invitorUsers.length}
             </span>
           </summary>
           <p className="mt-3 text-sm leading-6 text-zinc-500">
-            모집인 전용 회원은 기본 참가자 목록에서 숨기고, 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
+            `INVITOR` 역할이 있는 회원은 참가자 역할과 함께 있어도 여기 포함됩니다. 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
           </p>
           <div className="mt-4">
-            <MemberTable users={invitorOnlyUsers} editable={databaseConnected} allowDelete={false} />
+            <MemberTable users={invitorUsers} editable={databaseConnected} allowDelete={false} />
           </div>
         </details>
       </section>
@@ -149,7 +155,7 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
 
       <AdminSection className="p-4 sm:p-5">
         <DashboardTabs filters={filters} />
-        <FilterForm filters={filters} showIntroStatus />
+        <FilterForm filters={filters} showIntroStatus resetHref="/matches" />
       </AdminSection>
 
       {filters.view === "graph" ? (
@@ -259,10 +265,12 @@ function FilterForm({
   filters,
   showIntroStatus = false,
   showUserStatus = false,
+  resetHref = "/",
 }: {
   filters: MemberFilterState;
   showIntroStatus?: boolean;
   showUserStatus?: boolean;
+  resetHref?: string;
 }) {
   const gridClassName = showIntroStatus || showUserStatus ? "grid gap-3 xl:grid-cols-8" : "grid gap-3 xl:grid-cols-7";
 
@@ -328,12 +336,10 @@ function FilterForm({
         </select>
       </Field>
       <div className="flex items-end gap-2">
-        <NavigationSubmitButton
-          label="적용"
-          pendingLabel="적용 중..."
-          className={adminPrimaryButtonClassName}
-        />
-        <Link className={adminSecondaryButtonClassName} href="/">
+        <button type="submit" className={adminPrimaryButtonClassName}>
+          적용
+        </button>
+        <Link className={adminSecondaryButtonClassName} href={resetHref}>
           초기화
         </Link>
       </div>
@@ -555,7 +561,7 @@ function MemberRow({
         <div className="flex max-h-14 flex-col gap-1 overflow-hidden">
           {user.roles.slice(0, 2).map((role) => (
             <span key={role} className="w-fit max-w-full truncate rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-600">
-              {role}
+              {roleLabels[role] ?? role}
             </span>
           ))}
           {user.roles.length > 2 ? <span className="text-[11px] font-semibold text-zinc-400">+{user.roles.length - 2}</span> : null}
@@ -876,10 +882,6 @@ function isParticipantUser(user: DashboardUser) {
 
 function isInvitorUser(user: DashboardUser) {
   return user.roles.includes("INVITOR");
-}
-
-function isInvitorOnlyUser(user: DashboardUser) {
-  return isInvitorUser(user) && !isParticipantUser(user);
 }
 
 function formatAge(user: DashboardUser) {
