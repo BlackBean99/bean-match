@@ -48,6 +48,9 @@ export function IntroCaseCreateForm({
   return (
     <form ref={formRef} action={formAction} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
       <FormPendingFieldset className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-2">
+        <p className="sm:col-span-2 rounded-2xl border border-[#f5e2d3] bg-[#fffaf5] px-4 py-3 text-sm leading-6 text-zinc-700">
+          참여자 A/B 는 `PARTICIPANT` 역할 사용자만, 주선자는 `INVITOR` 역할 사용자만 노출합니다.
+        </p>
         {state.error ? (
           <p className="sm:col-span-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-[#b10606]">
             {state.error}
@@ -60,7 +63,7 @@ export function IntroCaseCreateForm({
         ) : null}
 
         <label className={fieldClassName}>
-          참여자 A
+          참여자 A (PARTICIPANT)
           <select
             name="personAId"
             required
@@ -77,7 +80,7 @@ export function IntroCaseCreateForm({
         </label>
 
         <label className={fieldClassName}>
-          참여자 B
+          참여자 B (PARTICIPANT)
           <select
             name="personBId"
             required
@@ -94,7 +97,7 @@ export function IntroCaseCreateForm({
         </label>
 
         <label className={fieldClassName}>
-          주선자
+          주선자 (INVITOR)
           <select
             name="invitorUserId"
             defaultValue={state.values.invitorUserId}

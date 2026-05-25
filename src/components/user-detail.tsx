@@ -8,25 +8,35 @@ import {
   setMainUserPhotoAction,
   updateUserPhotoAction,
 } from "@/app/actions";
+import { OnboardingAccessTokenManager } from "@/components/onboarding-access-token-manager";
 import { ReadOnlyTokenManager } from "@/components/readonly-token-manager";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
+import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
 
 type UserDetailProps = {
+  onboardingAccessTokenManager: OnboardingAccessTokenManagerData;
   readOnlyTokenManager: ReadOnlyBrowseTokenManagerData;
+  readOnly?: boolean;
   user: DashboardUserDetail;
 };
 
-export function UserDetail({ user, readOnlyTokenManager }: UserDetailProps) {
-  const accessUrl = `${process.env.AUTH_URL || "http://localhost:3000"}${readOnlyTokenManager.accessPath}`;
+export function UserDetail({
+  onboardingAccessTokenManager,
+  readOnly = false,
+  user,
+  readOnlyTokenManager,
+}: UserDetailProps) {
+  const baseUrl = process.env.AUTH_URL || "http://localhost:3000";
+  const accessUrl = `${baseUrl}${readOnlyTokenManager.accessPath}`;
 
   return (
     <div className="grid gap-6">
       <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
-        <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
           <Link href="/users" className="text-sm font-bold text-[#E00E0E]">
             사용자 목록으로
           </Link>
@@ -42,9 +52,19 @@ export function UserDetail({ user, readOnlyTokenManager }: UserDetailProps) {
                 {user.companyName ? ` · ${user.companyName}` : ""}
               </p>
               <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
+              {readOnly ? (
+                <p className="mt-2 inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
+                  읽기 전용
+                </p>
+              ) : null}
             </div>
             <StatusBadge status={user.status} />
           </div>
+          {readOnly ? (
+            <p className="mt-4 rounded-[20px] border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              모집인 전용 프로필은 열람만 가능하며, 정보 수정과 사진 편집은 할 수 없습니다.
+            </p>
+          ) : null}
           <div className="mt-5 space-y-4 text-sm leading-6 text-zinc-700">
             <ProfileText label="자기소개" value={user.selfIntro} />
             <ProfileText label="이상형" value={user.idealTypeDescription} />
@@ -61,48 +81,58 @@ export function UserDetail({ user, readOnlyTokenManager }: UserDetailProps) {
           </div>
         </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-zinc-950">사진</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Notion 사진 URL과 직접 업로드한 Supabase Storage 사진을 함께 관리합니다.
-              </p>
+              <p className="mt-1 text-sm text-zinc-500">Notion 사진 URL과 업로드 사진을 한 화면에서 정리합니다.</p>
             </div>
             <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#E00E0E]">
               {user.photos.length}장
             </span>
           </div>
 
-          <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} />
+          {!readOnly ? <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} /> : null}
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {user.photos.length === 0 ? (
-              <p className="rounded-lg border border-zinc-200 p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
+              <p className="rounded-[24px] border border-[#ece7e4] p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
             ) : (
-              user.photos.map((photo) => <PhotoCard key={photo.id} userId={user.id} photo={photo} />)
+              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={readOnly} userId={user.id} photo={photo} />)
             )}
           </div>
         </section>
       </div>
 
-      <ReadOnlyTokenManager
-        accessUrl={accessUrl}
-        databaseConnected={readOnlyTokenManager.databaseConnected}
-        loadError={readOnlyTokenManager.loadError}
-        tokens={readOnlyTokenManager.tokens}
-        userId={user.id}
-        userName={user.name}
-      />
+      {readOnly ? null : (
+        <>
+          <OnboardingAccessTokenManager
+            databaseConnected={onboardingAccessTokenManager.databaseConnected}
+            loadError={onboardingAccessTokenManager.loadError}
+            tokens={onboardingAccessTokenManager.tokens}
+            userId={user.id}
+            userName={user.name}
+          />
+
+          <ReadOnlyTokenManager
+            accessUrl={accessUrl}
+            databaseConnected={readOnlyTokenManager.databaseConnected}
+            loadError={readOnlyTokenManager.loadError}
+            tokens={readOnlyTokenManager.tokens}
+            userId={user.id}
+            userName={user.name}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-function PhotoCard({ userId, photo }: { userId: number; photo: DashboardUserPhoto }) {
+function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: DashboardUserPhoto; readOnly: boolean }) {
   return (
-    <article className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-      <div className="aspect-[4/3] bg-zinc-100">
-        <div className="photo-skeleton relative h-full w-full">
+    <article className="overflow-hidden rounded-[24px] border border-[#ece7e4] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
+      <div className="bg-[#f6f3ef] p-3">
+        <div className="photo-skeleton relative aspect-[4/3] overflow-hidden rounded-[18px] bg-white">
           <Image
             src={photo.url}
             alt={photo.originalFileName}
@@ -113,7 +143,7 @@ function PhotoCard({ userId, photo }: { userId: number; photo: DashboardUserPhot
           />
         </div>
       </div>
-      <div className="grid gap-3 p-3">
+      <div className="grid gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-zinc-950" title={photo.originalFileName}>
@@ -126,63 +156,69 @@ function PhotoCard({ userId, photo }: { userId: number; photo: DashboardUserPhot
           ) : null}
         </div>
 
-        <details>
-          <summary className="cursor-pointer text-xs font-bold text-[#E00E0E]">사진 수정</summary>
-          <form action={updateUserPhotoAction} className="mt-3 grid gap-3">
-            <FormPendingFieldset className="grid gap-3">
-              <input type="hidden" name="userId" value={userId} />
-              <input type="hidden" name="photoId" value={photo.id} />
-              <Field label="URL">
-                <input name="url" type="url" defaultValue={photo.sourceUrl} className={inputClassName} />
-              </Field>
-              <Field label="새 파일">
-                <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className={inputClassName} />
-              </Field>
-              <Field label="파일명">
-                <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
-              </Field>
-              <Field label="순서">
-                <input name="sortOrder" type="number" defaultValue={photo.sortOrder} className={inputClassName} />
-              </Field>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                <input type="checkbox" name="isMain" defaultChecked={photo.isMain} />
-                대표 사진
-              </label>
-              <FormSubmitButton
-                label="저장"
-                pendingLabel="저장 중..."
-                className={`${primaryButtonClassName} disabled:cursor-not-allowed disabled:bg-zinc-300`}
-              />
-            </FormPendingFieldset>
-          </form>
-        </details>
+        {readOnly ? (
+          <p className="text-xs text-zinc-500">읽기 전용 프로필이라 사진 수정 기능이 비활성화되어 있습니다.</p>
+        ) : (
+          <>
+            <details>
+              <summary className="cursor-pointer text-xs font-bold text-[#c96a2b]">사진 수정</summary>
+              <form action={updateUserPhotoAction} className="mt-3 grid gap-3">
+                <FormPendingFieldset className="grid gap-3">
+                  <input type="hidden" name="userId" value={userId} />
+                  <input type="hidden" name="photoId" value={photo.id} />
+                  <Field label="URL">
+                    <input name="url" type="url" defaultValue={photo.sourceUrl} className={inputClassName} />
+                  </Field>
+                  <Field label="새 파일">
+                    <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className={inputClassName} />
+                  </Field>
+                  <Field label="파일명">
+                    <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
+                  </Field>
+                  <Field label="순서">
+                    <input name="sortOrder" type="number" defaultValue={photo.sortOrder} className={inputClassName} />
+                  </Field>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                    <input type="checkbox" name="isMain" defaultChecked={photo.isMain} />
+                    대표 사진
+                  </label>
+                  <FormSubmitButton
+                    label="저장"
+                    pendingLabel="저장 중..."
+                    className={`${primaryButtonClassName} disabled:cursor-not-allowed disabled:bg-zinc-300`}
+                  />
+                </FormPendingFieldset>
+              </form>
+            </details>
 
-        <div className="flex gap-3">
-          {!photo.isMain ? (
-            <form action={setMainUserPhotoAction}>
-              <FormPendingFieldset className="contents">
-                <input type="hidden" name="userId" value={userId} />
-                <input type="hidden" name="photoId" value={photo.id} />
-                <FormSubmitButton
-                  label="대표 지정"
-                  pendingLabel="변경 중..."
-                  className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E] disabled:text-zinc-300"
-                />
-              </FormPendingFieldset>
-            </form>
-          ) : null}
-          <form action={deleteUserPhotoAction}>
-            <FormPendingFieldset className="contents">
-              <input type="hidden" name="userId" value={userId} />
-              <input type="hidden" name="photoId" value={photo.id} />
-              <FormSubmitButton
-                label="삭제"
-                pendingLabel="삭제 중..."
-                className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
-              />
-            </FormPendingFieldset>
-          </form>
-        </div>
+            <div className="flex gap-3">
+              {!photo.isMain ? (
+                <form action={setMainUserPhotoAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="userId" value={userId} />
+                    <input type="hidden" name="photoId" value={photo.id} />
+                    <FormSubmitButton
+                      label="대표 지정"
+                      pendingLabel="변경 중..."
+                      className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E] disabled:text-zinc-300"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
+              <form action={deleteUserPhotoAction}>
+                <FormPendingFieldset className="contents">
+                  <input type="hidden" name="userId" value={userId} />
+                  <input type="hidden" name="photoId" value={photo.id} />
+                  <FormSubmitButton
+                    label="삭제"
+                    pendingLabel="삭제 중..."
+                    className="text-xs font-bold text-zinc-500 hover:text-[#E00E0E] disabled:text-zinc-300"
+                  />
+                </FormPendingFieldset>
+              </form>
+            </div>
+          </>
+        )}
       </div>
     </article>
   );
@@ -214,6 +250,7 @@ function formatAge(user: DashboardUserDetail) {
 }
 
 const inputClassName =
-  "w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-[#FF3131] focus:ring-2 focus:ring-red-100";
+  "w-full min-w-0 rounded-2xl border border-[#ded5c8] bg-white px-3 py-2 text-sm text-zinc-950 outline-none focus:border-[#d98b51] focus:ring-2 focus:ring-[#f8e1cf]";
 
-const primaryButtonClassName = "rounded-lg bg-[#FF3131] px-4 py-2 text-sm font-bold text-white hover:bg-[#E00E0E]";
+const primaryButtonClassName =
+  "rounded-2xl bg-[linear-gradient(135deg,#da7a37,#ee9b55)] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(217,122,50,0.2)]";

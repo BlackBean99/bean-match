@@ -82,16 +82,23 @@ type DashboardProps = {
 };
 
 export function UsersDashboard({ users, databaseConnected, loadError, filters }: DashboardProps) {
-  const openCount = users.filter((user) => user.openLevel === "FULL_OPEN").length;
-  const waitingCount = users.filter((user) => user.status === "INCOMPLETE" || user.status === "HOLD").length;
+  const participantUsers = users.filter(isParticipantUser);
+  const invitorOnlyUsers = users.filter(isInvitorOnlyUser);
+  const openCount = participantUsers.filter((user) => user.openLevel === "FULL_OPEN").length;
+  const waitingCount = participantUsers.filter((user) => user.status === "INCOMPLETE" || user.status === "HOLD").length;
 
   return (
     <div className="grid gap-5">
       <section className="grid gap-4 xl:grid-cols-4">
-        <AdminStatCard label="전체 회원 수" value={users.length} detail="현재 필터에 포함된 회원 기준입니다." />
+        <AdminStatCard label="전체 회원 수" value={participantUsers.length} detail="기본 목록에 보이는 참가자 기준입니다." />
         <AdminStatCard label="프로필 오픈 가능" value={openCount} tone="green" detail="FULL_OPEN 동의 기준" />
         <AdminStatCard label="검토 필요" value={waitingCount} tone="amber" detail="미완료 또는 보류 상태" />
-        <AdminStatCard label="운영 연결" value={databaseConnected ? "ON" : "OFF"} tone="blue" detail={loadError ?? "Supabase 연결 상태"} />
+        <AdminStatCard
+          label="모집인"
+          value={invitorOnlyUsers.length}
+          tone="blue"
+          detail="기본 목록에서는 숨기고 별도 읽기 전용으로 확인합니다."
+        />
       </section>
 
       <AdminSection className="p-4 sm:p-5">
@@ -101,7 +108,21 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
       <section className="space-y-5">
         <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
         <MemberCreatePanel disabled={!databaseConnected} />
-        <MemberTable users={users} editable={databaseConnected} />
+        <MemberTable users={participantUsers} editable={databaseConnected} />
+        <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+          <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">
+            모집인만 보기
+            <span className="ml-2 rounded-full bg-[#fff1f5] px-2 py-0.5 text-[11px] font-bold text-[#e63a68]">
+              {invitorOnlyUsers.length}
+            </span>
+          </summary>
+          <p className="mt-3 text-sm leading-6 text-zinc-500">
+            모집인 전용 회원은 기본 참가자 목록에서 숨기고, 필요한 경우에만 읽기 전용으로 확인합니다.
+          </p>
+          <div className="mt-4">
+            <MemberTable users={invitorOnlyUsers} editable={false} />
+          </div>
+        </details>
       </section>
     </div>
   );
@@ -535,24 +556,28 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
               </form>
             </details>
           </div>
-        ) : null}
+        ) : (
+          <span className="text-xs font-semibold text-zinc-400">읽기 전용</span>
+        )}
       </td>
     </tr>
   );
 }
 
 function IntroCreatePanel({ users, disabled }: { users: DashboardUser[]; disabled: boolean }) {
-  const eligibleUsers = users.filter((user) => user.status === "READY");
+  const eligibleUsers = users.filter((user) => isParticipantUser(user) && user.status === "READY");
+  const invitorUsers = users.filter(isInvitorUser);
 
   return (
     <details className="overflow-hidden rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]" open>
       <summary className="cursor-pointer text-lg font-bold text-zinc-950">매칭 기록 생성</summary>
       <p className="mt-3 text-sm leading-6 text-zinc-500">
-        신규 매칭은 현재 `READY` 상태 사용자만 선택할 수 있습니다. 이미 진행 중이거나 기존 매칭 이력이 있는 조합은 추가되지 않습니다.
+        신규 매칭은 `PARTICIPANT` 역할이 있고 `READY` 상태인 사용자만 선택할 수 있습니다. 주선자는 `INVITOR` 역할 사용자만
+        따로 노출합니다. 이미 진행 중이거나 기존 매칭 이력이 있는 조합은 추가되지 않습니다.
       </p>
       <IntroCaseCreateForm
         users={eligibleUsers}
-        invitors={users}
+        invitors={invitorUsers}
         introStatuses={introStatusOrder.map((status) => ({ value: status, label: introStatusLabels[status] }))}
         inputClassName={inputClassName}
         fieldClassName="grid gap-1 text-xs font-semibold text-zinc-600"
@@ -803,6 +828,18 @@ function genderCodeFromLabel(gender?: DashboardUser["gender"]) {
   if (gender === "남성") return "MALE";
   if (gender === "기타") return "OTHER";
   return "UNDISCLOSED";
+}
+
+function isParticipantUser(user: DashboardUser) {
+  return user.roles.includes("PARTICIPANT");
+}
+
+function isInvitorUser(user: DashboardUser) {
+  return user.roles.includes("INVITOR");
+}
+
+function isInvitorOnlyUser(user: DashboardUser) {
+  return isInvitorUser(user) && !isParticipantUser(user);
 }
 
 function formatAge(user: DashboardUser) {
