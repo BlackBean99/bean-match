@@ -10,6 +10,7 @@ import {
   revokeReadOnlyBrowseToken,
   validateReadOnlyBrowseToken,
 } from "@/lib/readonly-browse-repository";
+import { submitBrowseInterests } from "@/lib/auto-exposure-repository";
 
 export type CreateReadOnlyBrowseTokenActionState = {
   createdToken:
@@ -29,6 +30,11 @@ export type CreateReadOnlyBrowseTokenActionState = {
 
 export type UnlockReadOnlyBrowseActionState = {
   error: string | null;
+};
+
+export type SubmitReadOnlyBrowseInterestsActionState = {
+  error: string | null;
+  success: string | null;
 };
 
 export async function createReadOnlyBrowseTokenWithStateAction(
@@ -111,6 +117,55 @@ export async function unlockReadOnlyBrowseAction(
   });
 
   redirect(getReadOnlyBrowseAccessPath(userId));
+}
+
+export async function submitReadOnlyBrowseInterestsWithStateAction(
+  _prevState: SubmitReadOnlyBrowseInterestsActionState,
+  formData: FormData,
+): Promise<SubmitReadOnlyBrowseInterestsActionState> {
+  const userId = parseNamedId(formData, "userId");
+  const cookieStore = await cookies();
+  const rawToken = cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
+  const validation = await validateReadOnlyBrowseToken(userId, rawToken);
+
+  if (!validation.ok) {
+    return {
+      error:
+        validation.reason === "database_unavailable"
+          ? "접근 토큰 저장소에 연결할 수 없습니다."
+          : "입장 코드가 유효하지 않아 다시 확인이 필요합니다.",
+      success: null,
+    };
+  }
+
+  const targetUserIds = formData
+    .getAll("targetUserId")
+    .map((value) => value.toString())
+    .filter(Boolean)
+    .map((value) => BigInt(value));
+
+  try {
+    await submitBrowseInterests({ userId, targetUserIds });
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "관심 저장 중 오류가 발생했습니다.",
+      success: null,
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/onboarding");
+  revalidatePath("/matches");
+  revalidatePath("/rounds");
+  revalidatePath("/users");
+  revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/pool/${userId.toString()}`);
+  revalidatePath(getReadOnlyBrowseAccessPath(userId));
+
+  return {
+    error: null,
+    success: "관심 선택이 저장되었습니다.",
+  };
 }
 
 export async function clearReadOnlyBrowseAccessAction(formData: FormData) {

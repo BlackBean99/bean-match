@@ -294,6 +294,7 @@ export type MemberFilterState = {
   view: "pool" | "recommend" | "graph";
   recommendationFor: string;
   introStatus: "ALL" | IntroStatus;
+  status: "ALL" | UserStatus;
   gender: "ALL" | "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED";
   ageMin: string;
   ageMax: string;

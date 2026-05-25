@@ -1,12 +1,19 @@
-import { introStatusLabels, type IntroStatus, type MemberFilterState } from "@/lib/domain";
+import { introStatusLabels, userStatusLabels, type IntroStatus, type MemberFilterState, type UserStatus } from "@/lib/domain";
 
 export type SearchParamMap = Record<string, string | string[] | undefined>;
 
-export function parseMemberFilters(searchParams: SearchParamMap): MemberFilterState {
+type ParseMemberFilterOptions = {
+  defaultStatus?: MemberFilterState["status"];
+};
+
+export function parseMemberFilters(searchParams: SearchParamMap, options: ParseMemberFilterOptions = {}): MemberFilterState {
+  const defaultStatus = options.defaultStatus ?? "ALL";
+
   return {
     view: readFilter(searchParams.view, ["pool", "recommend", "graph"], "pool"),
     recommendationFor: readString(searchParams.recommendationFor),
     introStatus: readFilter(searchParams.introStatus, ["ALL", ...introStatusOptions], "ALL"),
+    status: readFilter(searchParams.status, ["ALL", ...statusOptions], defaultStatus),
     gender: readFilter(searchParams.gender, ["ALL", "FEMALE", "MALE", "OTHER", "UNDISCLOSED"], "ALL"),
     ageMin: readString(searchParams.ageMin),
     ageMax: readString(searchParams.ageMax),
@@ -21,6 +28,7 @@ export function parseMemberFilters(searchParams: SearchParamMap): MemberFilterSt
 }
 
 const introStatusOptions = Object.keys(introStatusLabels) as IntroStatus[];
+const statusOptions = Object.keys(userStatusLabels) as UserStatus[];
 
 function readString(value: string | string[] | undefined) {
   const resolvedValue = Array.isArray(value) ? value[0] : value;
