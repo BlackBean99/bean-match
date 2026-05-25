@@ -203,6 +203,18 @@ erDiagram
         TIMESTAMP created_at
     }
 
+    READ_ONLY_BROWSE_TOKENS {
+        BIGINT id PK
+        BIGINT user_id FK
+        VARCHAR label
+        VARCHAR token_hash
+        VARCHAR token_hint
+        TIMESTAMP expires_at
+        TIMESTAMP last_used_at
+        TIMESTAMP revoked_at
+        TIMESTAMP created_at
+    }
+
     USERS ||--o{ USER_ROLES : has
     USERS ||--|| USER_PREFERENCES : has
     USERS ||--o{ USER_PHOTOS : owns
@@ -220,6 +232,7 @@ erDiagram
     USERS ||--o{ ROUND_SELECTIONS : selected_by
     USERS ||--o{ ROUND_PASSES : passes
     USERS ||--o{ ENTRY_QUEUE : queues
+    USERS ||--o{ READ_ONLY_BROWSE_TOKENS : issues_for
     INTRO_CASES ||--o{ INTRO_CASE_PARTICIPANTS : contains
     INTRO_CASES ||--o{ INTRO_CASE_EVENTS : logs
     ROUNDS ||--o{ ROUND_SELECTIONS : contains
@@ -279,7 +292,14 @@ erDiagram
 ### 3.8 USER_STATE_HISTORY
 사용자 상태 변경 감사 로그.
 
-### 3.9 ROUNDS
+### 3.9 READ_ONLY_BROWSE_TOKENS
+사용자별 읽기 전용 열람 권한 토큰 저장.
+- 토큰 원문은 저장하지 않고 `token_hash` 만 저장
+- `token_hint` 로 운영자가 토큰을 식별
+- `expires_at`, `revoked_at` 으로 만료/해제 관리
+- `last_used_at` 으로 최근 사용 시각 추적
+
+### 3.10 ROUNDS
 주 2회 운영할 수 있는 선택 라운드.
 - `DRAFT`
 - `OPEN`
@@ -287,41 +307,41 @@ erDiagram
 - `MATCHING`
 - `COMPLETED`
 
-### 3.10 ROUND_SELECTIONS
+### 3.11 ROUND_SELECTIONS
 라운드 내 사용자 선택 기록.
 - `from_user_id`: 선택한 사용자
 - `to_user_id`: 선택된 후보
 - 한 라운드에서 같은 후보 중복 선택 금지
 - 사용자당 선택 수는 최대 2명
 
-### 3.11 ROUND_PASSES
+### 3.12 ROUND_PASSES
 라운드에서 선택하지 않겠다는 의사 기록.
 - `user_id`: 이번 라운드를 패스한 사용자
 - `reason`: 선택 안 함 메모
 - 한 사용자당 한 라운드 1건만 허용
 - 이미 선택을 제출한 사용자는 패스를 남길 수 없음
 
-### 3.12 ENTRY_QUEUE
+### 3.13 ENTRY_QUEUE
 신규 온보딩 사용자를 자동 노출 준비 상태로 반영하는 큐.
 - `WAITING`
 - `READY`
 - `PROMOTED`
 - `CANCELLED`
 
-### 3.13 INTERESTS
+### 3.14 INTERESTS
 자동 노출 풀에서 사용자가 남긴 관심 표시 기록.
 - `from_user_id`: 관심을 보낸 사용자
 - `to_user_id`: 관심을 받은 사용자
 - `source`: 신규 가입자 브라우징 / 기존 회원 알림 / 운영자 수동 생성
 - `status`: 활성 / 철회 / 만료 / 소개 전환
 
-### 3.14 INTRO_CANDIDATES
+### 3.15 INTRO_CANDIDATES
 상호 관심이 생겨 운영자 검토가 필요한 소개 후보.
 - `user_a_id`, `user_b_id`: 정렬된 페어
 - `reason`: 후보 생성 근거
 - `status`: 검토 대기 / 승인 / 반려 / 소개 전환 완료
 
-### 3.15 NOTIFICATIONS
+### 3.16 NOTIFICATIONS
 자동 노출 풀에서 쓰는 in-app 알림.
 - `user_id`: 알림을 받는 사용자
 - `subject_user_id`: 알림 대상이 된 신규 멤버
