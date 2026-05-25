@@ -71,7 +71,7 @@ export async function createReadOnlyBrowseTokenWithStateAction(
   } catch (error) {
     return {
       createdToken: null,
-      error: error instanceof Error ? error.message : "리드 온리 토큰 생성 중 오류가 발생했습니다.",
+      error: error instanceof Error ? error.message : "열람 링크 생성 중 오류가 발생했습니다.",
       values,
     };
   }
@@ -98,10 +98,10 @@ export async function unlockReadOnlyBrowseAction(
     return {
       error:
         validation.reason === "missing_token"
-          ? "리드 온리 토큰을 입력해 주세요."
+          ? "링크 코드를 입력해 주세요."
           : validation.reason === "database_unavailable"
-            ? "접근 토큰 저장소에 연결할 수 없습니다."
-            : "토큰이 올바르지 않거나 이미 만료 또는 해제되었습니다.",
+            ? "지금은 링크 정보를 확인할 수 없습니다."
+            : "링크가 올바르지 않거나 이미 만료 또는 해제되었습니다.",
     };
   }
 
@@ -132,7 +132,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
     return {
       error:
         validation.reason === "database_unavailable"
-          ? "접근 토큰 저장소에 연결할 수 없습니다."
+          ? "지금은 링크 정보를 확인할 수 없습니다."
           : "입장 코드가 유효하지 않아 다시 확인이 필요합니다.",
       success: null,
     };
