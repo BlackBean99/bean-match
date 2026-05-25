@@ -243,7 +243,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: false,
       candidates: [],
       databaseConnected: false,
-      loadError: "DATABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured.",
+      loadError: "지금은 링크 정보를 확인할 수 없습니다.",
       tokenLabel: null,
     };
   }
@@ -257,7 +257,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: false,
       candidates: [],
       databaseConnected: validation.reason !== "database_unavailable",
-      loadError: validation.reason === "database_unavailable" ? "접근 토큰 저장소에 연결할 수 없습니다." : null,
+      loadError: validation.reason === "database_unavailable" ? "지금은 링크 정보를 확인할 수 없습니다." : null,
       tokenLabel: null,
     };
   }
