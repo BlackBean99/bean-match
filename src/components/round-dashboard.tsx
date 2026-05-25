@@ -27,6 +27,7 @@ import {
   type DashboardUser,
   type RoundStatus,
 } from "@/lib/domain";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import { getAppBaseUrl } from "@/lib/runtime-env";
 
 type RoundDashboardProps = {
@@ -279,7 +280,7 @@ function CandidateTable({ candidates, activeRound }: { candidates: DashboardUser
             <div>
               <p className="text-sm font-bold text-zinc-950">{user.name}</p>
               <p className="text-xs text-zinc-500">
-                {user.gender} · {user.age || user.ageText || "나이 미입력"} · {user.heightCm || "-"}cm
+                {user.gender} · {formatBirthYearLabel(user)} · {user.heightCm || "-"}cm
               </p>
             </div>
             <div className="flex items-center gap-2">

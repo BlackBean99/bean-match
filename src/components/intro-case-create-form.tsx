@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { createIntroCaseWithStateAction, type IntroCaseActionState } from "@/app/actions";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import type { DashboardUser, IntroStatus } from "@/lib/domain";
 
 type IntroCaseCreateFormProps = {
@@ -147,8 +148,5 @@ export function IntroCaseCreateForm({
 }
 
 function formatAge(user: DashboardUser) {
-  if (user.age > 0 && user.ageText) return `${user.age}세 (${user.ageText})`;
-  if (user.age > 0) return `${user.age}세`;
-  if (user.ageText) return user.ageText;
-  return "-";
+  return formatBirthYearLabel(user);
 }

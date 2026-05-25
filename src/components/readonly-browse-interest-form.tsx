@@ -8,6 +8,7 @@ import {
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { ParticipantPhotoGallery } from "@/components/participant-photo-gallery";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import type { ParticipantInterestSelection } from "@/lib/domain";
 import type { ReadOnlyBrowseCandidate } from "@/lib/readonly-browse-repository";
 
@@ -192,8 +193,5 @@ export function ReadOnlyBrowseInterestForm({
 }
 
 function formatAge(candidate: ReadOnlyBrowseCandidate) {
-  if (candidate.age > 0 && candidate.ageText) return `${candidate.age}세`;
-  if (candidate.age > 0) return `${candidate.age}세`;
-  if (candidate.ageText) return candidate.ageText;
-  return "나이 비공개";
+  return formatBirthYearLabel(candidate);
 }

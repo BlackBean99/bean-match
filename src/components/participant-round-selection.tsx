@@ -2,6 +2,7 @@ import { createParticipantRoundPassAction, createParticipantRoundSelectionsActio
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { ParticipantPhotoGallery } from "@/components/participant-photo-gallery";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import { type ParticipantRoundData } from "@/lib/domain";
 
 type ParticipantRoundSelectionProps = ParticipantRoundData;
@@ -179,8 +180,5 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function formatAge(user: NonNullable<ParticipantRoundData["actor"]>) {
-  if (user.age > 0 && user.ageText) return `${user.age}세`;
-  if (user.age > 0) return `${user.age}세`;
-  if (user.ageText) return user.ageText;
-  return "나이 비공개";
+  return formatBirthYearLabel(user);
 }

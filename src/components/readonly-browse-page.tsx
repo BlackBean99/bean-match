@@ -5,6 +5,7 @@ import { ReadOnlyBrowseGate } from "@/components/readonly-browse-gate";
 import { ReadOnlyBrowseInterestForm } from "@/components/readonly-browse-interest-form";
 import { userStatusLabels, type DashboardUser } from "@/lib/domain";
 import type { ReadOnlyBrowsePageData } from "@/lib/readonly-browse-repository";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 
 type ReadOnlyBrowsePageProps = {
   data: ReadOnlyBrowsePageData;
@@ -101,10 +102,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function formatAge(user: DashboardUser) {
-  if (user.age > 0 && user.ageText) return `${user.age}세`;
-  if (user.age > 0) return `${user.age}세`;
-  if (user.ageText) return user.ageText;
-  return "나이 비공개";
+  return formatBirthYearLabel(user);
 }
 
 function accessIssueMessage(accessIssue: ReadOnlyBrowsePageData["accessIssue"], loadError: string | null) {

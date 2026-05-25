@@ -15,6 +15,7 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { IntroCaseCreateForm } from "@/components/intro-case-create-form";
 import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
 import { NavigationSubmitButton } from "@/components/navigation-submit-button";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import {
   activeIntroStatuses,
   introStatusLabels,
@@ -786,7 +787,7 @@ function MemberFields({ user, compact = false }: { user?: DashboardUser; compact
         </div>
       </fieldset>
       <Field label="나이">
-        <input name="ageText" defaultValue={user?.ageText} placeholder="예: 95, 98, 30" className={inputClassName} />
+        <input name="ageText" defaultValue={user?.ageText} placeholder="예: 95년생, 98년생, 00년생" className={inputClassName} />
       </Field>
       <Field label="생년월일">
         <input name="birthDate" type="date" defaultValue={user?.birthDateInput} className={inputClassName} />
@@ -885,10 +886,7 @@ function isInvitorUser(user: DashboardUser) {
 }
 
 function formatAge(user: DashboardUser) {
-  if (user.age > 0 && user.ageText) return `${user.age}세 (${user.ageText})`;
-  if (user.age > 0) return `${user.age}세`;
-  if (user.ageText) return user.ageText;
-  return "-";
+  return formatBirthYearLabel(user);
 }
 
 function formatParticipants(introCase: DashboardIntroCase) {

@@ -14,6 +14,7 @@ import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
+import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
 import { getAppBaseUrl } from "@/lib/runtime-env";
@@ -244,10 +245,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function formatAge(user: DashboardUserDetail) {
-  if (user.age > 0 && user.ageText) return `${user.age}세 (${user.ageText})`;
-  if (user.age > 0) return `${user.age}세`;
-  if (user.ageText) return user.ageText;
-  return "나이 미입력";
+  return formatBirthYearLabel(user);
 }
 
 const inputClassName =
