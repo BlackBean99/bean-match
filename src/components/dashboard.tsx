@@ -97,12 +97,12 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
           label="모집인"
           value={invitorOnlyUsers.length}
           tone="blue"
-          detail="기본 목록에서는 숨기고 별도 읽기 전용으로 확인합니다."
+          detail="기본 목록에서는 숨기고 별도 목록에서 수정할 수 있습니다."
         />
       </section>
 
       <AdminSection className="p-4 sm:p-5">
-        <FilterForm filters={filters} />
+        <FilterForm filters={filters} showUserStatus />
       </AdminSection>
 
       <section className="space-y-5">
@@ -117,10 +117,10 @@ export function UsersDashboard({ users, databaseConnected, loadError, filters }:
             </span>
           </summary>
           <p className="mt-3 text-sm leading-6 text-zinc-500">
-            모집인 전용 회원은 기본 참가자 목록에서 숨기고, 필요한 경우에만 읽기 전용으로 확인합니다.
+            모집인 전용 회원은 기본 참가자 목록에서 숨기고, 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
           </p>
           <div className="mt-4">
-            <MemberTable users={invitorOnlyUsers} editable={false} />
+            <MemberTable users={invitorOnlyUsers} editable={databaseConnected} allowDelete={false} />
           </div>
         </details>
       </section>
@@ -255,9 +255,19 @@ function DashboardTabs({ filters }: { filters: MemberFilterState }) {
   );
 }
 
-function FilterForm({ filters, showIntroStatus = false }: { filters: MemberFilterState; showIntroStatus?: boolean }) {
+function FilterForm({
+  filters,
+  showIntroStatus = false,
+  showUserStatus = false,
+}: {
+  filters: MemberFilterState;
+  showIntroStatus?: boolean;
+  showUserStatus?: boolean;
+}) {
+  const gridClassName = showIntroStatus || showUserStatus ? "grid gap-3 xl:grid-cols-8" : "grid gap-3 xl:grid-cols-7";
+
   return (
-    <form className={showIntroStatus ? "grid gap-3 xl:grid-cols-8" : "grid gap-3 xl:grid-cols-7"} method="get">
+    <form className={gridClassName} method="get">
       <input type="hidden" name="view" value={filters.view} />
       <input type="hidden" name="recommendationFor" value={filters.recommendationFor} />
       {showIntroStatus ? (
@@ -267,6 +277,18 @@ function FilterForm({ filters, showIntroStatus = false }: { filters: MemberFilte
             {introStatusOrder.map((status) => (
               <option key={status} value={status}>
                 {introStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+      {showUserStatus ? (
+        <Field label="회원 상태">
+          <select name="status" defaultValue={filters.status} className={inputClassName}>
+            <option value="ALL">전체</option>
+            {statusOrder.map((status) => (
+              <option key={status} value={status}>
+                {userStatusLabels[status]}
               </option>
             ))}
           </select>
@@ -426,7 +448,15 @@ function MemberCreatePanel({ disabled }: { disabled: boolean }) {
   );
 }
 
-function MemberTable({ users, editable }: { users: DashboardUser[]; editable: boolean }) {
+function MemberTable({
+  users,
+  editable,
+  allowDelete = editable,
+}: {
+  users: DashboardUser[];
+  editable: boolean;
+  allowDelete?: boolean;
+}) {
   return (
     <AdminTableSection>
       <div className="flex items-center justify-between border-b border-[#f1f5f9] px-5 py-4">
@@ -457,7 +487,7 @@ function MemberTable({ users, editable }: { users: DashboardUser[]; editable: bo
                 </td>
               </tr>
             ) : (
-              users.map((user) => <MemberRow key={user.id} user={user} editable={editable} />)
+              users.map((user) => <MemberRow key={user.id} user={user} editable={editable} allowDelete={allowDelete} />)
             )}
           </tbody>
         </table>
@@ -466,7 +496,15 @@ function MemberTable({ users, editable }: { users: DashboardUser[]; editable: bo
   );
 }
 
-function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean }) {
+function MemberRow({
+  user,
+  editable,
+  allowDelete = editable,
+}: {
+  user: DashboardUser;
+  editable: boolean;
+  allowDelete?: boolean;
+}) {
   return (
     <tr className="align-middle hover:bg-[#fff7fa]">
       <td className="px-3 py-2">
@@ -544,16 +582,18 @@ function MemberRow({ user, editable }: { user: DashboardUser; editable: boolean 
                   <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
                 </FormPendingFieldset>
               </form>
-              <form action={deleteMemberAction} className="mt-2">
-                <FormPendingFieldset className="contents">
-                  <input type="hidden" name="id" value={user.id} />
-                  <FormSubmitButton
-                    label="삭제"
-                    pendingLabel="삭제 중..."
-                    className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                  />
-                </FormPendingFieldset>
-              </form>
+              {allowDelete ? (
+                <form action={deleteMemberAction} className="mt-2">
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="id" value={user.id} />
+                    <FormSubmitButton
+                      label="삭제"
+                      pendingLabel="삭제 중..."
+                      className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
             </details>
           </div>
         ) : (

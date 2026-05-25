@@ -10,7 +10,7 @@ type UsersPageProps = {
 };
 
 export default async function UsersPage({ searchParams }: UsersPageProps) {
-  const filters = parseMemberFilters((await searchParams) ?? {});
+  const filters = parseMemberFilters((await searchParams) ?? {}, { defaultStatus: "READY" });
   const data = await getMemberDashboardData(filters, { includeIntroCases: false });
 
   return (

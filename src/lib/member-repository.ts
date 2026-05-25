@@ -1624,6 +1624,7 @@ function applyUserFiltersAndSort(filters: MemberFilterState, users: DashboardUse
 
   return users
     .filter((user) => {
+      if (filters.status !== "ALL" && user.status !== filters.status) return false;
       if (filters.gender !== "ALL" && user.genderCode !== filters.gender) return false;
       if (ageMin !== null && (user.ageSortValue === 0 || user.ageSortValue < ageMin)) return false;
       if (ageMax !== null && (user.ageSortValue === 0 || user.ageSortValue > ageMax)) return false;
@@ -1872,6 +1873,7 @@ function defaultFilters(): MemberFilterState {
     view: "pool",
     recommendationFor: "",
     introStatus: "ALL",
+    status: "ALL",
     gender: "ALL",
     ageMin: "",
     ageMax: "",
