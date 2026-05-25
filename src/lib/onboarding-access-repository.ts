@@ -54,6 +54,22 @@ type FallbackOnboardingAccessTokenPayload = {
   userId: number;
 };
 
+type OnboardingAccessTokenRowSource =
+  | OnboardingAccessTokenRecord
+  | SupabaseOnboardingAccessTokenRow
+  | SupabaseNotionRawRecordRow
+  | {
+      id: bigint;
+      userId: bigint;
+      label: string;
+      tokenHash: string;
+      tokenHint: string;
+      expiresAt: Date | null;
+      lastUsedAt: Date | null;
+      revokedAt: Date | null;
+      createdAt: Date;
+    };
+
 type ValidationResult =
   | {
       ok: true;
@@ -124,7 +140,7 @@ export async function getOnboardingAccessTokenManagerData(
     return {
       databaseConnected: true,
       loadError: null,
-      tokens: tokens.map((token) => toOnboardingAccessTokenSummary(toTokenRecord(token))),
+      tokens: tokens.map((token: OnboardingAccessTokenRowSource) => toOnboardingAccessTokenSummary(toTokenRecord(token))),
     };
   } catch (error) {
     return {
@@ -451,7 +467,7 @@ function isOnboardingAccessTokenRecord(token: object): token is OnboardingAccess
   return "userId" in token && "createdAt" in token && typeof (token as OnboardingAccessTokenRecord).createdAt === "string";
 }
 
-async function loadOnboardingAccessTokenRows(userId: bigint) {
+async function loadOnboardingAccessTokenRows(userId: bigint): Promise<OnboardingAccessTokenRowSource[]> {
   if (hasDatabaseUrl()) {
     return prisma.onboardingAccessToken.findMany({
       where: { userId },
@@ -460,13 +476,13 @@ async function loadOnboardingAccessTokenRows(userId: bigint) {
   }
 
   try {
-    return await supabaseRest<SupabaseOnboardingAccessTokenRow[]>(
+    return await supabaseRest<OnboardingAccessTokenRowSource[]>(
       `/onboarding_access_tokens?select=id,user_id,label,token_hash,token_hint,expires_at,last_used_at,revoked_at,created_at&user_id=eq.${userId.toString()}&order=created_at.desc,id.desc`,
     );
   } catch (error) {
     if (!isMissingDedicatedOnboardingTokenTable(error)) throw error;
 
-    return await supabaseRest<SupabaseNotionRawRecordRow[]>(
+    return await supabaseRest<OnboardingAccessTokenRowSource[]>(
       `/notion_raw_records?select=id,source_type,source_id,source_name,notion_page_id,payload,checksum,last_synced_at,notion_edited_at&source_type=eq.onboarding_access_token&source_id=eq.${userId.toString()}&order=last_synced_at.desc,id.desc`,
     );
   }
