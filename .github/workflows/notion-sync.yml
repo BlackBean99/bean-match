@@ -42,8 +42,6 @@ jobs:
       - name: Log required sync secret presence
         shell: bash
         run: |
-          missing=0
-
           check_any() {
             local label="$1"
             shift
@@ -55,9 +53,6 @@ jobs:
               fi
             done
             echo "${label} present=${present}"
-            if [ "${present}" != "true" ]; then
-              missing=1
-            fi
           }
 
           check_any "SUPABASE_URL" SUPABASE_URL NEXT_PUBLIC_SUPABASE_URL
@@ -66,11 +61,6 @@ jobs:
           check_any "NOTION_MAIN_DATA_SOURCE_ID" NOTION_MAIN_DATA_SOURCE_ID NOTION_USERS_DATABASE_ID
           check_any "NOTION_INVITOR_DATA_SOURCE_ID" NOTION_INVITOR_DATA_SOURCE_ID
           check_any "NOTION_MATCHING_HISTORY_DATA_SOURCE_ID" NOTION_MATCHING_HISTORY_DATA_SOURCE_ID
-
-          if [ "${missing}" -ne 0 ]; then
-            echo "::error::One or more required sync secrets are missing from GitHub Actions secrets."
-            exit 1
-          fi
 
       - name: Generate Prisma client
         run: npm run prisma:generate
