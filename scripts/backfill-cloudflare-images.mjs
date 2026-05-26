@@ -13,6 +13,9 @@ const SUPABASE_SERVICE_ROLE_KEY = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 const CLOUDFLARE_API_TOKEN = requiredEnv("CLOUDFLARE_API_TOKEN");
 const CLOUDFLARE_IMAGES_ACCOUNT_ID =
   process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
+if (!CLOUDFLARE_IMAGES_ACCOUNT_ID) {
+  throw new Error("Missing required environment variable: CLOUDFLARE_IMAGES_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID");
+}
 const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2025-09-03";
@@ -25,6 +28,18 @@ const summary = {
   failed: 0,
   fallbackSourceLookups: 0,
 };
+
+console.log(
+  JSON.stringify({
+    scope: "backfill-cloudflare-images",
+    write,
+    cloudflareImagesAccountIdPresent: Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID),
+    cloudflareApiTokenPresent: Boolean(CLOUDFLARE_API_TOKEN),
+    notionTokenPresent: Boolean(NOTION_TOKEN),
+    supabaseUrlPresent: Boolean(SUPABASE_URL),
+    supabaseServiceRoleKeyPresent: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+  }),
+);
 
 await main();
 
@@ -62,9 +77,7 @@ async function main() {
     });
 
     if (!deliveryUrl) {
-      summary.failed += 1;
-      console.warn(`[backfill-cloudflare-images] failed photo ${row.id}: ${sourceUrl}`);
-      continue;
+      throw new Error(`[backfill-cloudflare-images] failed photo ${row.id}: ${sourceUrl}`);
     }
 
     if (write) {

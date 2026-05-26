@@ -51,6 +51,8 @@ function logMigrationEnvironment(
       cloudflareRepositoryPresent: Boolean(env.NOTION_SYNC_GITHUB_REPOSITORY),
       cloudflareWorkflowPresent: Boolean(env.NOTION_SYNC_GITHUB_WORKFLOW),
       cloudflareRefPresent: Boolean(env.NOTION_SYNC_GITHUB_REF),
+      cloudflareImagesAccountIdPresent: Boolean(env.CLOUDFLARE_IMAGES_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID),
+      cloudflareApiTokenPresent: Boolean(env.CLOUDFLARE_API_TOKEN),
       notionTokenPresent: Boolean(env.NOTION_TOKEN),
       supabaseUrlPresent: Boolean(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL),
       supabaseServiceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),

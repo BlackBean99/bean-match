@@ -276,6 +276,11 @@ try {
   if (notionSources.length === 0) {
     throw new Error("Missing required environment variable: NOTION_MAIN_DATA_SOURCE_ID");
   }
+  if (!isCloudflareImagesConfigured()) {
+    throw new Error(
+      "Cloudflare Images is not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_IMAGES_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+    );
+  }
 
   const results = [];
 
@@ -1307,23 +1312,27 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   const sourceUrl = photo.url;
   if (!sourceUrl) return null;
 
-  if (!isCloudflareImagesConfigured()) return null;
+  if (!isCloudflareImagesConfigured()) {
+    throw new Error(
+      "Cloudflare Images is not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_IMAGES_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+    );
+  }
 
   const storedFileName = `notion:${notionPageId}:${index}`;
-  try {
-    return await ensureCloudflareCachedImage({
-      customId: storedFileName,
-      sourceUrl,
-      fileName: photo.name,
-      metadata: {
-        notionPageId,
-        index: String(index),
-        originalFileName: photo.name,
-      },
-    });
-  } catch {
-    return null;
+  const deliveryUrl = await ensureCloudflareCachedImage({
+    customId: storedFileName,
+    sourceUrl,
+    fileName: photo.name,
+    metadata: {
+      notionPageId,
+      index: String(index),
+      originalFileName: photo.name,
+    },
+  });
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images upload failed for ${photo.name}`);
   }
+  return deliveryUrl;
 }
 
 function toPrismaPhotoPayload(userId, notionPageId, photo, index, deliveryUrl = null) {
