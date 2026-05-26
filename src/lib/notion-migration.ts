@@ -11,8 +11,10 @@ export type MigrationState = {
 
 export async function runNotionMigration(): Promise<MigrationState> {
   const env = getRuntimeEnv();
+  const runtime = isCloudflareRuntime() ? "cloudflare" : "node";
+  logMigrationEnvironment(runtime, env);
 
-  if (isCloudflareRuntime()) {
+  if (runtime === "cloudflare") {
     return dispatchNotionSyncWorkflow(env);
   }
 
@@ -35,6 +37,26 @@ export async function runNotionMigration(): Promise<MigrationState> {
       message: error instanceof Error ? `동기화 실패: ${error.message}` : "동기화 실패: 알 수 없는 오류",
     };
   }
+}
+
+function logMigrationEnvironment(
+  runtime: "cloudflare" | "node",
+  env: ReturnType<typeof getRuntimeEnv>,
+) {
+  console.info(
+    JSON.stringify({
+      scope: "notion-sync",
+      runtime,
+      cloudflareTokenPresent: Boolean(env.NOTION_SYNC_GITHUB_TOKEN),
+      cloudflareRepositoryPresent: Boolean(env.NOTION_SYNC_GITHUB_REPOSITORY),
+      cloudflareWorkflowPresent: Boolean(env.NOTION_SYNC_GITHUB_WORKFLOW),
+      cloudflareRefPresent: Boolean(env.NOTION_SYNC_GITHUB_REF),
+      notionTokenPresent: Boolean(env.NOTION_TOKEN),
+      supabaseUrlPresent: Boolean(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL),
+      supabaseServiceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+      databaseUrlPresent: Boolean(env.DATABASE_URL),
+    }),
+  );
 }
 
 async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>): Promise<MigrationState> {
