@@ -36,7 +36,7 @@ export function getPhotoBucketName() {
 
 export function getCloudflareImagesToken() {
   const env = getRuntimeEnv();
-  return env.CLOUDFLARE_IMAGES_TOKEN || env.CloudFlare_Token || "";
+  return env.CLOUDFLARE_API_TOKEN || env.CloudFlare_Token || "";
 }
 
 export function getCloudflareImagesVariant() {

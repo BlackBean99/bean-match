@@ -125,7 +125,7 @@ class NotionApiError extends Error {
 }
 
 const CLOUDFLARE_IMAGES_ACCOUNT_ID = process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || "";
-const CLOUDFLARE_IMAGES_TOKEN = process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CloudFlare_Token || "";
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
 const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 
@@ -141,7 +141,7 @@ function isCloudflareDeliveryUrl(url) {
 }
 
 function isCloudflareImagesConfigured() {
-  return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_IMAGES_TOKEN);
+  return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_API_TOKEN);
 }
 
 async function deleteCloudflareImage(imageId) {
@@ -152,7 +152,7 @@ async function deleteCloudflareImage(imageId) {
     {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${CLOUDFLARE_IMAGES_TOKEN}`,
+        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
       },
       cache: "no-store",
     },
@@ -174,7 +174,7 @@ async function ensureCloudflareCachedImage(input) {
   const response = await fetch(`${cloudflareApiBaseUrl}/accounts/${CLOUDFLARE_IMAGES_ACCOUNT_ID}/images/v1`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${CLOUDFLARE_IMAGES_TOKEN}`,
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
     },
     body: formData,
     cache: "no-store",
