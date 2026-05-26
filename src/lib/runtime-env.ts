@@ -44,7 +44,8 @@ export function getCloudflareImagesVariant() {
 }
 
 export function getCloudflareImagesAccountId() {
-  return getRuntimeEnv().CLOUDFLARE_IMAGES_ACCOUNT_ID || "";
+  const env = getRuntimeEnv();
+  return env.CLOUDFLARE_IMAGES_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID || "";
 }
 
 function getCloudflareEnv(): Partial<CloudflareEnv> | null {

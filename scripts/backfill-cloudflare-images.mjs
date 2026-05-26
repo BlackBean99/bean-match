@@ -11,7 +11,8 @@ const pageSize = parseIntegerArg(args, "--page-size") ?? 100;
 const SUPABASE_URL = requiredEnv("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 const CLOUDFLARE_API_TOKEN = requiredEnv("CLOUDFLARE_API_TOKEN");
-const CLOUDFLARE_IMAGES_ACCOUNT_ID = requiredEnv("CLOUDFLARE_IMAGES_ACCOUNT_ID");
+const CLOUDFLARE_IMAGES_ACCOUNT_ID =
+  process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
 const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2025-09-03";

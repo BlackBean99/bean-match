@@ -124,21 +124,11 @@ class NotionApiError extends Error {
   }
 }
 
-const CLOUDFLARE_IMAGES_ACCOUNT_ID = process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || "";
+const CLOUDFLARE_IMAGES_ACCOUNT_ID =
+  process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
 const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
-
-function isCloudflareDeliveryUrl(url) {
-  if (!url) return false;
-
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname === "imagedelivery.net" || parsed.pathname.includes("/cdn-cgi/imagedelivery/");
-  } catch {
-    return false;
-  }
-}
 
 function isCloudflareImagesConfigured() {
   return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_API_TOKEN);

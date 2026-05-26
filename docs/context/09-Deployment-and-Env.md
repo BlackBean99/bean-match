@@ -38,7 +38,7 @@
 ### 3.4 File Storage / R2 (향후)
 - `R2_PUBLIC_BASE_URL` (공개 가능)
 - `CLOUDFLARE_API_TOKEN` (Cloudflare 배포 + Cloudflare Images 업로드/삭제용 공통 비밀)
-- `CLOUDFLARE_IMAGES_ACCOUNT_ID` (Cloudflare Images delivery/관리용)
+- `CLOUDFLARE_IMAGES_ACCOUNT_ID` (Cloudflare Images delivery/관리용, `CLOUDFLARE_ACCOUNT_ID`도 fallback으로 허용)
 - `CLOUDFLARE_IMAGES_VARIANT` (선택, 기본값 `public`)
 
 ### 3.5 Cloudflare Pages runtime
@@ -54,12 +54,12 @@
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
 - `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare Pages의 운영 버튼은 production에서 이 workflow를 dispatch합니다.
 - GitHub Secrets에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 를 넣습니다.
-- Cloudflare Images를 쓰려면 Pages/앱 런타임과 GitHub Actions sync job에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`, `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
+- Cloudflare Images를 쓰려면 Pages/앱 런타임과 GitHub Actions sync job에 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
 - Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
 - Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.
 - GitHub Actions의 `notion-sync.yml` 은 job 초반에 required secret presence 로그를 출력합니다. `Actions` 탭에서 workflow run을 열고 해당 job 로그를 확인합니다.
-- 백필 스크립트는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID` 가 필요하고, `NOTION_TOKEN`이 있으면 오래된 Notion 파일 URL을 재조회할 수 있습니다.
+- 백필 스크립트는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`) 가 필요하고, `NOTION_TOKEN`이 있으면 오래된 Notion 파일 URL을 재조회할 수 있습니다.
 - 운영자용 백필 실행 예시는 `npm run backfill:cloudflare-images -- --write` 입니다.
 
 ## 4. “구성 값 전부 보여줘”에 대한 운영 원칙

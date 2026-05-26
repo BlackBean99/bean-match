@@ -606,7 +606,7 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
         filePath: photo.file_path,
         fileUrl: photo.file_url,
       },
-      photo.file_path || photo.file_url || input.url,
+      photo.file_url || input.url,
       async (freshUrl) => {
         await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
           method: "PATCH",
@@ -637,7 +637,7 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
         filePath: photo.filePath,
         fileUrl: photo.fileUrl,
       },
-      photo.filePath || photo.fileUrl || input.url,
+      photo.fileUrl || input.url,
       async (freshUrl) => {
         await tx.userPhoto.update({
           where: { id: photo.id },
@@ -673,14 +673,14 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
         filePath: photo.file_path,
         fileUrl: photo.file_url,
       },
-      photo.file_path || photo.file_url || input.url,
+      photo.file_url || input.url,
       async (freshUrl) => {
         await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
           method: "PATCH",
           body: JSON.stringify({ file_url: freshUrl }),
         });
       },
-      existing.file_path,
+      resolveStoredSourceUrl(existing.file_path, existing.file_url),
     );
     if (input.isMain) await updateSupabaseMainPhoto(existing.user_id, photo.id);
     return photo;
@@ -705,14 +705,14 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
         filePath: photo.filePath,
         fileUrl: photo.fileUrl,
       },
-      photo.filePath || photo.fileUrl || input.url,
+      photo.fileUrl || input.url,
       async (freshUrl) => {
         await tx.userPhoto.update({
           where: { id: photo.id },
           data: { fileUrl: freshUrl },
         });
       },
-      existing.filePath,
+      resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
     );
     if (input.isMain) {
       await tx.user.update({ where: { id: existing.userId }, data: { mainPhotoId: photo.id } });
@@ -1409,7 +1409,11 @@ async function getOrCreatePhotoDeliveryUrl(
   const fallbackUrl = photo.fileUrl ?? photo.filePath;
   if (isCloudflareDeliveryUrl(photo.fileUrl)) return photo.fileUrl;
 
-  const sourceUrl = photo.filePath || photo.fileUrl;
+  const sourceUrl = isUsableImageUrl(photo.fileUrl)
+    ? photo.fileUrl
+    : isUsableImageUrl(photo.filePath)
+      ? photo.filePath
+      : null;
   if (!sourceUrl) return fallbackUrl;
 
   const freshUrl = await ensureCloudflareCachedImage({
@@ -1444,6 +1448,21 @@ async function refreshPhotoCloudflareDelivery(
   });
   if (deliveryUrl && deliveryUrl !== photo.fileUrl) await persistFreshUrl(deliveryUrl);
   return deliveryUrl ?? photo.fileUrl ?? sourceUrl;
+}
+
+function isUsableImageUrl(url: string | null | undefined) {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+function resolveStoredSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
+  return isUsableImageUrl(fileUrl) ? fileUrl : isUsableImageUrl(filePath) ? filePath : null;
 }
 
 type EntryQueueUpsertStatus = "WAITING" | "READY";
