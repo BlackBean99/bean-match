@@ -441,11 +441,17 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl: mainPhoto?.fileUrl ?? mainPhoto?.filePath ?? photoDisplayUrl(mainPhoto?.id),
+      mainPhotoUrl:
+        mainPhoto?.fileUrl && isCloudflareDeliveryUrl(mainPhoto.fileUrl)
+          ? mainPhoto.fileUrl
+          : photoDisplayUrl(mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
-        url: photo.fileUrl ?? photo.filePath ?? photoDisplayUrl(photo.id),
+        url:
+          (photo.fileUrl && isCloudflareDeliveryUrl(photo.fileUrl)
+            ? photo.fileUrl
+            : photoDisplayUrl(photo.id)) ?? "",
         sourceUrl: photo.filePath ?? photo.fileUrl,
         originalFileName: photo.originalFileName,
         isMain: photo.isMain,
@@ -487,7 +493,10 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl: mainPhoto?.file_url ?? mainPhoto?.file_path ?? photoDisplayUrl(mainPhoto?.id),
+    mainPhotoUrl:
+      mainPhoto?.file_url && isCloudflareDeliveryUrl(mainPhoto.file_url)
+        ? mainPhoto.file_url
+        : photoDisplayUrl(mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -1276,7 +1285,7 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
-    url: photo.file_url ?? photo.file_path ?? photoDisplayUrl(photo.id),
+    url: (photo.file_url && isCloudflareDeliveryUrl(photo.file_url) ? photo.file_url : photoDisplayUrl(photo.id)) ?? "",
     sourceUrl: photo.file_path ?? photo.file_url,
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,

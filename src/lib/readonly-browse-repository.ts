@@ -13,6 +13,7 @@ import {
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
+import { isCloudflareDeliveryUrl } from "@/lib/cloudflare-images";
 import { MAX_NEW_USER_MARKS } from "@/lib/auto-exposure-repository";
 
 const READ_ONLY_BROWSE_TOKEN_PREFIX = "bbro_";
@@ -512,7 +513,7 @@ async function getPhotosByUserIds(userIds: bigint[]) {
     const bucket = photosByUserId.get(photoRow.userId) ?? [];
     bucket.push({
       id: photoRow.id,
-      url: photoRow.fileUrl ?? photoRow.filePath ?? photoDisplayUrl(photoRow.id),
+      url: (photoRow.fileUrl && isCloudflareDeliveryUrl(photoRow.fileUrl) ? photoRow.fileUrl : photoDisplayUrl(photoRow.id)) ?? "",
       sourceUrl: photoRow.filePath ?? photoRow.fileUrl,
       originalFileName: photoRow.originalFileName,
       isMain: photoRow.isMain,
