@@ -7,6 +7,10 @@ export function getRuntimeEnv(): RuntimeEnv {
   return cloudflareEnv ? { ...process.env, ...cloudflareEnv } : process.env;
 }
 
+export function isCloudflareRuntime() {
+  return Boolean(getCloudflareEnv());
+}
+
 export function getAppBaseUrl() {
   const env = getRuntimeEnv();
   return env.AUTH_URL || env.NEXT_PUBLIC_SITE_URL || env.CF_PAGES_URL || "http://localhost:3000";

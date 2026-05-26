@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRuntimeEnv, isCloudflareRuntime } from "@/lib/runtime-env";
 
 const execFileAsync = promisify(execFile);
 
@@ -12,7 +12,7 @@ export type MigrationState = {
 export async function runNotionMigration(): Promise<MigrationState> {
   const env = getRuntimeEnv();
 
-  if (env.CF_PAGES_URL) {
+  if (isCloudflareRuntime()) {
     return dispatchNotionSyncWorkflow(env);
   }
 
