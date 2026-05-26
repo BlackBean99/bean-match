@@ -231,7 +231,7 @@ async function getMemberDashboardDataFromPrisma(
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: mainPhoto?.fileUrl ?? mainPhoto?.filePath,
+        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -318,7 +318,7 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: mainPhotoByUserId.get(user.id)?.file_url ?? mainPhotoByUserId.get(user.id)?.file_path,
+        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhotoByUserId.get(user.id)?.file_url, mainPhotoByUserId.get(user.id)?.id),
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
@@ -442,10 +442,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl:
-        mainPhoto?.fileUrl && isCloudflareDeliveryUrl(mainPhoto.fileUrl)
-          ? mainPhoto.fileUrl
-          : photoDisplayUrl(mainPhoto?.id),
+      mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
@@ -494,10 +491,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl:
-      mainPhoto?.file_url && isCloudflareDeliveryUrl(mainPhoto.file_url)
-        ? mainPhoto.file_url
-        : photoDisplayUrl(mainPhoto?.id),
+    mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.file_url, mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -615,6 +609,10 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
         });
       },
     );
+    if (!(await getPhotoRedirectUrl(BigInt(photo.id)))) {
+      await supabaseRest(`/user_photos?id=eq.${photo.id}`, { method: "DELETE" });
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (shouldBeMain) await updateSupabaseMainPhoto(numericUserId, photo.id);
     await promoteUserToFullOpenOnPhotoSupabase(numericUserId);
     return photo;
@@ -683,6 +681,9 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       },
       resolveStoredSourceUrl(existing.file_path, existing.file_url),
     );
+    if (!(await getPhotoRedirectUrl(photoId))) {
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (input.isMain) await updateSupabaseMainPhoto(existing.user_id, photo.id);
     return photo;
   }
@@ -715,6 +716,9 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       },
       resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
     );
+    if (!(await getPhotoRedirectUrl(photoId))) {
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (input.isMain) {
       await tx.user.update({ where: { id: existing.userId }, data: { mainPhotoId: photo.id } });
     }
@@ -1396,6 +1400,11 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
   return photoId === null || photoId === undefined ? undefined : `/api/photos/${photoId.toString()}`;
 }
 
+function photoDeliveryOrProxyUrl(fileUrl: string | null | undefined, photoId: bigint | number | null | undefined) {
+  if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
+  return photoDisplayUrl(photoId);
+}
+
 type PhotoRedirectRecord = {
   id: number;
   storedFileName: string;
@@ -1414,7 +1423,7 @@ async function getOrCreatePhotoDeliveryUrl(
     : isUsableImageUrl(photo.filePath)
       ? photo.filePath
       : null;
-  if (!sourceUrl) return await retryCloudflareFromNotionSource(photo, persistFreshUrl);
+  if (!sourceUrl) return retryCloudflareFromNotionSource(photo, persistFreshUrl);
 
   const freshUrl = await ensureCloudflareCachedImage({
     customId: photo.storedFileName,
@@ -1426,7 +1435,7 @@ async function getOrCreatePhotoDeliveryUrl(
   if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
   if (freshUrl) return freshUrl;
 
-  return await retryCloudflareFromNotionSource(photo, persistFreshUrl);
+  return retryCloudflareFromNotionSource(photo, persistFreshUrl);
 }
 
 async function refreshPhotoCloudflareDelivery(
@@ -1435,7 +1444,7 @@ async function refreshPhotoCloudflareDelivery(
   persistFreshUrl: (freshUrl: string) => Promise<unknown>,
   previousSourceUrl?: string | null,
 ) {
-  if (!sourceUrl) return photo.fileUrl ?? photo.filePath;
+  if (!sourceUrl) return photo.fileUrl ?? null;
 
   if (previousSourceUrl && previousSourceUrl !== sourceUrl) {
     await deleteCloudflareImage(photo.storedFileName);
@@ -1449,7 +1458,7 @@ async function refreshPhotoCloudflareDelivery(
     },
   });
   if (deliveryUrl && deliveryUrl !== photo.fileUrl) await persistFreshUrl(deliveryUrl);
-  return deliveryUrl ?? photo.fileUrl ?? sourceUrl;
+  return deliveryUrl ?? null;
 }
 
 function isUsableImageUrl(url: string | null | undefined) {

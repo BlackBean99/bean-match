@@ -1336,13 +1336,16 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
 }
 
 function toPrismaPhotoPayload(userId, notionPageId, photo, index, deliveryUrl = null) {
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images delivery URL is required for ${photo.name}`);
+  }
   return {
     userId,
     photoType: "PROFILE",
     originalFileName: photo.name,
     storedFileName: `notion:${notionPageId}:${index}`,
     filePath: photo.url,
-    fileUrl: deliveryUrl || photo.url,
+    fileUrl: deliveryUrl,
     mimeType: mimeTypeForName(photo.name),
     fileSizeBytes: BigInt(0),
     sortOrder: index,
@@ -1351,13 +1354,16 @@ function toPrismaPhotoPayload(userId, notionPageId, photo, index, deliveryUrl = 
 }
 
 function toSupabasePhotoPayload(userId, notionPageId, photo, index, deliveryUrl = null) {
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images delivery URL is required for ${photo.name}`);
+  }
   return {
     user_id: userId,
     photo_type: "PROFILE",
     original_file_name: photo.name,
     stored_file_name: `notion:${notionPageId}:${index}`,
     file_path: photo.url,
-    file_url: deliveryUrl || photo.url,
+    file_url: deliveryUrl,
     mime_type: mimeTypeForName(photo.name),
     file_size_bytes: 0,
     sort_order: index,
