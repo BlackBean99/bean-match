@@ -7,6 +7,8 @@ const execFileAsync = promisify(execFile);
 export type MigrationState = {
   status: "idle" | "success" | "error" | "queued";
   message: string;
+  progress?: number;
+  phase?: string;
 };
 
 export async function runNotionMigration(): Promise<MigrationState> {
@@ -30,11 +32,15 @@ export async function runNotionMigration(): Promise<MigrationState> {
     return {
       status: "success",
       message: `동기화 완료: 생성 ${result.created}건, 업데이트 ${result.updated}건, 건너뜀 ${result.skipped}건${result.sourceSummary ? ` (${result.sourceSummary})` : ""}`,
+      progress: 100,
+      phase: "완료",
     };
   } catch (error) {
     return {
       status: "error",
       message: error instanceof Error ? `동기화 실패: ${error.message}` : "동기화 실패: 알 수 없는 오류",
+      progress: 100,
+      phase: "실패",
     };
   }
 }
@@ -68,6 +74,8 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
       status: "error",
       message:
         "동기화 실패: Cloudflare Pages production requires NOTION_SYNC_GITHUB_TOKEN to trigger the GitHub Actions sync workflow.",
+      progress: 100,
+      phase: "설정 필요",
     };
   }
 
@@ -92,20 +100,26 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
 
     if (!response.ok) {
       const body = await response.text();
-      return {
-        status: "error",
-        message: `동기화 실패: GitHub Actions dispatch failed (${response.status} ${response.statusText})${body ? ` - ${body.slice(0, 200)}` : ""}`,
-      };
-    }
+    return {
+      status: "error",
+      message: `동기화 실패: GitHub Actions dispatch failed (${response.status} ${response.statusText})${body ? ` - ${body.slice(0, 200)}` : ""}`,
+      progress: 100,
+      phase: "실패",
+    };
+  }
 
     return {
       status: "queued",
       message: "동기화 요청 완료. GitHub Actions에서 처리합니다.",
+      progress: 65,
+      phase: "대기 중",
     };
   } catch (error) {
     return {
       status: "error",
       message: error instanceof Error ? `동기화 실패: ${error.message}` : "동기화 실패: 알 수 없는 오류",
+      progress: 100,
+      phase: "실패",
     };
   }
 }
