@@ -40,6 +40,7 @@
 - `CLOUDFLARE_API_TOKEN` (Cloudflare 배포 + Cloudflare Images 업로드/삭제용 공통 비밀)
 - `CLOUDFLARE_IMAGES_ACCOUNT_ID` (Cloudflare Images delivery/관리용, `CLOUDFLARE_ACCOUNT_ID`도 fallback으로 허용)
 - `CLOUDFLARE_IMAGES_VARIANT` (선택, 기본값 `public`)
+- `AUTO_SYNC_ON_START` (선택, 기본값 `true`; 서버 시작 시 Notion sync 1회를 자동 실행합니다)
 
 ### 3.5 Cloudflare Pages runtime
 - Cloudflare Pages에서는 Variables and Secrets를 런타임 env로 읽습니다.
