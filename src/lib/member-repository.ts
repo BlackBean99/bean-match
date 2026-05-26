@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { prisma, hasDatabaseUrl } from "@/lib/prisma";
 import {
   getPhotoBucketName,
+  getRuntimeEnv,
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
@@ -1406,7 +1407,6 @@ async function getOrCreatePhotoDeliveryUrl(
   photo: PhotoRedirectRecord,
   persistFreshUrl: (freshUrl: string) => Promise<unknown>,
 ) {
-  const fallbackUrl = photo.fileUrl ?? photo.filePath;
   if (isCloudflareDeliveryUrl(photo.fileUrl)) return photo.fileUrl;
 
   const sourceUrl = isUsableImageUrl(photo.fileUrl)
@@ -1414,7 +1414,7 @@ async function getOrCreatePhotoDeliveryUrl(
     : isUsableImageUrl(photo.filePath)
       ? photo.filePath
       : null;
-  if (!sourceUrl) return fallbackUrl;
+  if (!sourceUrl) return await retryCloudflareFromNotionSource(photo, persistFreshUrl);
 
   const freshUrl = await ensureCloudflareCachedImage({
     customId: photo.storedFileName,
@@ -1424,7 +1424,9 @@ async function getOrCreatePhotoDeliveryUrl(
     },
   });
   if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
-  return freshUrl ?? fallbackUrl;
+  if (freshUrl) return freshUrl;
+
+  return await retryCloudflareFromNotionSource(photo, persistFreshUrl);
 }
 
 async function refreshPhotoCloudflareDelivery(
@@ -1463,6 +1465,68 @@ function isUsableImageUrl(url: string | null | undefined) {
 
 function resolveStoredSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
   return isUsableImageUrl(fileUrl) ? fileUrl : isUsableImageUrl(filePath) ? filePath : null;
+}
+
+async function retryCloudflareFromNotionSource(
+  photo: PhotoRedirectRecord,
+  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
+) {
+  const notionSourceUrl = await resolveNotionPhotoSourceUrl(photo.storedFileName);
+  if (!notionSourceUrl || notionSourceUrl === photo.fileUrl) return null;
+
+  const freshUrl = await ensureCloudflareCachedImage({
+    customId: photo.storedFileName,
+    sourceUrl: notionSourceUrl,
+    metadata: {
+      photoId: photo.id.toString(),
+    },
+  });
+  if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
+  return freshUrl ?? null;
+}
+
+async function resolveNotionPhotoSourceUrl(storedFileName: string) {
+  const env = getRuntimeEnv();
+  const notionToken = env.NOTION_TOKEN;
+  if (!notionToken) return null;
+
+  const match = /^notion:([^:]+):(\d+)$/.exec(storedFileName || "");
+  if (!match) return null;
+
+  const pageId = match[1];
+  const index = Number(match[2]);
+  if (!Number.isFinite(index)) return null;
+
+  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+    headers: {
+      Authorization: `Bearer ${notionToken}`,
+      "Content-Type": "application/json",
+      "Notion-Version": env.NOTION_API_VERSION || "2025-09-03",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) return null;
+
+  const page = (await response.json()) as {
+    properties?: Record<string, { type?: string; files?: Array<{ file?: { url?: string }; external?: { url?: string } }> }>;
+  };
+  const photosProp = findProperty(page.properties, ["Photos", "photos", "Picture", "picture", "사진"]);
+  if (!photosProp || photosProp.type !== "files") return null;
+
+  const photo = photosProp.files?.[index];
+  return photo?.file?.url || photo?.external?.url || null;
+}
+
+function findProperty(
+  props: Record<string, { type?: string; files?: Array<{ file?: { url?: string }; external?: { url?: string } }> }> | undefined,
+  names: string[],
+) {
+  if (!props) return null;
+  for (const name of names) {
+    if (props[name]) return props[name];
+  }
+  return null;
 }
 
 type EntryQueueUpsertStatus = "WAITING" | "READY";
