@@ -51,6 +51,17 @@
 - Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
 - Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.
+- `CLOUDFLARE_API_TOKEN` 에 client IP address filtering을 걸면 GitHub-hosted runner의 동적 IP가 거부될 수 있습니다. `Cannot use the access token from location` 오류가 나오면 토큰이 IP 제한된 상태인지 먼저 확인합니다.
+- GitHub Actions 배포용 토큰은 보통 IP 제한 없이 새로 발급하거나, 기존 토큰을 롤해서 제한을 제거하는 방식이 안전합니다.
+- IP 제한이 꼭 필요하면 self-hosted runner처럼 고정 IP가 있는 실행 환경으로 옮겨야 합니다.
+
+#### 토큰 재발급 절차
+1. Cloudflare Dashboard에서 `My Profile -> API Tokens` 로 이동합니다.
+2. 배포용 기존 토큰을 선택합니다.
+3. `Roll` 을 쓰면 기존 권한을 유지한 새 토큰이 발급됩니다.
+4. 새 토큰을 만들 경우 `Pages Write` 권한이 포함되도록 설정합니다.
+5. client IP address filtering은 비워 두거나, GitHub Actions가 아닌 고정 IP 실행 환경에서만 제한을 겁니다.
+6. GitHub Secrets의 `CLOUDFLARE_API_TOKEN` 값을 새 토큰으로 교체합니다.
 
 ## 4. “구성 값 전부 보여줘”에 대한 운영 원칙
 - `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_TOKEN`, `DATABASE_URL` 같은 비밀 값은 문서/PR/스크린샷/채팅에 그대로 남기지 않습니다.
