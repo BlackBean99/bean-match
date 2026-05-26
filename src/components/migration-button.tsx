@@ -5,7 +5,7 @@ import type { MigrationState } from "@/lib/notion-migration";
 
 const initialState = {
   status: "idle" as const,
-  message: "Notion 데이터를 Supabase로 수동 동기화합니다.",
+  message: "Notion 데이터를 Supabase로 동기화 요청합니다.",
 };
 
 export function MigrationButton() {
@@ -20,7 +20,7 @@ export function MigrationButton() {
         disabled={pending}
         onClick={() => {
           startTransition(async () => {
-            setState({ status: "idle", message: "Notion 데이터를 Supabase로 동기화하는 중입니다." });
+            setState({ status: "idle", message: "Notion 데이터를 Supabase로 동기화 요청하는 중입니다." });
 
             try {
               const response = await fetch("/api/migration/notion", {

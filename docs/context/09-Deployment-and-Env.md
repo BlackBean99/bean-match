@@ -27,6 +27,10 @@
 - `NOTION_API_VERSION` (선택)
 - `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` (비밀 아님, 하지만 외부 노출 주의)
 - `NOTION_INVITOR_DATA_SOURCE_ID` (선택)
+- `NOTION_SYNC_GITHUB_TOKEN` (Cloudflare Pages에서 운영 버튼이 GitHub Actions sync workflow를 dispatch할 때 사용)
+- `NOTION_SYNC_GITHUB_REPOSITORY` (선택, 기본값 `BlackBean99/bean-match`)
+- `NOTION_SYNC_GITHUB_WORKFLOW` (선택, 기본값 `notion-sync.yml`)
+- `NOTION_SYNC_GITHUB_REF` (선택, 기본값 `main`)
 
 ### 3.3 DB (Prisma 모드)
 - `DATABASE_URL` (비밀)
@@ -42,8 +46,11 @@
 
 ### 3.6 GitHub Actions CD
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
+- `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare Pages의 운영 버튼은 production에서 이 workflow를 dispatch합니다.
 - GitHub Secrets에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 를 넣습니다.
+- Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
+- Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.
 
 ## 4. “구성 값 전부 보여줘”에 대한 운영 원칙
 - `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_TOKEN`, `DATABASE_URL` 같은 비밀 값은 문서/PR/스크린샷/채팅에 그대로 남기지 않습니다.

@@ -45,6 +45,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.swp
+*.swo
 
 # Supabase local metadata
 supabase/.temp/

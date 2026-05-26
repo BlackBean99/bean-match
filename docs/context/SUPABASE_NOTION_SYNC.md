@@ -114,7 +114,9 @@ Apply changes:
 npm run sync:notion -- --write
 ```
 
-Operators can also run the same write sync from the admin web UI with the `Notion -> Supabase 동기화` button in the page header. The button executes `scripts/sync-notion-to-supabase.mjs --write`, then revalidates the users and matches views.
+Operators can also run the same write sync from the admin web UI with the `Notion -> Supabase 동기화` button in the page header. In local Node environments, the button executes `scripts/sync-notion-to-supabase.mjs --write` directly; in Cloudflare Pages production, it dispatches the GitHub Actions sync workflow, which then runs the same command in GitHub Actions and revalidates the users and matches views.
+
+In Cloudflare Pages production, the same button dispatches the GitHub Actions `notion-sync.yml` workflow instead of spawning a local child process. That workflow runs the exact same `npm run sync:notion -- --write` command in GitHub Actions, so the production runtime only needs the dispatch token while the actual sync still runs in a full Node environment.
 
 The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Notion-hosted file URLs are imported as photo metadata only; binary image files are not copied into Supabase.
 

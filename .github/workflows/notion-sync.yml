@@ -1,0 +1,46 @@
+name: Notion Sync
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: notion-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_API_VERSION: ${{ secrets.NOTION_API_VERSION }}
+      NOTION_MAIN_DATA_SOURCE_ID: ${{ secrets.NOTION_MAIN_DATA_SOURCE_ID }}
+      NOTION_USERS_DATABASE_ID: ${{ secrets.NOTION_USERS_DATABASE_ID }}
+      NOTION_INVITOR_DATA_SOURCE_ID: ${{ secrets.NOTION_INVITOR_DATA_SOURCE_ID }}
+      NOTION_MATCHING_HISTORY_DATA_SOURCE_ID: ${{ secrets.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Run Notion sync
+        run: npm run sync:notion -- --write

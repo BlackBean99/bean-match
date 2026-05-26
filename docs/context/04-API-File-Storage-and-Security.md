@@ -9,6 +9,7 @@
 
 ### 2.0 Operations
 - `POST /api/migration/notion` : 운영자가 수동으로 Notion 데이터를 Supabase로 동기화한다. 응답은 항상 JSON이며, 실패도 `status: "error"` 상태로 반환해 현재 페이지 URL로 잘못 POST하지 않게 한다.
+  - Cloudflare Pages production에서는 GitHub Actions sync workflow를 dispatch하고 `status: "queued"` 를 반환한다.
 
 ### 2.1 User
 - `POST /api/users` : 사용자 생성

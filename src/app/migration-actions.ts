@@ -11,8 +11,10 @@ export async function runNotionMigrationAction(
   void formData;
 
   const result = await runNotionMigration();
-  revalidatePath("/users");
-  revalidatePath("/matches");
+  if (result.status !== "queued") {
+    revalidatePath("/users");
+    revalidatePath("/matches");
+  }
 
   return result;
 }

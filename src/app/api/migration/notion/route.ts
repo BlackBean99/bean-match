@@ -6,8 +6,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   const result = await runNotionMigration();
-  revalidatePath("/users");
-  revalidatePath("/matches");
+  if (result.status !== "queued") {
+    revalidatePath("/users");
+    revalidatePath("/matches");
+  }
 
   return NextResponse.json(result, {
     status: 200,
