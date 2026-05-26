@@ -70,7 +70,7 @@
 - 사용자 상세: `/users/{userId}`
 - 자동 노출 운영: `/rounds`
 - 매칭 조율: `/matches`
-- Notion 동기화: 운영 화면의 `Notion -> Supabase 동기화` 버튼
+- Notion 동기화: 운영 화면의 `동기화` 버튼
 - 사용자 상세에서 프로필 열람 토큰 발급/해제
 
 관리자가 할 수 있는 일:

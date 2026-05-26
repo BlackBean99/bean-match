@@ -98,7 +98,7 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
 
     return {
       status: "queued",
-      message: "동기화 요청을 GitHub Actions에 전달했습니다. 완료되면 Supabase 데이터가 갱신됩니다.",
+      message: "동기화 요청 완료. GitHub Actions에서 처리합니다.",
     };
   } catch (error) {
     return {

@@ -87,7 +87,7 @@ export function UserDetail({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-zinc-950">사진</h2>
-              <p className="mt-1 text-sm text-zinc-500">Notion 사진 URL과 업로드 사진을 한 화면에서 정리합니다.</p>
+              <p className="mt-1 text-sm text-zinc-500">Notion 사진과 업로드 사진을 함께 봅니다.</p>
             </div>
             <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-[#E00E0E]">
               {user.photos.length}장

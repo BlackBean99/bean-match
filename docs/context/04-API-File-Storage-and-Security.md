@@ -77,8 +77,8 @@
 - DB에는 이미지 바이너리를 저장하지 않는다.
 - 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
 - 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage 같은 외부 오브젝트 스토리지에 저장한다.
-- Notion에서 가져온 파일은 Notion 파일 URL을 원본 경로로 보존하고, Cloudflare Images로 다시 업로드해 delivery URL을 저장한다.
-- UI는 저장된 외부 URL을 직접 노출하지 않고 `/api/photos/{photoId}`를 사용한다. 이 라우트는 저장된 Cloudflare Images delivery URL로 리다이렉트하고, 아직 캐시가 없으면 원본 URL을 Cloudflare Images에 등록한 뒤 delivery URL로 연결한다.
+- Notion에서 가져온 파일은 `file_path`에 원본 URL을 보존하고, Cloudflare Images에 다시 업로드해 `file_url`에 delivery URL을 저장한다.
+- UI는 Cloudflare Images delivery URL을 우선 사용하고, 오래된 레코드는 `/api/photos/{photoId}`를 통해 백필/캐시한다. 이 라우트는 저장된 Cloudflare Images delivery URL로 리다이렉트하고, 아직 캐시가 없으면 원본 URL을 Cloudflare Images에 등록한 뒤 delivery URL로 연결한다.
 - DB에는 메타데이터를 저장한다.
 
 ### 4.2 저장 예시

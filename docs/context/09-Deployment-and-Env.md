@@ -59,6 +59,8 @@
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
 - Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.
 - GitHub Actions의 `notion-sync.yml` 은 job 초반에 required secret presence 로그를 출력합니다. `Actions` 탭에서 workflow run을 열고 해당 job 로그를 확인합니다.
+- 백필 스크립트는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID` 가 필요하고, `NOTION_TOKEN`이 있으면 오래된 Notion 파일 URL을 재조회할 수 있습니다.
+- 운영자용 백필 실행 예시는 `npm run backfill:cloudflare-images -- --write` 입니다.
 
 ## 4. “구성 값 전부 보여줘”에 대한 운영 원칙
 - `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_TOKEN`, `DATABASE_URL` 같은 비밀 값은 문서/PR/스크린샷/채팅에 그대로 남기지 않습니다.
