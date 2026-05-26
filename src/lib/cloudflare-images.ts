@@ -65,6 +65,32 @@ export async function ensureCloudflareCachedImage(input: {
   return null;
 }
 
+export async function deleteCloudflareImage(imageId: string) {
+  if (!isCloudflareImagesConfigured()) return false;
+
+  const accountId = await getCloudflareAccountId();
+  if (!accountId) return false;
+
+  const response = await fetch(
+    `${cloudflareApiBaseUrl}/accounts/${accountId}/images/v1/${encodeURIComponent(imageId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${getCloudflareImagesToken()}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (response.status === 404) return false;
+  if (response.status === 401 || response.status === 403) {
+    cloudflareImagesAvailability.disabled = true;
+    return false;
+  }
+
+  return response.ok;
+}
+
 export function isCloudflareDeliveryUrl(url: string | null | undefined) {
   if (!url) return false;
 

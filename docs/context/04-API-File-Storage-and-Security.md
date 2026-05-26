@@ -30,7 +30,7 @@
 - `PATCH /api/users/{id}/photos/{photoId}/main` : 대표 사진 변경
 - `DELETE /api/users/{id}/photos/{photoId}` : 사진 삭제
 - `GET /api/users/{id}/photos/{photoId}` : 사진 조회/다운로드
-- `GET /api/photos/{photoId}` : 앱 내부 사진 표시 URL. Supabase Storage 사진은 저장 URL을 서버에서 프록시하고, Notion 동기화 사진은 Notion 파일 URL을 최신 URL로 갱신한 뒤 서버에서 프록시한다.
+- `GET /api/photos/{photoId}` : 앱 내부 사진 표시 URL. 저장된 사진이 Cloudflare Images에 있으면 delivery URL로 리다이렉트하고, 아직 캐시가 없으면 source URL을 Cloudflare Images에 올린 뒤 delivery URL로 연결한다.
 
 ### 2.5 IntroCase
 - `POST /api/intro-cases` : 소개 건 생성
@@ -77,8 +77,8 @@
 - DB에는 이미지 바이너리를 저장하지 않는다.
 - 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
 - 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage 같은 외부 오브젝트 스토리지에 저장한다.
-- Notion에서 가져온 파일은 Notion 파일 URL을 메타데이터로 동기화하며, 바이너리를 재복사하지 않는다.
-- Notion 파일 URL은 만료될 수 있으므로 UI에는 저장된 외부 URL을 직접 노출하지 않고 `/api/photos/{photoId}`를 사용한다. 이 라우트는 Notion 원본을 수정하지 않고 필요한 경우 Supabase의 `file_url`/`file_path`만 최신 표시 URL로 갱신한 뒤 이미지 바이트를 서버에서 프록시한다.
+- Notion에서 가져온 파일은 Notion 파일 URL을 원본 경로로 보존하고, Cloudflare Images로 다시 업로드해 delivery URL을 저장한다.
+- UI는 저장된 외부 URL을 직접 노출하지 않고 `/api/photos/{photoId}`를 사용한다. 이 라우트는 저장된 Cloudflare Images delivery URL로 리다이렉트하고, 아직 캐시가 없으면 원본 URL을 Cloudflare Images에 등록한 뒤 delivery URL로 연결한다.
 - DB에는 메타데이터를 저장한다.
 
 ### 4.2 저장 예시
@@ -89,7 +89,8 @@
 저장 메타데이터:
 - `original_file_name`
 - `stored_file_name`
-- `file_path`
+- `file_path`: 원본 또는 source URL
+- `file_url`: Cloudflare Images delivery URL
 - `mime_type`
 - `file_size_bytes`
 - `width_px`

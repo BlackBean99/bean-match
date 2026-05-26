@@ -37,12 +37,16 @@
 
 ### 3.4 File Storage / R2 (향후)
 - `R2_PUBLIC_BASE_URL` (공개 가능)
+- `CLOUDFLARE_IMAGES_ACCOUNT_ID` (Cloudflare Images delivery/관리용)
+- `CLOUDFLARE_IMAGES_TOKEN` (Cloudflare Images 업로드/삭제용 비밀)
+- `CLOUDFLARE_IMAGES_VARIANT` (선택, 기본값 `public`)
 
 ### 3.5 Cloudflare Pages runtime
 - Cloudflare Pages에서는 Variables and Secrets를 런타임 env로 읽습니다.
 - 서버 코드에서는 `process.env`만 보지 말고 Pages runtime env를 우선 확인해야 합니다.
 - 로컬 개발은 `.env.local`, Pages 배포는 Pages Variables/Secrets를 사용합니다.
 - 배포 URL 생성용 `AUTH_URL` 이 없으면 `CF_PAGES_URL` 또는 로컬 기본값으로 폴백합니다.
+- 사진 조회는 `/api/photos/{photoId}`를 통해 Cloudflare Images delivery URL로 리다이렉트합니다.
 - Cloudflare Pages에서 운영 버튼을 눌러 sync를 실행하면 Functions 로그에 `scope=notion-sync` JSON이 남습니다. 여기서 `cloudflareTokenPresent`, `notionTokenPresent`, `supabaseServiceRoleKeyPresent` 같은 불리언을 확인합니다.
 - Cloudflare 로그는 Pages deployment 상세 화면 또는 `wrangler pages deployment tail` 로 확인합니다.
 
@@ -50,6 +54,7 @@
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
 - `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare Pages의 운영 버튼은 production에서 이 workflow를 dispatch합니다.
 - GitHub Secrets에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 를 넣습니다.
+- Cloudflare Images를 쓰려면 Pages/앱 런타임에 `CLOUDFLARE_IMAGES_ACCOUNT_ID`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
 - Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
 - Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.

@@ -513,7 +513,7 @@ async function getPhotosByUserIds(userIds: bigint[]) {
     bucket.push({
       id: photoRow.id,
       url: photoDisplayUrl(photoRow.id),
-      sourceUrl: photoRow.fileUrl ?? photoRow.filePath,
+      sourceUrl: photoRow.filePath ?? photoRow.fileUrl,
       originalFileName: photoRow.originalFileName,
       isMain: photoRow.isMain,
       sortOrder: photoRow.sortOrder,
