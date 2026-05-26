@@ -230,7 +230,7 @@ async function getMemberDashboardDataFromPrisma(
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+        mainPhotoUrl: mainPhoto?.fileUrl ?? mainPhoto?.filePath,
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -262,7 +262,12 @@ async function getMemberDashboardDataFromSupabaseRest(
       "/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
     );
     const userIds = users.map((user) => user.id);
-    const [roles, introCases] = await Promise.all([
+    const [mainPhotos, roles, introCases] = await Promise.all([
+      userIds.length > 0
+        ? supabaseRest<SupabasePhotoRow[]>(
+          `/user_photos?select=id,user_id,file_path,file_url&user_id=in.(${userIds.join(",")})&is_main=is.true&deleted_at=is.null`,
+        )
+        : Promise.resolve([]),
       options.includeRoles && userIds.length > 0
         ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
         : Promise.resolve([]),
@@ -272,6 +277,10 @@ async function getMemberDashboardDataFromSupabaseRest(
           )
         : Promise.resolve([]),
     ]);
+    const mainPhotoByUserId = new Map<number, SupabasePhotoRow>();
+    for (const photo of mainPhotos) {
+      mainPhotoByUserId.set(photo.user_id, photo);
+    }
     const rolesByUserId = groupByUserId(roles);
     const introCaseIds = introCases.map((introCase) => introCase.id);
     const introParticipants =
@@ -308,7 +317,7 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: photoDisplayUrl(user.main_photo_id),
+        mainPhotoUrl: mainPhotoByUserId.get(user.id)?.file_url ?? mainPhotoByUserId.get(user.id)?.file_path,
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
@@ -432,11 +441,11 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+      mainPhotoUrl: mainPhoto?.fileUrl ?? mainPhoto?.filePath ?? photoDisplayUrl(mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
-        url: photoDisplayUrl(photo.id) ?? photo.fileUrl ?? photo.filePath,
+        url: photo.fileUrl ?? photo.filePath ?? photoDisplayUrl(photo.id),
         sourceUrl: photo.filePath ?? photo.fileUrl,
         originalFileName: photo.originalFileName,
         isMain: photo.isMain,
@@ -478,7 +487,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+    mainPhotoUrl: mainPhoto?.file_url ?? mainPhoto?.file_path ?? photoDisplayUrl(mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -1267,7 +1276,7 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
-    url: photoDisplayUrl(photo.id) ?? photo.file_url ?? photo.file_path,
+    url: photo.file_url ?? photo.file_path ?? photoDisplayUrl(photo.id),
     sourceUrl: photo.file_path ?? photo.file_url,
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
