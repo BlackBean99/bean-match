@@ -117,6 +117,8 @@ const activeIntroStatusSet = new Set([
   "RESULT_PENDING",
 ]);
 
+const NOTION_SYNC_SCHEMA_VERSION = "photos-v2";
+
 class NotionApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -1124,6 +1126,7 @@ function stableInputForChecksum(input, source) {
   if (source.sourceType !== "main" && source.sourceType !== "invitor") return input;
   return {
     ...input,
+    syncSchemaVersion: NOTION_SYNC_SCHEMA_VERSION,
     photos: (input.photos || []).map((photo) => ({
       name: photo.name,
       sourceType: photo.sourceType,

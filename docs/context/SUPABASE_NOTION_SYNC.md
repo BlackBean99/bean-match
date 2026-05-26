@@ -120,6 +120,8 @@ In Cloudflare Pages production, the same button dispatches the GitHub Actions `n
 
 The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Cloudflare Images delivery URLs in `file_url`; `file_path` is only kept as a source reference or Cloudflare image marker.
 
+When the photo pipeline changes, bump the sync schema version in `scripts/sync-notion-to-supabase.mjs` so the next startup sync reprocesses all pages once and refreshes Cloudflare Images delivery URLs.
+
 If older rows still have a non-delivery `file_url`, run the backfill script:
 
 ```sh
