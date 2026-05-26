@@ -118,7 +118,7 @@ Operators can also run the same write sync from the admin web UI with the header
 
 In Cloudflare Pages production, the same button dispatches the GitHub Actions `notion-sync.yml` workflow instead of spawning a local child process. That workflow runs the exact same `npm run sync:notion -- --write` command in GitHub Actions, so the production runtime only needs the dispatch token while the actual sync still runs in a full Node environment.
 
-The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written as `file_path` source URLs plus `file_url` Cloudflare Images delivery URLs.
+The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Cloudflare Images delivery URLs in `file_url`; `file_path` is only kept as a source reference or Cloudflare image marker.
 
 If older rows still have a non-delivery `file_url`, run the backfill script:
 
@@ -126,14 +126,14 @@ If older rows still have a non-delivery `file_url`, run the backfill script:
 npm run backfill:cloudflare-images -- --write
 ```
 
-The backfill script reads the current `user_photos` rows from Supabase, re-fetches the original image bytes from `file_path` or the source Notion page, uploads them to Cloudflare Images, and patches `file_url` to the delivery URL.
+The backfill script reads the current `user_photos` rows from Supabase, re-fetches the original image bytes from `file_path` or the source Notion page, uploads them to Cloudflare Images, and patches `file_url` to the delivery URL. It does not use Supabase Storage.
 
 Use `--limit=<n>` for a small batch run before the full pass if you want to verify a subset first.
 
-Manual profile photo uploads in the user detail screen use Supabase Storage bucket `user-photos` by default. The bucket name can be overridden with `SUPABASE_PHOTO_BUCKET`. Clipboard paste, file selection, and HTTPS URL metadata are supported.
+Manual profile photo uploads in the user detail screen upload directly to Cloudflare Images. Clipboard paste, file selection, and HTTPS URL metadata are supported. Batch upload uses Cloudflare Images batch token when available.
 
 ## Privacy and safety notes
 - Contact fields stay in Supabase only after import and are not exposed by this script.
 - When `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` is enabled, the sync can create intro cases. It rejects creation if either participant already has an active intro (domain statuses like `OFFERED`, `MATCHED`, `CONNECTED`, etc.) so the rule "never create a new intro for a user in `PROGRESSING`" is still enforced.
 - Recommendation and manual intro creation exclude any pair that already exists in `intro_cases`, including history imported from Notion.
-- Uploaded files are still expected to use external object storage in production, not ephemeral local disk.
+- Uploaded files are stored in Cloudflare Images, not ephemeral local disk or Supabase Storage.

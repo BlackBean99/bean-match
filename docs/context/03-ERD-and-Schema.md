@@ -239,7 +239,7 @@ erDiagram
     ROUNDS ||--o{ ROUND_PASSES : contains
 ```
 
-`USER_PHOTOS.file_path`는 원본/source URL이고, `USER_PHOTOS.file_url`은 Cloudflare Images delivery URL로 사용한다.
+`USER_PHOTOS.file_path`는 source URL 또는 Cloudflare Images 식별자 메모이고, `USER_PHOTOS.file_url`은 Cloudflare Images delivery URL로 사용한다.
 
 ---
 

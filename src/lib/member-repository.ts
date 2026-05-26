@@ -6,11 +6,9 @@ import {
   type UserRole,
   type UserStatus,
 } from "@prisma/client";
-import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { prisma, hasDatabaseUrl } from "@/lib/prisma";
 import {
-  getPhotoBucketName,
   getRuntimeEnv,
   getSupabaseServerKey,
   getSupabaseUrl,
@@ -19,6 +17,7 @@ import {
   deleteCloudflareImage,
   ensureCloudflareCachedImage,
   isCloudflareDeliveryUrl,
+  uploadCloudflareImageFile,
 } from "@/lib/cloudflare-images";
 import {
   activeIntroStatuses,
@@ -125,10 +124,12 @@ type PhotoInput = {
   fileSizeBytes?: number;
   sortOrder: number;
   isMain: boolean;
+  cloudflareImageId?: string | null;
 };
 
 type UploadedPhotoInput = Required<Pick<PhotoInput, "url" | "storedFileName" | "filePath" | "mimeType" | "fileSizeBytes">> & {
   originalFileName: string;
+  cloudflareImageId: string;
 };
 
 const introCaseInclude = {
@@ -503,29 +504,30 @@ export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<U
   const originalFileName = sanitizeFileName(file.name || "clipboard-image");
   const extension = extensionForPhoto(file.type, originalFileName);
   const storedFileName = `${randomUUID()}${extension}`;
-  const filePath = `users/${userId.toString()}/${storedFileName}`;
-  const body = Buffer.from(await file.arrayBuffer());
-
-  await ensureSupabasePhotoBucket();
-  const photoBucketName = getPhotoBucketName();
-  await supabaseStorage(`/object/${photoBucketName}/${encodePathSegments(filePath)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": file.type,
-      "x-upsert": "false",
+  const cloudflareImageId = storedFileName;
+  const deliveryUrl = await uploadCloudflareImageFile({
+    customId: cloudflareImageId,
+    file,
+    fileName: originalFileName,
+    metadata: {
+      userId: userId.toString(),
+      uploadedBy: "manual-upload",
+      originalFileName,
     },
-    body,
   });
 
-  const sourceUrl = `${getSupabaseUrl()}/storage/v1/object/public/${photoBucketName}/${encodePathSegments(filePath)}`;
+  if (!deliveryUrl) {
+    throw new Error("Cloudflare Images upload failed.");
+  }
 
   return {
-    url: sourceUrl,
+    url: deliveryUrl,
     originalFileName,
     storedFileName,
-    filePath,
+    filePath: `cloudflare:${cloudflareImageId}`,
     mimeType: file.type,
     fileSizeBytes: file.size,
+    cloudflareImageId,
   };
 }
 
@@ -594,21 +596,23 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabasePhotoPayload(numericUserId, photoInput)),
     });
-    await refreshPhotoCloudflareDelivery(
-      {
-        id: photo.id,
-        storedFileName: photo.stored_file_name,
-        filePath: photo.file_path,
-        fileUrl: photo.file_url,
-      },
-      photo.file_url || input.url,
-      async (freshUrl) => {
-        await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ file_url: freshUrl }),
-        });
-      },
-    );
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: photo.id,
+          storedFileName: photo.stored_file_name,
+          filePath: photo.file_path,
+          fileUrl: photo.file_url,
+        },
+        input.url,
+        async (freshUrl) => {
+          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ file_url: freshUrl }),
+          });
+        },
+      );
+    }
     if (!(await getPhotoRedirectUrl(BigInt(photo.id)))) {
       await supabaseRest(`/user_photos?id=eq.${photo.id}`, { method: "DELETE" });
       throw new Error("Cloudflare Images upload failed.");
@@ -629,21 +633,23 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
     const photo = await tx.userPhoto.create({
       data: toPrismaPhotoPayload(userId, photoInput),
     });
-    await refreshPhotoCloudflareDelivery(
-      {
-        id: Number(photo.id),
-        storedFileName: photo.storedFileName,
-        filePath: photo.filePath,
-        fileUrl: photo.fileUrl,
-      },
-      photo.fileUrl || input.url,
-      async (freshUrl) => {
-        await tx.userPhoto.update({
-          where: { id: photo.id },
-          data: { fileUrl: freshUrl },
-        });
-      },
-    );
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: Number(photo.id),
+          storedFileName: photo.storedFileName,
+          filePath: photo.filePath,
+          fileUrl: photo.fileUrl,
+        },
+        input.url,
+        async (freshUrl) => {
+          await tx.userPhoto.update({
+            where: { id: photo.id },
+            data: { fileUrl: freshUrl },
+          });
+        },
+      );
+    }
     if (shouldBeMain) {
       await tx.user.update({ where: { id: userId }, data: { mainPhotoId: photo.id } });
     }
@@ -665,22 +671,24 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabasePhotoPayload(existing.user_id, updateInput)),
     });
-    await refreshPhotoCloudflareDelivery(
-      {
-        id: photo.id,
-        storedFileName: photo.stored_file_name,
-        filePath: photo.file_path,
-        fileUrl: photo.file_url,
-      },
-      photo.file_url || input.url,
-      async (freshUrl) => {
-        await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ file_url: freshUrl }),
-        });
-      },
-      resolveStoredSourceUrl(existing.file_path, existing.file_url),
-    );
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: photo.id,
+          storedFileName: photo.stored_file_name,
+          filePath: photo.file_path,
+          fileUrl: photo.file_url,
+        },
+        input.url,
+        async (freshUrl) => {
+          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ file_url: freshUrl }),
+          });
+        },
+        resolveStoredSourceUrl(existing.file_path, existing.file_url),
+      );
+    }
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Cloudflare Images upload failed.");
     }
@@ -700,22 +708,24 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       where: { id: photoId },
       data: toPrismaPhotoPayload(existing.userId, updateInput),
     });
-    await refreshPhotoCloudflareDelivery(
-      {
-        id: Number(photo.id),
-        storedFileName: photo.storedFileName,
-        filePath: photo.filePath,
-        fileUrl: photo.fileUrl,
-      },
-      photo.fileUrl || input.url,
-      async (freshUrl) => {
-        await tx.userPhoto.update({
-          where: { id: photo.id },
-          data: { fileUrl: freshUrl },
-        });
-      },
-      resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
-    );
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: Number(photo.id),
+          storedFileName: photo.storedFileName,
+          filePath: photo.filePath,
+          fileUrl: photo.fileUrl,
+        },
+        input.url,
+        async (freshUrl) => {
+          await tx.userPhoto.update({
+            where: { id: photo.id },
+            data: { fileUrl: freshUrl },
+          });
+        },
+        resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
+      );
+    }
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Cloudflare Images upload failed.");
     }
@@ -1162,62 +1172,6 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-async function supabaseStorage<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!hasSupabaseRestConfig()) {
-    throw new Error("Supabase URL or service role key is not configured.");
-  }
-
-  const response = await fetch(`${getSupabaseUrl()}/storage/v1${path}`, {
-    ...init,
-    headers: {
-      apikey: getSupabaseServerKey(),
-      Authorization: `Bearer ${getSupabaseServerKey()}`,
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Supabase Storage ${response.status}: ${text}`);
-  }
-
-  const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
-}
-
-async function ensureSupabasePhotoBucket() {
-  const photoBucketName = getPhotoBucketName();
-  const response = await fetch(`${getSupabaseUrl()}/storage/v1/bucket/${photoBucketName}`, {
-    headers: {
-      apikey: getSupabaseServerKey(),
-      Authorization: `Bearer ${getSupabaseServerKey()}`,
-    },
-  });
-
-  if (response.ok) return;
-  if (response.status !== 404) {
-    const text = await response.text();
-    throw new Error(`Supabase Storage ${response.status}: ${text}`);
-  }
-
-  try {
-    await supabaseStorage("/bucket", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: photoBucketName,
-        name: photoBucketName,
-        public: true,
-        file_size_limit: maxPhotoUploadBytes,
-        allowed_mime_types: [...photoUploadMimeTypes],
-      }),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("409")) return;
-    throw error;
-  }
-}
-
 function toSupabaseUserPayload(input: MemberInput, includePhone: boolean) {
   return {
     name: input.name,
@@ -1291,7 +1245,7 @@ function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
     url: (photo.file_url && isCloudflareDeliveryUrl(photo.file_url) ? photo.file_url : photoDisplayUrl(photo.id)) ?? "",
-    sourceUrl: photo.file_path ?? photo.file_url,
+    sourceUrl: photoSourceUrl(photo.file_path, photo.file_url),
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
     sortOrder: photo.sort_order,
@@ -1358,10 +1312,6 @@ function extensionForPhoto(mimeType: string, fileName: string) {
   return "";
 }
 
-function encodePathSegments(path: string) {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
 function fileNameFromUrl(url: string) {
   const pathname = new URL(url).pathname;
   const fileName = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "profile-photo");
@@ -1403,6 +1353,12 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
 function photoDeliveryOrProxyUrl(fileUrl: string | null | undefined, photoId: bigint | number | null | undefined) {
   if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
   return photoDisplayUrl(photoId);
+}
+
+function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined): string {
+  if (isUsableImageUrl(filePath)) return filePath ?? "";
+  if (isCloudflareDeliveryUrl(fileUrl)) return fileUrl ?? "";
+  return "";
 }
 
 type PhotoRedirectRecord = {

@@ -76,20 +76,18 @@
 ### 4.1 저장 원칙
 - DB에는 이미지 바이너리를 저장하지 않는다.
 - 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
-- 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage 같은 외부 오브젝트 스토리지에 저장한다.
-- Notion에서 가져온 파일은 `file_path`에 원본 URL을 보존하고, Cloudflare Images에 다시 업로드해 `file_url`에 delivery URL을 저장한다.
-- UI는 Cloudflare Images delivery URL을 우선 사용하고, 오래된 레코드는 `/api/photos/{photoId}`를 통해 백필/캐시한다. 이 라우트는 저장된 Cloudflare Images delivery URL로 리다이렉트하고, 아직 캐시가 없으면 원본 URL을 Cloudflare Images에 등록한 뒤 delivery URL로 연결한다.
+- 직접 업로드/클립보드 붙여넣기 이미지는 Cloudflare Images에 직접 업로드한다.
+- Notion에서 가져온 파일은 source URL을 Cloudflare Images에 업로드하고, `file_url`에 delivery URL만 저장한다.
+- UI는 Cloudflare Images delivery URL을 우선 사용하고, 오래된 레코드는 `/api/photos/{photoId}`를 통해 Cloudflare Images delivery URL로만 정리한다. 이 라우트는 저장된 delivery URL을 반환하고, 아직 캐시가 없으면 Notion source를 다시 읽어 Cloudflare Images에 업로드한다.
 - DB에는 메타데이터를 저장한다.
 
 ### 4.2 저장 예시
 파일 경로 예시:
 
-`user-photos/users/{user_id}/{uuid}.jpg`
-
 저장 메타데이터:
 - `original_file_name`
 - `stored_file_name`
-- `file_path`: 원본 또는 source URL
+- `file_path`: source URL 또는 Cloudflare Images 식별자 메모
 - `file_url`: Cloudflare Images delivery URL
 - `mime_type`
 - `file_size_bytes`
@@ -103,9 +101,7 @@
 - 확장자는 화이트리스트 검증 후 허용
 
 ### 4.4 디렉터리 구조 권장
-- `/uploads/profile/yyyy/MM/dd/`
-- `/uploads/profile-thumbs/yyyy/MM/dd/` (선택)
-- `/uploads/temp/` (선택)
+- 애플리케이션은 별도 업로드 디렉터리를 만들지 않는다. 이미지 저장과 전송은 Cloudflare Images가 담당한다.
 
 ### 4.5 삭제 정책
 - DB soft delete + 파일 비동기 삭제 또는 보존 정책 선택

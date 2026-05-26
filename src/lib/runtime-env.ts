@@ -30,10 +30,6 @@ export function hasDatabaseUrl() {
   return Boolean(getRuntimeEnv().DATABASE_URL);
 }
 
-export function getPhotoBucketName() {
-  return getRuntimeEnv().SUPABASE_PHOTO_BUCKET || "user-photos";
-}
-
 export function getCloudflareImagesToken() {
   const env = getRuntimeEnv();
   return env.CLOUDFLARE_API_TOKEN || env.CloudFlare_Token || "";

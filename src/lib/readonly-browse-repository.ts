@@ -514,7 +514,7 @@ async function getPhotosByUserIds(userIds: bigint[]) {
     bucket.push({
       id: photoRow.id,
       url: (photoRow.fileUrl && isCloudflareDeliveryUrl(photoRow.fileUrl) ? photoRow.fileUrl : photoDisplayUrl(photoRow.id)) ?? "",
-      sourceUrl: photoRow.filePath ?? photoRow.fileUrl,
+      sourceUrl: photoSourceUrl(photoRow.filePath, photoRow.fileUrl),
       originalFileName: photoRow.originalFileName,
       isMain: photoRow.isMain,
       sortOrder: photoRow.sortOrder,
@@ -608,6 +608,23 @@ function formatShortDateTime(value: string) {
 
 function photoDisplayUrl(photoId: number) {
   return `/api/photos/${photoId}`;
+}
+
+function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
+  if (isUsablePhotoSource(filePath)) return filePath ?? "";
+  if (isCloudflareDeliveryUrl(fileUrl)) return fileUrl ?? "";
+  return "";
+}
+
+function isUsablePhotoSource(url: string | null | undefined) {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
+  } catch {
+    return false;
+  }
 }
 
 function toTokenRecord(
