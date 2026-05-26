@@ -165,8 +165,15 @@ async function deleteCloudflareImage(imageId) {
 async function ensureCloudflareCachedImage(input) {
   if (!isCloudflareImagesConfigured()) return null;
 
+  const sourceResponse = await fetch(input.sourceUrl, { cache: "no-store" });
+  if (!sourceResponse.ok) return null;
+
+  const contentType = sourceResponse.headers.get("content-type") || "application/octet-stream";
+  const bytes = await sourceResponse.arrayBuffer();
+  const fileName = input.fileName || input.customId || "image";
+
   const formData = new FormData();
-  formData.set("url", input.sourceUrl);
+  formData.set("file", new Blob([bytes], { type: contentType }), fileName);
   formData.set("id", input.customId);
   formData.set("requireSignedURLs", "false");
   formData.set("metadata", JSON.stringify(input.metadata ?? {}));
@@ -1317,6 +1324,7 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
     return await ensureCloudflareCachedImage({
       customId: storedFileName,
       sourceUrl,
+      fileName: photo.name,
       metadata: {
         notionPageId,
         index: String(index),
