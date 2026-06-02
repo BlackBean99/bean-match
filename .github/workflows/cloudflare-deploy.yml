@@ -18,6 +18,25 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_API_VERSION: ${{ secrets.NOTION_API_VERSION }}
+      NOTION_MAIN_DATA_SOURCE_ID: ${{ secrets.NOTION_MAIN_DATA_SOURCE_ID }}
+      NOTION_USERS_DATABASE_ID: ${{ secrets.NOTION_USERS_DATABASE_ID }}
+      NOTION_INVITOR_DATA_SOURCE_ID: ${{ secrets.NOTION_INVITOR_DATA_SOURCE_ID }}
+      NOTION_MATCHING_HISTORY_DATA_SOURCE_ID: ${{ secrets.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID }}
+      NOTION_SYNC_GITHUB_TOKEN: ${{ secrets.NOTION_SYNC_GITHUB_TOKEN }}
+      CLOUDFLARE_IMAGES_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_IMAGES_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_IMAGES_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_TOKEN }}
+      CLOUDFLARE_IMAGES_VARIANT: ${{ secrets.CLOUDFLARE_IMAGES_VARIANT }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,10 +53,88 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
-      - name: Build and deploy to Cloudflare
+      - name: Sync Pages secrets from GitHub Secrets
+        shell: bash
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_ACCESS_CLIENT_ID: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_ID }}
-          CLOUDFLARE_ACCESS_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_SECRET }}
+          PAGES_PROJECT_NAME: bean-match
+        run: |
+          secret_file="$(mktemp)"
+          cleanup() {
+            rm -f "$secret_file"
+          }
+          trap cleanup EXIT
+
+          missing=0
+
+          require_value() {
+            local key="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Missing GitHub secret: $key"
+              missing=1
+            fi
+          }
+
+          require_one_of() {
+            local label="$1"
+            shift
+            local present=false
+            for value in "$@"; do
+              if [ -n "$value" ]; then
+                present=true
+                break
+              fi
+            done
+            if [ "$present" = false ]; then
+              echo "::error::Missing GitHub secret: $label"
+              missing=1
+            fi
+          }
+
+          require_value NOTION_SYNC_GITHUB_TOKEN "$NOTION_SYNC_GITHUB_TOKEN"
+          require_value NOTION_TOKEN "$NOTION_TOKEN"
+          require_one_of "SUPABASE_SERVICE_ROLE_KEY or DATABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$DATABASE_URL"
+          require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
+
+          append_secret() {
+            local key="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              printf '%s=%s\n' "$key" "$value" >> "$secret_file"
+            fi
+          }
+
+          append_secret NOTION_SYNC_GITHUB_TOKEN "$NOTION_SYNC_GITHUB_TOKEN"
+          append_secret NOTION_SYNC_GITHUB_REPOSITORY "$NOTION_SYNC_GITHUB_REPOSITORY"
+          append_secret NOTION_SYNC_GITHUB_WORKFLOW "$NOTION_SYNC_GITHUB_WORKFLOW"
+          append_secret NOTION_SYNC_GITHUB_REF "$NOTION_SYNC_GITHUB_REF"
+          append_secret SUPABASE_URL "$SUPABASE_URL"
+          append_secret NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
+          append_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
+          append_secret NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          append_secret DATABASE_URL "$DATABASE_URL"
+          append_secret NOTION_TOKEN "$NOTION_TOKEN"
+          append_secret NOTION_API_VERSION "$NOTION_API_VERSION"
+          append_secret NOTION_MAIN_DATA_SOURCE_ID "$NOTION_MAIN_DATA_SOURCE_ID"
+          append_secret NOTION_USERS_DATABASE_ID "$NOTION_USERS_DATABASE_ID"
+          append_secret NOTION_INVITOR_DATA_SOURCE_ID "$NOTION_INVITOR_DATA_SOURCE_ID"
+          append_secret NOTION_MATCHING_HISTORY_DATA_SOURCE_ID "$NOTION_MATCHING_HISTORY_DATA_SOURCE_ID"
+          append_secret CLOUDFLARE_IMAGES_ACCOUNT_ID "$CLOUDFLARE_IMAGES_ACCOUNT_ID"
+          append_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
+          append_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
+          append_secret CLOUDFLARE_IMAGES_TOKEN "$CLOUDFLARE_IMAGES_TOKEN"
+          append_secret CLOUDFLARE_IMAGES_VARIANT "$CLOUDFLARE_IMAGES_VARIANT"
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if [ ! -s "$secret_file" ]; then
+            echo "No Pages secrets were provided from GitHub Secrets."
+            exit 1
+          fi
+
+          npx wrangler pages secret bulk "$secret_file" --project-name "$PAGES_PROJECT_NAME"
+
+      - name: Build and deploy to Cloudflare
         run: npm run deploy
