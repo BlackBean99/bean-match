@@ -128,7 +128,8 @@ class NotionApiError extends Error {
 
 const CLOUDFLARE_IMAGES_ACCOUNT_ID =
   process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
+const CLOUDFLARE_API_TOKEN =
+  process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
 const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
 const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 
@@ -310,6 +311,30 @@ try {
       const existingSync = await findSyncRecord(page.id);
 
       if (existingSync?.checksum === checksum) {
+        if (write && (source.sourceType === "main" || source.sourceType === "invitor")) {
+          try {
+            const refreshed = await refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source);
+
+            results.push({
+              pageId: page.id,
+              source: source.name,
+              action: "updated",
+              userId: refreshed.id.toString(),
+              name: refreshed.name,
+              reason: "photos_refreshed",
+            });
+            continue;
+          } catch (error) {
+            results.push({
+              pageId: page.id,
+              source: source.name,
+              action: "skipped",
+              reason: error instanceof Error ? error.message : "Photo refresh failed",
+            });
+            continue;
+          }
+        }
+
         results.push({ pageId: page.id, source: source.name, action: "skipped" });
         continue;
       }
@@ -543,6 +568,43 @@ async function writeUserFromNotion(existingSync, input, page, checksum, rawCheck
   return {
     id: BigInt(user.id),
     name: user.name,
+  };
+}
+
+async function refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source) {
+  if (prisma) {
+    return prisma.$transaction(async (tx) => {
+      await upsertRawNotionRecordWithPrisma(tx, page, rawChecksum, source);
+      await syncUserPhotosWithPrisma(tx, existingSync.entityId, page.id, input.photos);
+      await tx.notionSyncRecord.update({
+        where: { notionPageId: page.id },
+        data: {
+          lastSyncedAt: new Date(),
+          notionEditedAt: page.last_edited_time ? new Date(page.last_edited_time) : null,
+        },
+      });
+
+      return {
+        id: existingSync.entityId,
+        name: input.user.name,
+      };
+    });
+  }
+
+  const userId = safeNumberFromBigInt(existingSync.entityId, "userId");
+  await upsertRawNotionRecordWithSupabase(page, rawChecksum, source);
+  await syncUserPhotosWithSupabase(userId, page.id, input.photos);
+  await supabaseRest(`/notion_sync_records?notion_page_id=eq.${encodeURIComponent(page.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      last_synced_at: new Date().toISOString(),
+      notion_edited_at: page.last_edited_time || null,
+    }),
+  });
+
+  return {
+    id: existingSync.entityId,
+    name: input.user.name,
   };
 }
 

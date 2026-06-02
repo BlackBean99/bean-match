@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
+const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
+
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
@@ -10,7 +12,10 @@ const pageSize = parseIntegerArg(args, "--page-size") ?? 100;
 
 const SUPABASE_URL = requiredEnv("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-const CLOUDFLARE_API_TOKEN = requiredEnv("CLOUDFLARE_API_TOKEN");
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CLOUDFLARE_API_TOKEN || "";
+if (!CLOUDFLARE_API_TOKEN) {
+  throw new Error("Missing required environment variable: CLOUDFLARE_API_TOKEN or CLOUDFLARE_IMAGES_TOKEN");
+}
 const CLOUDFLARE_IMAGES_ACCOUNT_ID =
   process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
 if (!CLOUDFLARE_IMAGES_ACCOUNT_ID) {
@@ -65,7 +70,7 @@ async function main() {
       continue;
     }
 
-    const deliveryUrl = await ensureCloudflareCachedImage({
+    let deliveryUrl = await ensureCloudflareCachedImage({
       customId: row.stored_file_name,
       sourceUrl,
       fileName: row.original_file_name || fileNameFromUrl(sourceUrl),
@@ -75,6 +80,23 @@ async function main() {
         storedFileName: row.stored_file_name,
       },
     });
+
+    if (!deliveryUrl) {
+      const notionFallback = await resolveNotionSourceUrl(row.stored_file_name);
+      if (notionFallback && notionFallback !== sourceUrl) {
+        summary.fallbackSourceLookups += 1;
+        deliveryUrl = await ensureCloudflareCachedImage({
+          customId: row.stored_file_name,
+          sourceUrl: notionFallback,
+          fileName: row.original_file_name || fileNameFromUrl(notionFallback),
+          metadata: {
+            photoId: String(row.id),
+            userId: String(row.user_id),
+            storedFileName: row.stored_file_name,
+          },
+        });
+      }
+    }
 
     if (!deliveryUrl) {
       throw new Error(`[backfill-cloudflare-images] failed photo ${row.id}: ${sourceUrl}`);
@@ -353,5 +375,3 @@ function loadEnvFile(path) {
     process.env[match[1]] = value;
   }
 }
-
-const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";

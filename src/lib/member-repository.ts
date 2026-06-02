@@ -447,11 +447,8 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
-        url:
-          (photo.fileUrl && isCloudflareDeliveryUrl(photo.fileUrl)
-            ? photo.fileUrl
-            : photoDisplayUrl(photo.id)) ?? "",
-        sourceUrl: photo.filePath ?? photo.fileUrl,
+        url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.id) ?? "",
+        sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl) ?? "",
         originalFileName: photo.originalFileName,
         isMain: photo.isMain,
         sortOrder: photo.sortOrder,
@@ -1244,8 +1241,8 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
-    url: (photo.file_url && isCloudflareDeliveryUrl(photo.file_url) ? photo.file_url : photoDisplayUrl(photo.id)) ?? "",
-    sourceUrl: photoSourceUrl(photo.file_path, photo.file_url),
+    url: photoDeliveryOrProxyUrl(photo.file_url, photo.id) ?? "",
+    sourceUrl: photoSourceUrl(photo.file_path, photo.file_url) ?? "",
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
     sortOrder: photo.sort_order,
@@ -1351,14 +1348,14 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
 }
 
 function photoDeliveryOrProxyUrl(fileUrl: string | null | undefined, photoId: bigint | number | null | undefined) {
-  if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
+  if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
   return photoDisplayUrl(photoId);
 }
 
-function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined): string {
-  if (isUsableImageUrl(filePath)) return filePath ?? "";
-  if (isCloudflareDeliveryUrl(fileUrl)) return fileUrl ?? "";
-  return "";
+function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined): string | undefined {
+  if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
+  if (filePath && isUsableImageUrl(filePath)) return filePath;
+  return undefined;
 }
 
 type PhotoRedirectRecord = {
@@ -1446,8 +1443,12 @@ async function retryCloudflareFromNotionSource(
       photoId: photo.id.toString(),
     },
   });
-  if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
-  return freshUrl ?? null;
+  if (freshUrl && freshUrl !== photo.fileUrl) {
+    await persistFreshUrl(freshUrl);
+    return freshUrl;
+  }
+
+  return notionSourceUrl;
 }
 
 async function resolveNotionPhotoSourceUrl(storedFileName: string) {

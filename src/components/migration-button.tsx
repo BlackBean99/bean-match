@@ -15,18 +15,49 @@ export function MigrationButton() {
   const isActive = pending || state.status === "queued";
 
   useEffect(() => {
-    if (!pending) return;
+    if (state.status !== "queued") return;
 
-    const timer = window.setInterval(() => {
-      setState((current) => {
-        if (current.status !== "idle" || typeof current.progress !== "number") return current;
-        const nextProgress = Math.min((current.progress ?? 0) + 12, 88);
-        return { ...current, progress: nextProgress };
-      });
-    }, 220);
+    let cancelled = false;
 
-    return () => window.clearInterval(timer);
-  }, [pending]);
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/migration/notion", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) return;
+
+        const next = (await response.json()) as MigrationState;
+        if (cancelled) return;
+
+        setState((current) => {
+          if (next.status === "queued") {
+            return {
+              ...current,
+              ...next,
+              progress: next.progress ?? current.progress ?? 65,
+              phase: next.phase ?? current.phase ?? "대기 중",
+            };
+          }
+
+          return {
+            ...current,
+            ...next,
+          };
+        });
+      } catch {
+        // Keep the last known state and retry on the next tick.
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(poll, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [state.status]);
 
   return (
     <div className="grid gap-2">
@@ -50,7 +81,7 @@ export function MigrationButton() {
       <button
         type="button"
         className="rounded-lg border border-[#FF3131] bg-white px-4 py-2 text-sm font-bold text-[#E00E0E] hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={pending}
+        disabled={isActive}
         onClick={() => {
           setState({ status: "idle", message: "동기화 요청 중.", progress: 12, phase: "요청 중" });
           startTransition(async () => {

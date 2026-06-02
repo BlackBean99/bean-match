@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { runNotionMigration } from "@/lib/notion-migration";
+import { getNotionMigrationStatus, runNotionMigration } from "@/lib/notion-migration";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,16 @@ export async function POST() {
     revalidatePath("/matches");
   }
 
+  return NextResponse.json(result, {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+export async function GET() {
+  const result = await getNotionMigrationStatus();
   return NextResponse.json(result, {
     status: 200,
     headers: {
