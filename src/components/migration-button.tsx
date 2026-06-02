@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { MigrationState } from "@/lib/notion-migration";
 
 const initialState = {
@@ -12,6 +13,7 @@ const initialState = {
 export function MigrationButton() {
   const [state, setState] = useState<MigrationState>(initialState);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const isActive = pending || state.status === "queued";
 
   useEffect(() => {
@@ -40,10 +42,14 @@ export function MigrationButton() {
             };
           }
 
-          return {
+          const nextState = {
             ...current,
             ...next,
           };
+          if (next.status === "success") {
+            router.refresh();
+          }
+          return nextState;
         });
       } catch {
         // Keep the last known state and retry on the next tick.
@@ -57,7 +63,7 @@ export function MigrationButton() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [state.status]);
+  }, [router, state.status]);
 
   return (
     <div className="grid gap-2">
@@ -91,6 +97,9 @@ export function MigrationButton() {
                 headers: { Accept: "application/json" },
               });
               const result = (await response.json()) as MigrationState;
+              if (result.status === "success") {
+                router.refresh();
+              }
               setState({
                 ...result,
                 progress: result.status === "success" ? 100 : result.status === "error" ? 100 : result.progress ?? 65,

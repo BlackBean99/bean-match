@@ -155,33 +155,34 @@ async function getCloudflareImage(imageId: string) {
 }
 
 async function requestCloudflareImages(path: string, init: RequestInit = {}) {
+  const accountId = getCloudflareImagesAccountId();
   const batchToken = await getCloudflareBatchToken();
-  const endpoints = batchToken
-    ? [
-        {
-          baseUrl: cloudflareBatchBaseUrl,
-          token: batchToken,
-          isBatch: true,
-        },
-        {
-          baseUrl: cloudflareApiBaseUrl,
-          token: getCloudflareImagesToken(),
-          isBatch: false,
-        },
-      ]
-    : [
-        {
-          baseUrl: cloudflareApiBaseUrl,
-          token: getCloudflareImagesToken(),
-          isBatch: false,
-        },
-      ];
+  const endpoints: Array<{ baseUrl: string; path: string; token: string; isBatch: boolean }> = [];
+
+  if (batchToken) {
+    endpoints.push({
+      baseUrl: cloudflareBatchBaseUrl,
+      path,
+      token: batchToken,
+      isBatch: true,
+    });
+  }
+
+  if (accountId) {
+    const apiToken = getCloudflareImagesToken();
+    if (apiToken) {
+      endpoints.push({
+        baseUrl: cloudflareApiBaseUrl,
+        path: `/accounts/${accountId}${path}`,
+        token: apiToken,
+        isBatch: false,
+      });
+    }
+  }
 
   let lastResponse: Response | null = null;
   for (const endpoint of endpoints) {
-    if (!endpoint.token) continue;
-
-    const response = await fetch(`${endpoint.baseUrl}${path}`, {
+    const response = await fetch(`${endpoint.baseUrl}${endpoint.path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${endpoint.token}`,
@@ -263,7 +264,7 @@ function normalizeUploadFile(file: File | Blob | ArrayBuffer | Uint8Array, fileN
 }
 
 function isCloudflareImagesConfigured() {
-  return Boolean(getCloudflareImagesToken()) && !cloudflareImagesAvailability.disabled;
+  return Boolean(getCloudflareImagesToken() && getCloudflareImagesAccountId()) && !cloudflareImagesAvailability.disabled;
 }
 
 function toDeliveryUrl(result: CloudflareImageResult) {
