@@ -529,6 +529,7 @@ function MemberRow({
               fill
               sizes="48px"
               className="relative z-10 object-cover"
+              unoptimized
             />
           ) : (
             <div className="flex h-full items-center justify-center text-[10px] text-zinc-400">없음</div>

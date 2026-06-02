@@ -13,6 +13,7 @@ import {
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
+import { isCloudflareDeliveryUrl } from "@/lib/cloudflare-images";
 import { MAX_NEW_USER_MARKS } from "@/lib/auto-exposure-repository";
 
 const READ_ONLY_BROWSE_TOKEN_PREFIX = "bbro_";
@@ -512,8 +513,8 @@ async function getPhotosByUserIds(userIds: bigint[]) {
     const bucket = photosByUserId.get(photoRow.userId) ?? [];
     bucket.push({
       id: photoRow.id,
-      url: photoDisplayUrl(photoRow.id),
-      sourceUrl: photoRow.fileUrl ?? photoRow.filePath,
+      url: (photoRow.fileUrl && isCloudflareDeliveryUrl(photoRow.fileUrl) ? photoRow.fileUrl : photoDisplayUrl(photoRow.id)) ?? "",
+      sourceUrl: photoSourceUrl(photoRow.filePath, photoRow.fileUrl),
       originalFileName: photoRow.originalFileName,
       isMain: photoRow.isMain,
       sortOrder: photoRow.sortOrder,
@@ -607,6 +608,23 @@ function formatShortDateTime(value: string) {
 
 function photoDisplayUrl(photoId: number) {
   return `/api/photos/${photoId}`;
+}
+
+function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
+  if (isUsablePhotoSource(filePath)) return filePath ?? "";
+  if (isCloudflareDeliveryUrl(fileUrl)) return fileUrl ?? "";
+  return "";
+}
+
+function isUsablePhotoSource(url: string | null | undefined) {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
+  } catch {
+    return false;
+  }
 }
 
 function toTokenRecord(

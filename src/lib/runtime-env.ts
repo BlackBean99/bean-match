@@ -30,13 +30,9 @@ export function hasDatabaseUrl() {
   return Boolean(getRuntimeEnv().DATABASE_URL);
 }
 
-export function getPhotoBucketName() {
-  return getRuntimeEnv().SUPABASE_PHOTO_BUCKET || "user-photos";
-}
-
 export function getCloudflareImagesToken() {
   const env = getRuntimeEnv();
-  return env.CLOUDFLARE_IMAGES_TOKEN || env.CloudFlare_Token || "";
+  return env.CLOUDFLARE_IMAGES_TOKEN || env.CLOUDFLARE_API_TOKEN || env.CloudFlare_Token || "";
 }
 
 export function getCloudflareImagesVariant() {
@@ -44,7 +40,8 @@ export function getCloudflareImagesVariant() {
 }
 
 export function getCloudflareImagesAccountId() {
-  return getRuntimeEnv().CLOUDFLARE_IMAGES_ACCOUNT_ID || "";
+  const env = getRuntimeEnv();
+  return env.CLOUDFLARE_IMAGES_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID || "";
 }
 
 function getCloudflareEnv(): Partial<CloudflareEnv> | null {

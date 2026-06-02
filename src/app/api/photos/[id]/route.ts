@@ -24,26 +24,9 @@ async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
   const url = await getPhotoRedirectUrl(photoId);
   if (!url) return photoFallbackResponse(headOnly);
 
-  try {
-    const upstream = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        "User-Agent": "blackbean-match-admin/1.0",
-      },
-    });
-    if (!upstream.ok) return photoFallbackResponse(headOnly);
-
-    const headers = new Headers();
-    headers.set("Cache-Control", "private, no-store");
-    headers.set("Content-Type", upstream.headers.get("Content-Type") ?? "image/jpeg");
-
-    return new Response(headOnly ? null : upstream.body, {
-      status: 200,
-      headers,
-    });
-  } catch {
-    return photoFallbackResponse(headOnly);
-  }
+  const response = NextResponse.redirect(url, 307);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }
 
 function photoFallbackResponse(headOnly: boolean) {

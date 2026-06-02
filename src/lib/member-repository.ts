@@ -6,14 +6,19 @@ import {
   type UserRole,
   type UserStatus,
 } from "@prisma/client";
-import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { prisma, hasDatabaseUrl } from "@/lib/prisma";
 import {
-  getPhotoBucketName,
+  getRuntimeEnv,
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
+import {
+  deleteCloudflareImage,
+  ensureCloudflareCachedImage,
+  isCloudflareDeliveryUrl,
+  uploadCloudflareImageFile,
+} from "@/lib/cloudflare-images";
 import {
   activeIntroStatuses,
   type DashboardIntroCase,
@@ -119,10 +124,12 @@ type PhotoInput = {
   fileSizeBytes?: number;
   sortOrder: number;
   isMain: boolean;
+  cloudflareImageId?: string | null;
 };
 
 type UploadedPhotoInput = Required<Pick<PhotoInput, "url" | "storedFileName" | "filePath" | "mimeType" | "fileSizeBytes">> & {
   originalFileName: string;
+  cloudflareImageId: string;
 };
 
 const introCaseInclude = {
@@ -225,7 +232,7 @@ async function getMemberDashboardDataFromPrisma(
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -257,7 +264,12 @@ async function getMemberDashboardDataFromSupabaseRest(
       "/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
     );
     const userIds = users.map((user) => user.id);
-    const [roles, introCases] = await Promise.all([
+    const [mainPhotos, roles, introCases] = await Promise.all([
+      userIds.length > 0
+        ? supabaseRest<SupabasePhotoRow[]>(
+          `/user_photos?select=id,user_id,file_path,file_url&user_id=in.(${userIds.join(",")})&is_main=is.true&deleted_at=is.null`,
+        )
+        : Promise.resolve([]),
       options.includeRoles && userIds.length > 0
         ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
         : Promise.resolve([]),
@@ -267,6 +279,10 @@ async function getMemberDashboardDataFromSupabaseRest(
           )
         : Promise.resolve([]),
     ]);
+    const mainPhotoByUserId = new Map<number, SupabasePhotoRow>();
+    for (const photo of mainPhotos) {
+      mainPhotoByUserId.set(photo.user_id, photo);
+    }
     const rolesByUserId = groupByUserId(roles);
     const introCaseIds = introCases.map((introCase) => introCase.id);
     const introParticipants =
@@ -303,7 +319,7 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: photoDisplayUrl(user.main_photo_id),
+        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhotoByUserId.get(user.id)?.file_url, mainPhotoByUserId.get(user.id)?.id),
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
@@ -427,12 +443,12 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+      mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
-        url: photoDisplayUrl(photo.id) ?? photo.fileUrl ?? photo.filePath,
-        sourceUrl: photo.fileUrl ?? photo.filePath,
+        url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.id) ?? "",
+        sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl) ?? "",
         originalFileName: photo.originalFileName,
         isMain: photo.isMain,
         sortOrder: photo.sortOrder,
@@ -473,7 +489,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl: photoDisplayUrl(mainPhoto?.id),
+    mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.file_url, mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -485,27 +501,30 @@ export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<U
   const originalFileName = sanitizeFileName(file.name || "clipboard-image");
   const extension = extensionForPhoto(file.type, originalFileName);
   const storedFileName = `${randomUUID()}${extension}`;
-  const filePath = `users/${userId.toString()}/${storedFileName}`;
-  const body = Buffer.from(await file.arrayBuffer());
-
-  await ensureSupabasePhotoBucket();
-  const photoBucketName = getPhotoBucketName();
-  await supabaseStorage(`/object/${photoBucketName}/${encodePathSegments(filePath)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": file.type,
-      "x-upsert": "false",
+  const cloudflareImageId = storedFileName;
+  const deliveryUrl = await uploadCloudflareImageFile({
+    customId: cloudflareImageId,
+    file,
+    fileName: originalFileName,
+    metadata: {
+      userId: userId.toString(),
+      uploadedBy: "manual-upload",
+      originalFileName,
     },
-    body,
   });
 
+  if (!deliveryUrl) {
+    throw new Error("Cloudflare Images upload failed.");
+  }
+
   return {
-    url: `${getSupabaseUrl()}/storage/v1/object/public/${photoBucketName}/${encodePathSegments(filePath)}`,
+    url: deliveryUrl,
     originalFileName,
     storedFileName,
-    filePath,
+    filePath: `cloudflare:${cloudflareImageId}`,
     mimeType: file.type,
     fileSizeBytes: file.size,
+    cloudflareImageId,
   };
 }
 
@@ -522,18 +541,19 @@ export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | nul
     });
     if (!photo) return null;
 
-    return resolvePhotoRedirectUrl(
+    return getOrCreatePhotoDeliveryUrl(
       {
         id: Number(photo.id),
         storedFileName: photo.storedFileName,
         filePath: photo.filePath,
         fileUrl: photo.fileUrl,
       },
-      (freshUrl) =>
-        prisma.userPhoto.update({
+      async (freshUrl) => {
+        await prisma.userPhoto.update({
           where: { id: photo.id },
-          data: { fileUrl: freshUrl, filePath: freshUrl },
-        }),
+          data: { fileUrl: freshUrl },
+        });
+      },
     );
   }
 
@@ -544,18 +564,19 @@ export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | nul
   );
   if (!photo) return null;
 
-  return resolvePhotoRedirectUrl(
+  return getOrCreatePhotoDeliveryUrl(
     {
       id: photo.id,
       storedFileName: photo.stored_file_name,
       filePath: photo.file_path,
       fileUrl: photo.file_url,
     },
-    (freshUrl) =>
-      supabaseRest(`/user_photos?id=eq.${photo.id}`, {
+    async (freshUrl) => {
+      await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ file_url: freshUrl, file_path: freshUrl }),
-      }),
+        body: JSON.stringify({ file_url: freshUrl }),
+      });
+    },
   );
 }
 
@@ -572,6 +593,27 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabasePhotoPayload(numericUserId, photoInput)),
     });
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: photo.id,
+          storedFileName: photo.stored_file_name,
+          filePath: photo.file_path,
+          fileUrl: photo.file_url,
+        },
+        input.url,
+        async (freshUrl) => {
+          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ file_url: freshUrl }),
+          });
+        },
+      );
+    }
+    if (!(await getPhotoRedirectUrl(BigInt(photo.id)))) {
+      await supabaseRest(`/user_photos?id=eq.${photo.id}`, { method: "DELETE" });
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (shouldBeMain) await updateSupabaseMainPhoto(numericUserId, photo.id);
     await promoteUserToFullOpenOnPhotoSupabase(numericUserId);
     return photo;
@@ -588,6 +630,23 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
     const photo = await tx.userPhoto.create({
       data: toPrismaPhotoPayload(userId, photoInput),
     });
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: Number(photo.id),
+          storedFileName: photo.storedFileName,
+          filePath: photo.filePath,
+          fileUrl: photo.fileUrl,
+        },
+        input.url,
+        async (freshUrl) => {
+          await tx.userPhoto.update({
+            where: { id: photo.id },
+            data: { fileUrl: freshUrl },
+          });
+        },
+      );
+    }
     if (shouldBeMain) {
       await tx.user.update({ where: { id: userId }, data: { mainPhotoId: photo.id } });
     }
@@ -603,11 +662,33 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
     const [existing] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`);
     if (!existing) throw new Error("Photo not found.");
     if (input.isMain) await clearSupabaseMainPhotos(existing.user_id);
+    const updateInput = { ...input, storedFileName: existing.stored_file_name };
     const [photo] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify(toSupabasePhotoPayload(existing.user_id, input)),
+      body: JSON.stringify(toSupabasePhotoPayload(existing.user_id, updateInput)),
     });
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: photo.id,
+          storedFileName: photo.stored_file_name,
+          filePath: photo.file_path,
+          fileUrl: photo.file_url,
+        },
+        input.url,
+        async (freshUrl) => {
+          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ file_url: freshUrl }),
+          });
+        },
+        resolveStoredSourceUrl(existing.file_path, existing.file_url),
+      );
+    }
+    if (!(await getPhotoRedirectUrl(photoId))) {
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (input.isMain) await updateSupabaseMainPhoto(existing.user_id, photo.id);
     return photo;
   }
@@ -619,10 +700,32 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
     if (input.isMain) {
       await tx.userPhoto.updateMany({ where: { userId: existing.userId }, data: { isMain: false } });
     }
+    const updateInput = { ...input, storedFileName: existing.storedFileName };
     const photo = await tx.userPhoto.update({
       where: { id: photoId },
-      data: toPrismaPhotoPayload(existing.userId, input),
+      data: toPrismaPhotoPayload(existing.userId, updateInput),
     });
+    if (!input.cloudflareImageId) {
+      await refreshPhotoCloudflareDelivery(
+        {
+          id: Number(photo.id),
+          storedFileName: photo.storedFileName,
+          filePath: photo.filePath,
+          fileUrl: photo.fileUrl,
+        },
+        input.url,
+        async (freshUrl) => {
+          await tx.userPhoto.update({
+            where: { id: photo.id },
+            data: { fileUrl: freshUrl },
+          });
+        },
+        resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
+      );
+    }
+    if (!(await getPhotoRedirectUrl(photoId))) {
+      throw new Error("Cloudflare Images upload failed.");
+    }
     if (input.isMain) {
       await tx.user.update({ where: { id: existing.userId }, data: { mainPhotoId: photo.id } });
     }
@@ -660,6 +763,7 @@ export async function deleteUserPhoto(photoId: bigint) {
     if (photo.is_main) {
       await updateSupabaseMainPhoto(photo.user_id, null);
     }
+    await deleteCloudflareImage(photo.stored_file_name);
     await supabaseRest(`/user_photos?id=eq.${photoId.toString()}`, { method: "DELETE" });
     return;
   }
@@ -672,6 +776,7 @@ export async function deleteUserPhoto(photoId: bigint) {
     if (photo.isMain) {
       await tx.user.update({ where: { id: photo.userId }, data: { mainPhotoId: null } });
     }
+    await deleteCloudflareImage(photo.storedFileName);
     await tx.userPhoto.delete({ where: { id: photoId } });
   });
 }
@@ -1064,62 +1169,6 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-async function supabaseStorage<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!hasSupabaseRestConfig()) {
-    throw new Error("Supabase URL or service role key is not configured.");
-  }
-
-  const response = await fetch(`${getSupabaseUrl()}/storage/v1${path}`, {
-    ...init,
-    headers: {
-      apikey: getSupabaseServerKey(),
-      Authorization: `Bearer ${getSupabaseServerKey()}`,
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Supabase Storage ${response.status}: ${text}`);
-  }
-
-  const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
-}
-
-async function ensureSupabasePhotoBucket() {
-  const photoBucketName = getPhotoBucketName();
-  const response = await fetch(`${getSupabaseUrl()}/storage/v1/bucket/${photoBucketName}`, {
-    headers: {
-      apikey: getSupabaseServerKey(),
-      Authorization: `Bearer ${getSupabaseServerKey()}`,
-    },
-  });
-
-  if (response.ok) return;
-  if (response.status !== 404) {
-    const text = await response.text();
-    throw new Error(`Supabase Storage ${response.status}: ${text}`);
-  }
-
-  try {
-    await supabaseStorage("/bucket", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: photoBucketName,
-        name: photoBucketName,
-        public: true,
-        file_size_limit: maxPhotoUploadBytes,
-        allowed_mime_types: [...photoUploadMimeTypes],
-      }),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("409")) return;
-    throw error;
-  }
-}
-
 function toSupabaseUserPayload(input: MemberInput, includePhone: boolean) {
   return {
     name: input.name,
@@ -1192,8 +1241,8 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
-    url: photoDisplayUrl(photo.id) ?? photo.file_url ?? photo.file_path,
-    sourceUrl: photo.file_url ?? photo.file_path,
+    url: photoDeliveryOrProxyUrl(photo.file_url, photo.id) ?? "",
+    sourceUrl: photoSourceUrl(photo.file_path, photo.file_url) ?? "",
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
     sortOrder: photo.sort_order,
@@ -1260,10 +1309,6 @@ function extensionForPhoto(mimeType: string, fileName: string) {
   return "";
 }
 
-function encodePathSegments(path: string) {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
 function fileNameFromUrl(url: string) {
   const pathname = new URL(url).pathname;
   const fileName = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "profile-photo");
@@ -1302,6 +1347,17 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
   return photoId === null || photoId === undefined ? undefined : `/api/photos/${photoId.toString()}`;
 }
 
+function photoDeliveryOrProxyUrl(fileUrl: string | null | undefined, photoId: bigint | number | null | undefined) {
+  if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
+  return photoDisplayUrl(photoId);
+}
+
+function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined): string | undefined {
+  if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
+  if (filePath && isUsableImageUrl(filePath)) return filePath;
+  return undefined;
+}
+
 type PhotoRedirectRecord = {
   id: number;
   storedFileName: string;
@@ -1309,67 +1365,134 @@ type PhotoRedirectRecord = {
   fileUrl: string | null;
 };
 
-async function resolvePhotoRedirectUrl(
+async function getOrCreatePhotoDeliveryUrl(
   photo: PhotoRedirectRecord,
   persistFreshUrl: (freshUrl: string) => Promise<unknown>,
 ) {
-  const fallbackUrl = photo.fileUrl ?? photo.filePath;
-  const notionPhoto = parseNotionStoredFileName(photo.storedFileName);
-  if (!notionPhoto) return fallbackUrl;
+  if (isCloudflareDeliveryUrl(photo.fileUrl)) return photo.fileUrl;
 
-  const freshUrl = await fetchNotionPhotoUrl(notionPhoto.pageId, notionPhoto.index);
-  if (!freshUrl) return fallbackUrl;
-  if (freshUrl !== fallbackUrl) await persistFreshUrl(freshUrl);
-  return freshUrl;
+  const sourceUrl = isUsableImageUrl(photo.fileUrl)
+    ? photo.fileUrl
+    : isUsableImageUrl(photo.filePath)
+      ? photo.filePath
+      : null;
+  if (!sourceUrl) return retryCloudflareFromNotionSource(photo, persistFreshUrl);
+
+  const freshUrl = await ensureCloudflareCachedImage({
+    customId: photo.storedFileName,
+    sourceUrl,
+    metadata: {
+      photoId: photo.id.toString(),
+    },
+  });
+  if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
+  if (freshUrl) return freshUrl;
+
+  return retryCloudflareFromNotionSource(photo, persistFreshUrl);
 }
 
-function parseNotionStoredFileName(storedFileName: string) {
-  const match = storedFileName.match(/^notion:([^:]+):(\d+)$/);
+async function refreshPhotoCloudflareDelivery(
+  photo: PhotoRedirectRecord,
+  sourceUrl: string,
+  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
+  previousSourceUrl?: string | null,
+) {
+  if (!sourceUrl) return photo.fileUrl ?? null;
+
+  if (previousSourceUrl && previousSourceUrl !== sourceUrl) {
+    await deleteCloudflareImage(photo.storedFileName);
+  }
+
+  const deliveryUrl = await ensureCloudflareCachedImage({
+    customId: photo.storedFileName,
+    sourceUrl,
+    metadata: {
+      photoId: photo.id.toString(),
+    },
+  });
+  if (deliveryUrl && deliveryUrl !== photo.fileUrl) await persistFreshUrl(deliveryUrl);
+  return deliveryUrl ?? null;
+}
+
+function isUsableImageUrl(url: string | null | undefined) {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+function resolveStoredSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
+  return isUsableImageUrl(fileUrl) ? fileUrl : isUsableImageUrl(filePath) ? filePath : null;
+}
+
+async function retryCloudflareFromNotionSource(
+  photo: PhotoRedirectRecord,
+  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
+) {
+  const notionSourceUrl = await resolveNotionPhotoSourceUrl(photo.storedFileName);
+  if (!notionSourceUrl || notionSourceUrl === photo.fileUrl) return null;
+
+  const freshUrl = await ensureCloudflareCachedImage({
+    customId: photo.storedFileName,
+    sourceUrl: notionSourceUrl,
+    metadata: {
+      photoId: photo.id.toString(),
+    },
+  });
+  if (freshUrl && freshUrl !== photo.fileUrl) {
+    await persistFreshUrl(freshUrl);
+    return freshUrl;
+  }
+
+  return notionSourceUrl;
+}
+
+async function resolveNotionPhotoSourceUrl(storedFileName: string) {
+  const env = getRuntimeEnv();
+  const notionToken = env.NOTION_TOKEN;
+  if (!notionToken) return null;
+
+  const match = /^notion:([^:]+):(\d+)$/.exec(storedFileName || "");
   if (!match) return null;
 
-  return {
-    pageId: match[1],
-    index: Number.parseInt(match[2], 10),
-  };
-}
+  const pageId = match[1];
+  const index = Number(match[2]);
+  if (!Number.isFinite(index)) return null;
 
-type NotionFile = {
-  file?: { url?: string };
-  external?: { url?: string };
-};
-
-type NotionProperty = {
-  type?: string;
-  files?: NotionFile[];
-};
-
-async function fetchNotionPhotoUrl(pageId: string, index: number) {
-  const token = process.env.NOTION_TOKEN;
-  if (!token) return null;
-
-  const response = await fetch(`https://api.notion.com/v1/pages/${encodeURIComponent(pageId)}`, {
+  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
-      "Notion-Version": process.env.NOTION_API_VERSION || "2022-06-28",
+      Authorization: `Bearer ${notionToken}`,
+      "Content-Type": "application/json",
+      "Notion-Version": env.NOTION_API_VERSION || "2025-09-03",
     },
     cache: "no-store",
   });
+
   if (!response.ok) return null;
 
-  const page = (await response.json()) as { properties?: Record<string, NotionProperty> };
-  const files = findNotionFilesProperty(page.properties);
-  return files?.[index]?.file?.url ?? files?.[index]?.external?.url ?? null;
+  const page = (await response.json()) as {
+    properties?: Record<string, { type?: string; files?: Array<{ file?: { url?: string }; external?: { url?: string } }> }>;
+  };
+  const photosProp = findProperty(page.properties, ["Photos", "photos", "Picture", "picture", "사진"]);
+  if (!photosProp || photosProp.type !== "files") return null;
+
+  const photo = photosProp.files?.[index];
+  return photo?.file?.url || photo?.external?.url || null;
 }
 
-function findNotionFilesProperty(properties: Record<string, NotionProperty> | undefined) {
-  if (!properties) return null;
-
-  for (const key of ["Photos", "photos", "Picture", "picture", "사진"]) {
-    const property = properties[key];
-    if (property?.type === "files") return property.files ?? [];
+function findProperty(
+  props: Record<string, { type?: string; files?: Array<{ file?: { url?: string }; external?: { url?: string } }> }> | undefined,
+  names: string[],
+) {
+  if (!props) return null;
+  for (const name of names) {
+    if (props[name]) return props[name];
   }
-
-  return Object.values(properties).find((property) => property.type === "files")?.files ?? null;
+  return null;
 }
 
 type EntryQueueUpsertStatus = "WAITING" | "READY";

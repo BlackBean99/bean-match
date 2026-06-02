@@ -117,11 +117,93 @@ const activeIntroStatusSet = new Set([
   "RESULT_PENDING",
 ]);
 
+const NOTION_SYNC_SCHEMA_VERSION = "photos-v2";
+
 class NotionApiError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
   }
+}
+
+const CLOUDFLARE_IMAGES_ACCOUNT_ID =
+  process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
+const CLOUDFLARE_API_TOKEN =
+  process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
+const CLOUDFLARE_IMAGES_VARIANT = process.env.CLOUDFLARE_IMAGES_VARIANT || "public";
+const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
+
+function isCloudflareImagesConfigured() {
+  return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_API_TOKEN);
+}
+
+async function deleteCloudflareImage(imageId) {
+  if (!isCloudflareImagesConfigured()) return false;
+
+  const response = await fetch(
+    `${cloudflareApiBaseUrl}/accounts/${CLOUDFLARE_IMAGES_ACCOUNT_ID}/images/v1/${encodeURIComponent(imageId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (response.status === 404) return false;
+  return response.ok;
+}
+
+async function ensureCloudflareCachedImage(input) {
+  if (!isCloudflareImagesConfigured()) return null;
+
+  const sourceResponse = await fetch(input.sourceUrl, { cache: "no-store" });
+  if (!sourceResponse.ok) return null;
+
+  const contentType = sourceResponse.headers.get("content-type") || "application/octet-stream";
+  const bytes = await sourceResponse.arrayBuffer();
+  const fileName = input.fileName || input.customId || "image";
+
+  const formData = new FormData();
+  formData.set("file", new Blob([bytes], { type: contentType }), fileName);
+  formData.set("id", input.customId);
+  formData.set("requireSignedURLs", "false");
+  formData.set("metadata", JSON.stringify(input.metadata ?? {}));
+
+  const response = await fetch(`${cloudflareApiBaseUrl}/accounts/${CLOUDFLARE_IMAGES_ACCOUNT_ID}/images/v1`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (response.ok) {
+    const envelope = await response.json();
+    return toDeliveryUrl(envelope?.result);
+  }
+
+  if (response.status === 409) {
+    const deleted = await deleteCloudflareImage(input.customId);
+    if (deleted) {
+      return ensureCloudflareCachedImage(input);
+    }
+    return null;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return null;
+  }
+
+  return null;
+}
+
+function toDeliveryUrl(result) {
+  if (!result) return null;
+  const variants = Array.isArray(result.variants) ? result.variants : [];
+  return variants.find((variant) => variant.endsWith(`/${CLOUDFLARE_IMAGES_VARIANT}`)) ?? variants[0] ?? null;
 }
 
 async function buildNotionSources() {
@@ -197,6 +279,11 @@ try {
   if (notionSources.length === 0) {
     throw new Error("Missing required environment variable: NOTION_MAIN_DATA_SOURCE_ID");
   }
+  if (!isCloudflareImagesConfigured()) {
+    throw new Error(
+      "Cloudflare Images is not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_IMAGES_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+    );
+  }
 
   const results = [];
 
@@ -224,6 +311,30 @@ try {
       const existingSync = await findSyncRecord(page.id);
 
       if (existingSync?.checksum === checksum) {
+        if (write && (source.sourceType === "main" || source.sourceType === "invitor")) {
+          try {
+            const refreshed = await refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source);
+
+            results.push({
+              pageId: page.id,
+              source: source.name,
+              action: "updated",
+              userId: refreshed.id.toString(),
+              name: refreshed.name,
+              reason: "photos_refreshed",
+            });
+            continue;
+          } catch (error) {
+            results.push({
+              pageId: page.id,
+              source: source.name,
+              action: "skipped",
+              reason: error instanceof Error ? error.message : "Photo refresh failed",
+            });
+            continue;
+          }
+        }
+
         results.push({ pageId: page.id, source: source.name, action: "skipped" });
         continue;
       }
@@ -457,6 +568,43 @@ async function writeUserFromNotion(existingSync, input, page, checksum, rawCheck
   return {
     id: BigInt(user.id),
     name: user.name,
+  };
+}
+
+async function refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source) {
+  if (prisma) {
+    return prisma.$transaction(async (tx) => {
+      await upsertRawNotionRecordWithPrisma(tx, page, rawChecksum, source);
+      await syncUserPhotosWithPrisma(tx, existingSync.entityId, page.id, input.photos);
+      await tx.notionSyncRecord.update({
+        where: { notionPageId: page.id },
+        data: {
+          lastSyncedAt: new Date(),
+          notionEditedAt: page.last_edited_time ? new Date(page.last_edited_time) : null,
+        },
+      });
+
+      return {
+        id: existingSync.entityId,
+        name: input.user.name,
+      };
+    });
+  }
+
+  const userId = safeNumberFromBigInt(existingSync.entityId, "userId");
+  await upsertRawNotionRecordWithSupabase(page, rawChecksum, source);
+  await syncUserPhotosWithSupabase(userId, page.id, input.photos);
+  await supabaseRest(`/notion_sync_records?notion_page_id=eq.${encodeURIComponent(page.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      last_synced_at: new Date().toISOString(),
+      notion_edited_at: page.last_edited_time || null,
+    }),
+  });
+
+  return {
+    id: existingSync.entityId,
+    name: input.user.name,
   };
 }
 
@@ -1040,6 +1188,7 @@ function stableInputForChecksum(input, source) {
   if (source.sourceType !== "main" && source.sourceType !== "invitor") return input;
   return {
     ...input,
+    syncSchemaVersion: NOTION_SYNC_SCHEMA_VERSION,
     photos: (input.photos || []).map((photo) => ({
       name: photo.name,
       sourceType: photo.sourceType,
@@ -1146,6 +1295,17 @@ async function syncUserPhotosWithPrisma(tx, userId, notionPageId, photos) {
     data: { mainPhotoId: null },
   });
 
+  const existingPhotos = await tx.userPhoto.findMany({
+    where: {
+      userId,
+      storedFileName: { startsWith: `notion:${notionPageId}:` },
+    },
+    select: { storedFileName: true },
+  });
+  for (const photo of existingPhotos) {
+    await deleteCloudflareImage(photo.storedFileName);
+  }
+
   await tx.userPhoto.deleteMany({
     where: {
       userId,
@@ -1155,9 +1315,13 @@ async function syncUserPhotosWithPrisma(tx, userId, notionPageId, photos) {
 
   if (photos.length === 0) return;
 
-  const [mainPhoto, ...restPhotos] = photos.map((photo, index) =>
-    toPrismaPhotoPayload(userId, notionPageId, photo, index),
-  );
+  const payloads = [];
+  for (const [index, photo] of photos.entries()) {
+    const deliveryUrl = await cacheNotionPhotoDeliveryUrl(notionPageId, photo, index);
+    payloads.push(toPrismaPhotoPayload(userId, notionPageId, photo, index, deliveryUrl));
+  }
+
+  const [mainPhoto, ...restPhotos] = payloads;
 
   const createdMainPhoto = await tx.userPhoto.create({ data: mainPhoto });
 
@@ -1177,6 +1341,13 @@ async function syncUserPhotosWithSupabase(userId, notionPageId, photos) {
     body: JSON.stringify({ main_photo_id: null }),
   });
 
+  const existingRows = await supabaseRest(
+    `/user_photos?select=stored_file_name&user_id=eq.${userId}&stored_file_name=like.${encodeURIComponent(`notion:${notionPageId}:%`)}`,
+  );
+  for (const row of existingRows || []) {
+    await deleteCloudflareImage(row.stored_file_name);
+  }
+
   await supabaseRest(
     `/user_photos?user_id=eq.${userId}&stored_file_name=like.${encodeURIComponent(`notion:${notionPageId}:%`)}`,
     { method: "DELETE" },
@@ -1184,11 +1355,16 @@ async function syncUserPhotosWithSupabase(userId, notionPageId, photos) {
 
   if (photos.length === 0) return;
 
-  const rows = await supabaseRest("/user_photos?select=*", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify(photos.map((photo, index) => toSupabasePhotoPayload(userId, notionPageId, photo, index))),
-  });
+  const rows = [];
+  for (const [index, photo] of photos.entries()) {
+    const deliveryUrl = await cacheNotionPhotoDeliveryUrl(notionPageId, photo, index);
+    const [row] = await supabaseRest("/user_photos?select=*", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(toSupabasePhotoPayload(userId, notionPageId, photo, index, deliveryUrl)),
+    });
+    rows.push(row);
+  }
   const mainPhoto = rows[0];
 
   await supabaseRest(`/users?id=eq.${userId}`, {
@@ -1197,14 +1373,44 @@ async function syncUserPhotosWithSupabase(userId, notionPageId, photos) {
   });
 }
 
-function toPrismaPhotoPayload(userId, notionPageId, photo, index) {
+async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
+  const sourceUrl = photo.url;
+  if (!sourceUrl) return null;
+
+  if (!isCloudflareImagesConfigured()) {
+    throw new Error(
+      "Cloudflare Images is not configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_IMAGES_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID.",
+    );
+  }
+
+  const storedFileName = `notion:${notionPageId}:${index}`;
+  const deliveryUrl = await ensureCloudflareCachedImage({
+    customId: storedFileName,
+    sourceUrl,
+    fileName: photo.name,
+    metadata: {
+      notionPageId,
+      index: String(index),
+      originalFileName: photo.name,
+    },
+  });
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images upload failed for ${photo.name}`);
+  }
+  return deliveryUrl;
+}
+
+function toPrismaPhotoPayload(userId, notionPageId, photo, index, deliveryUrl = null) {
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images delivery URL is required for ${photo.name}`);
+  }
   return {
     userId,
     photoType: "PROFILE",
     originalFileName: photo.name,
     storedFileName: `notion:${notionPageId}:${index}`,
     filePath: photo.url,
-    fileUrl: photo.url,
+    fileUrl: deliveryUrl,
     mimeType: mimeTypeForName(photo.name),
     fileSizeBytes: BigInt(0),
     sortOrder: index,
@@ -1212,14 +1418,17 @@ function toPrismaPhotoPayload(userId, notionPageId, photo, index) {
   };
 }
 
-function toSupabasePhotoPayload(userId, notionPageId, photo, index) {
+function toSupabasePhotoPayload(userId, notionPageId, photo, index, deliveryUrl = null) {
+  if (!deliveryUrl) {
+    throw new Error(`Cloudflare Images delivery URL is required for ${photo.name}`);
+  }
   return {
     user_id: userId,
     photo_type: "PROFILE",
     original_file_name: photo.name,
     stored_file_name: `notion:${notionPageId}:${index}`,
     file_path: photo.url,
-    file_url: photo.url,
+    file_url: deliveryUrl,
     mime_type: mimeTypeForName(photo.name),
     file_size_bytes: 0,
     sort_order: index,

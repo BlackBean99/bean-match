@@ -223,6 +223,7 @@ async function parsePhotoForm(userId: bigint, formData: FormData) {
     filePath: uploadedPhoto?.filePath,
     mimeType: uploadedPhoto?.mimeType,
     fileSizeBytes: uploadedPhoto?.fileSizeBytes,
+    cloudflareImageId: uploadedPhoto?.cloudflareImageId ?? null,
     sortOrder: readNumber(formData, "sortOrder") ?? 0,
     isMain: formData.get("isMain") === "on",
   };
