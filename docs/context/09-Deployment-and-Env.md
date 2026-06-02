@@ -54,6 +54,7 @@
 
 ### 3.6 GitHub Actions CD
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
+- 그 workflow는 배포 전에 `wrangler pages secret bulk` 로 GitHub Secrets를 Cloudflare Pages project secrets로 동기화합니다. 즉, `NOTION_SYNC_GITHUB_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NOTION_TOKEN`, `CLOUDFLARE_API_TOKEN` 같은 값은 GitHub Secrets에만 넣고, workflow가 Pages 런타임에 주입합니다.
 - `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare Pages의 운영 버튼은 production에서 이 workflow를 dispatch합니다.
 - GitHub Secrets에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 를 넣습니다.
 - Cloudflare Images를 쓰려면 Pages/앱 런타임과 GitHub Actions sync job에 `CLOUDFLARE_API_TOKEN` 또는 `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
