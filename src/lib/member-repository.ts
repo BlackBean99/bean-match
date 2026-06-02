@@ -232,7 +232,7 @@ async function getMemberDashboardDataFromPrisma(
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
+        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -319,7 +319,11 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhotoByUserId.get(user.id)?.file_url, mainPhotoByUserId.get(user.id)?.id),
+        mainPhotoUrl: photoDeliveryOrProxyUrl(
+          mainPhotoByUserId.get(user.id)?.file_url,
+          mainPhotoByUserId.get(user.id)?.file_path,
+          mainPhotoByUserId.get(user.id)?.id,
+        ),
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
@@ -443,11 +447,11 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.id),
+      mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
-        url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.id) ?? "",
+        url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
         sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl) ?? "",
         originalFileName: photo.originalFileName,
         isMain: photo.isMain,
@@ -489,7 +493,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.file_url, mainPhoto?.id),
+    mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.file_url, mainPhoto?.file_path, mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -1241,7 +1245,7 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
   return {
     id: photo.id,
-    url: photoDeliveryOrProxyUrl(photo.file_url, photo.id) ?? "",
+    url: photoDeliveryOrProxyUrl(photo.file_url, photo.file_path, photo.id) ?? "",
     sourceUrl: photoSourceUrl(photo.file_path, photo.file_url) ?? "",
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
@@ -1347,8 +1351,13 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
   return photoId === null || photoId === undefined ? undefined : `/api/photos/${photoId.toString()}`;
 }
 
-function photoDeliveryOrProxyUrl(fileUrl: string | null | undefined, photoId: bigint | number | null | undefined) {
+function photoDeliveryOrProxyUrl(
+  fileUrl: string | null | undefined,
+  filePath: string | null | undefined,
+  photoId: bigint | number | null | undefined,
+) {
   if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
+  if (filePath && isUsableImageUrl(filePath)) return filePath;
   return photoDisplayUrl(photoId);
 }
 
@@ -1448,7 +1457,7 @@ async function retryCloudflareFromNotionSource(
     return freshUrl;
   }
 
-  return notionSourceUrl;
+  return null;
 }
 
 async function resolveNotionPhotoSourceUrl(storedFileName: string) {
