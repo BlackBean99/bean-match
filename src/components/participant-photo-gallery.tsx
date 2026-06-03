@@ -46,32 +46,61 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
 
   return (
     <>
-      <button
-        type="button"
-        onClick={(event) => {
-          blockCardSelection(event);
-          setIsViewerOpen(true);
-        }}
-        className="relative block h-full w-full overflow-hidden rounded-md"
-      >
-        <Image
-          src={selectedPhoto.url}
-          alt={`${name} 사진 ${selectedIndex + 1}`}
-          fill
-          sizes="(max-width: 640px) 116px, 144px"
-          className="object-cover"
-          unoptimized
-        />
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md">
+        <button
+          type="button"
+          onClick={(event) => {
+            blockCardSelection(event);
+            setIsViewerOpen(true);
+          }}
+          className="relative block h-full w-full overflow-hidden rounded-md"
+        >
+          <Image
+            src={selectedPhoto.url}
+            alt={`${name} 사진 ${selectedIndex + 1}`}
+            fill
+            sizes="(max-width: 640px) 116px, 144px"
+            className="object-cover"
+            unoptimized
+          />
+          {galleryPhotos.length > 1 ? (
+            <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
+              {selectedIndex + 1}/{galleryPhotos.length}
+            </span>
+          ) : (
+            <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
+              사진 보기
+            </span>
+          )}
+        </button>
+
         {galleryPhotos.length > 1 ? (
-          <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-            {selectedIndex + 1}/{galleryPhotos.length}
-          </span>
-        ) : (
-          <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-            사진 보기
-          </span>
-        )}
-      </button>
+          <>
+            <button
+              type="button"
+              aria-label="이전 사진"
+              onClick={(event) => {
+                blockCardSelection(event);
+                setSelectedIndex((selectedIndex - 1 + galleryPhotos.length) % galleryPhotos.length);
+              }}
+              className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white shadow-sm"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="다음 사진"
+              onClick={(event) => {
+                blockCardSelection(event);
+                setSelectedIndex((selectedIndex + 1) % galleryPhotos.length);
+              }}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white shadow-sm"
+            >
+              ›
+            </button>
+          </>
+        ) : null}
+      </div>
 
       {galleryPhotos.length > 1 ? (
         <div className="mt-2 flex gap-1 overflow-x-auto pb-1">

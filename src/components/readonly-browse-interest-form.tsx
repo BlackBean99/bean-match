@@ -113,8 +113,8 @@ export function ReadOnlyBrowseInterestForm({
                         : "border-[#ece7e4] bg-white hover:border-[#f3d8c1]"
                     }`}
                   >
-                    <div className="self-start overflow-hidden rounded-[22px] border border-[#ede7df] bg-[#f6f3ef]">
-                      <div className="relative aspect-[3/4] w-full min-w-[148px]">
+                    <div className="self-start rounded-[22px] border border-[#ede7df] bg-[#f6f3ef] p-2">
+                      <div className="w-full min-w-[148px]">
                         <ParticipantPhotoGallery
                           name={candidate.name}
                           photos={candidate.photos}

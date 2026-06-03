@@ -15,10 +15,6 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!isOpsAuthConfigured()) {
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.next();
-    }
-
     const lockedUrl = new URL("/admin-access", request.url);
     lockedUrl.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(lockedUrl);
