@@ -116,13 +116,13 @@ export type ReadOnlyBrowseTokenManagerData = {
 };
 
 export type CreateReadOnlyBrowseTokenResult = {
-  accessUrl: string;
+  accessPath: string;
   rawToken: string;
   token: ReadOnlyBrowseTokenSummary;
 };
 
 export function getReadOnlyBrowseAccessPath(userId: bigint | number | string) {
-  return `/readonly/pool/${userId.toString()}`;
+  return `/offer/pool/${userId.toString()}`;
 }
 
 export function buildReadOnlyBrowseAccessUrl(userId: bigint | number | string) {
@@ -221,7 +221,7 @@ export async function createReadOnlyBrowseToken(
 
   const summary = toReadOnlyBrowseTokenSummary(toTokenRecord(token));
   return {
-    accessUrl: buildReadOnlyBrowseAccessUrl(userId),
+    accessPath: getReadOnlyBrowseAccessPath(userId),
     rawToken,
     token: summary,
   };

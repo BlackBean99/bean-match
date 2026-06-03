@@ -15,6 +15,7 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { IntroCaseCreateForm } from "@/components/intro-case-create-form";
 import { MatchNetworkDashboard } from "@/components/match-network-dashboard";
 import { NavigationSubmitButton } from "@/components/navigation-submit-button";
+import { OfferLinkQuickActions } from "@/components/offer-link-quick-actions";
 import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import {
   activeIntroStatuses,
@@ -483,7 +484,7 @@ function MemberTable({
               <th className="w-32 px-3 py-3">상태</th>
               <th className="w-36 px-3 py-3">역할</th>
               <th className="px-3 py-3">소개 / 이상형</th>
-              <th className="w-32 px-3 py-3">관리</th>
+              <th className="w-48 px-3 py-3">관리</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
@@ -577,32 +578,35 @@ function MemberRow({
       </td>
       <td className="px-3 py-2">
         {editable ? (
-          <div className="flex items-center gap-3">
-            <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
-              자세히
-            </Link>
-            <details className="relative w-14">
-              <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
-              <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
-                <FormPendingFieldset className="grid gap-3">
-                  <input type="hidden" name="id" value={user.id} />
-                  <MemberFields user={user} compact />
-                  <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
-                </FormPendingFieldset>
-              </form>
-              {allowDelete ? (
-                <form action={deleteMemberAction} className="mt-2">
-                  <FormPendingFieldset className="contents">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
+                자세히
+              </Link>
+              <details className="relative w-14">
+                <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
+                <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+                  <FormPendingFieldset className="grid gap-3">
                     <input type="hidden" name="id" value={user.id} />
-                    <FormSubmitButton
-                      label="삭제"
-                      pendingLabel="삭제 중..."
-                      className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                    />
+                    <MemberFields user={user} compact />
+                    <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
                   </FormPendingFieldset>
                 </form>
-              ) : null}
-            </details>
+                {allowDelete ? (
+                  <form action={deleteMemberAction} className="mt-2">
+                    <FormPendingFieldset className="contents">
+                      <input type="hidden" name="id" value={user.id} />
+                      <FormSubmitButton
+                        label="삭제"
+                        pendingLabel="삭제 중..."
+                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                      />
+                    </FormPendingFieldset>
+                  </form>
+                ) : null}
+              </details>
+            </div>
+            <OfferLinkQuickActions userId={user.id} />
           </div>
         ) : (
           <span className="text-xs font-semibold text-zinc-400">열람 전용</span>

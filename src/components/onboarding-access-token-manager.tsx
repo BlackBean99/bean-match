@@ -18,6 +18,7 @@ import {
   adminTablePanelClassName,
 } from "@/components/admin-ui";
 import type { OnboardingAccessTokenSummary } from "@/lib/onboarding-access-repository";
+import { ResolvedUrlText } from "@/components/resolved-url-text";
 
 type OnboardingAccessTokenManagerProps = {
   databaseConnected: boolean;
@@ -127,7 +128,7 @@ export function OnboardingAccessTokenManager({
             <div className="grid gap-3 rounded-2xl border border-emerald-100 bg-white px-4 py-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Access URL</p>
-                <p className="mt-2 break-all text-sm text-zinc-800">{state.createdToken.accessUrl}</p>
+                <ResolvedUrlText url={state.createdToken.accessUrl} className="mt-2 break-all text-sm text-zinc-800" />
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Token</p>

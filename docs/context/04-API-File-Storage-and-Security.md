@@ -43,7 +43,7 @@
 - `GET /invite/{invitorId}` : 모집인 초대 링크. 자동 노출 참여 진입 폼에 `invitorId`를 전달한다.
 - `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 자동 노출 참여 진입 URL
 - `GET /pool/{userId}` : 참가자 개인 풀 URL. 신규 가입자는 브라우징 관심을 제출하고, 기존 회원은 새 멤버 알림을 확인한다.
-- `GET /readonly/pool/{userId}` : 관리자 발급 리드 온리 토큰으로만 접근 가능한 읽기 전용 후보 열람 URL
+- `GET /offer/pool/{userId}` : 관리자 발급 토큰으로만 접근 가능한 외부 오퍼 후보 열람 URL
 - `POST /pool/{userId}/browse-interests` : 신규 가입자가 최대 3명의 관심을 제출한다. 현재 구현은 Server Action을 사용한다.
 - `POST /pool/{userId}/broadcast-interests` : 기존 회원이 새 멤버 알림 카드에 관심을 표시한다. 현재 구현은 Server Action을 사용한다.
 - `GET /rounds` : 관리자 자동 노출 운영 화면
@@ -114,8 +114,9 @@
 ### 5.1 접근 제어
 - 운영자만 전체 사용자 조회 가능
 - 사용자는 본인 프로필만 수정 가능
-- `/readonly/pool/{userId}` 는 관리자 발급 토큰이 유효할 때만 접근 가능해야 한다.
-- 리드 온리 토큰은 사용자별로 발급하고, 서버에는 원문 대신 해시만 저장한다.
+- `/offer/pool/{userId}` 는 관리자 발급 토큰이 유효할 때만 접근 가능해야 한다.
+- `/offer/*`, `/invite/{invitorId}`, `/onboarding/access/{token}`, `/api/photos/*` 를 제외한 운영 경로는 접근 코드로 보호해야 한다.
+- 오퍼 토큰은 사용자별로 발급하고, 서버에는 원문 대신 해시만 저장한다.
 - 연락처는 `CONNECTED` 전까지 비공개 정책을 권장
 
 ### 5.2 업로드 보안
@@ -166,7 +167,7 @@
 5. 상호 관심이 생기면 `IntroCandidate` 를 생성하고 즉시 `IntroCase` 로 연결하지 않음
 6. 관심 데이터는 `ACTIVE/WITHDRAWN/EXPIRED/CONVERTED_TO_INTRO` 상태로만 갱신
 
-### 읽기 전용 후보 열람
+### 오퍼 후보 열람
 1. `read_only_browse_tokens` 에 저장된 해시 기준으로 토큰을 검증
 2. 만료되었거나 해제된 토큰은 거절
 3. 토큰이 유효하면 본인과 같은 성별을 제외한 후보만 노출

@@ -17,23 +17,19 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
-import { getAppBaseUrl } from "@/lib/runtime-env";
 
 type UserDetailProps = {
   onboardingAccessTokenManager: OnboardingAccessTokenManagerData;
   readOnlyTokenManager: ReadOnlyBrowseTokenManagerData;
-  readOnly?: boolean;
   user: DashboardUserDetail;
 };
 
 export function UserDetail({
   onboardingAccessTokenManager,
-  readOnly = false,
   user,
   readOnlyTokenManager,
 }: UserDetailProps) {
-  const baseUrl = getAppBaseUrl();
-  const accessUrl = `${baseUrl}${readOnlyTokenManager.accessPath}`;
+  const accessUrl = readOnlyTokenManager.accessPath;
 
   return (
     <div className="grid gap-6">
@@ -54,19 +50,9 @@ export function UserDetail({
                 {user.companyName ? ` · ${user.companyName}` : ""}
               </p>
               <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
-              {readOnly ? (
-                <p className="mt-2 inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
-                  열람 전용
-                </p>
-              ) : null}
             </div>
             <StatusBadge status={user.status} />
           </div>
-          {readOnly ? (
-            <p className="mt-4 rounded-[20px] border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              모집인 전용 프로필은 열람만 가능하며, 정보 수정과 사진 편집은 할 수 없습니다.
-            </p>
-          ) : null}
           <div className="mt-5 space-y-4 text-sm leading-6 text-zinc-700">
             <ProfileText label="자기소개" value={user.selfIntro} />
             <ProfileText label="이상형" value={user.idealTypeDescription} />
@@ -94,38 +80,34 @@ export function UserDetail({
             </span>
           </div>
 
-          {!readOnly ? <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} /> : null}
+          <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} />
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {user.photos.length === 0 ? (
               <p className="rounded-[24px] border border-[#ece7e4] p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
             ) : (
-              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={readOnly} userId={user.id} photo={photo} />)
+              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={false} userId={user.id} photo={photo} />)
             )}
           </div>
         </section>
       </div>
 
-      {readOnly ? null : (
-        <>
-          <OnboardingAccessTokenManager
-            databaseConnected={onboardingAccessTokenManager.databaseConnected}
-            loadError={onboardingAccessTokenManager.loadError}
-            tokens={onboardingAccessTokenManager.tokens}
-            userId={user.id}
-            userName={user.name}
-          />
+      <OnboardingAccessTokenManager
+        databaseConnected={onboardingAccessTokenManager.databaseConnected}
+        loadError={onboardingAccessTokenManager.loadError}
+        tokens={onboardingAccessTokenManager.tokens}
+        userId={user.id}
+        userName={user.name}
+      />
 
-          <ReadOnlyTokenManager
-            accessUrl={accessUrl}
-            databaseConnected={readOnlyTokenManager.databaseConnected}
-            loadError={readOnlyTokenManager.loadError}
-            tokens={readOnlyTokenManager.tokens}
-            userId={user.id}
-            userName={user.name}
-          />
-        </>
-      )}
+      <ReadOnlyTokenManager
+        accessUrl={accessUrl}
+        databaseConnected={readOnlyTokenManager.databaseConnected}
+        loadError={readOnlyTokenManager.loadError}
+        tokens={readOnlyTokenManager.tokens}
+        userId={user.id}
+        userName={user.name}
+      />
     </div>
   );
 }

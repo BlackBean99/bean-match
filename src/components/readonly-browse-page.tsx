@@ -40,7 +40,7 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#E00E0E]">Blackbean Match</p>
-              <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950">이성 프로필 둘러보기</h1>
+              <h1 className="mt-3 text-3xl font-black tracking-[-0.04em] text-zinc-950">오퍼 프로필 둘러보기</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
                 마음에 드는 사람을 모두 살펴보고 선택해 주세요. 연락처는 연결되기 전까지 공개되지 않습니다.
               </p>
