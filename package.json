@@ -6,6 +6,7 @@
     "build": "node scripts/build.mjs",
     "dev": "next dev",
     "postbuild": "node scripts/fix-next-server-chunks.mjs && node scripts/verify-next-server-bundle.mjs",
+    "postinstall": "prisma generate",
     "start": "next start",
     "env:check": "node scripts/check-env.mjs",
     "pretypecheck": "npm run prisma:generate",
