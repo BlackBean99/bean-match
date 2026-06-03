@@ -25,13 +25,13 @@ async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
   if (!url) return photoFallbackResponse(headOnly);
 
   const response = NextResponse.redirect(url, 307);
-  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("Cache-Control", "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
   return response;
 }
 
 function photoFallbackResponse(headOnly: boolean) {
   const headers = new Headers();
-  headers.set("Cache-Control", "private, no-store");
+  headers.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
   headers.set("Content-Type", "image/svg+xml; charset=utf-8");
 
   return new NextResponse(headOnly ? null : fallbackSvg, {

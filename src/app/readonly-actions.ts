@@ -87,6 +87,7 @@ export async function revokeReadOnlyBrowseTokenAction(formData: FormData) {
 }
 
 export async function createQuickOfferClipboardAction(userId: number) {
+  const expiresAt = oneWeekFromNow();
   const createdToken = await createReadOnlyBrowseToken(BigInt(userId), {
     label: `회원 관리 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
       month: "2-digit",
@@ -95,13 +96,14 @@ export async function createQuickOfferClipboardAction(userId: number) {
       minute: "2-digit",
       hour12: false,
     }).format(new Date())}`,
-    expiresAt: null,
+    expiresAt,
   });
 
   revalidatePath(`/users/${userId}`);
 
   return {
     accessPath: createdToken.accessPath,
+    expiresAtIso: expiresAt.toISOString(),
     rawToken: createdToken.rawToken,
   };
 }
@@ -226,4 +228,10 @@ function parseExpiryDate(value: string | null) {
     throw new Error("만료일 형식이 올바르지 않습니다.");
   }
   return parsed;
+}
+
+function oneWeekFromNow() {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+  return expiresAt;
 }

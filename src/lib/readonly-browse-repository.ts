@@ -13,8 +13,8 @@ import {
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
-import { isCloudflareDeliveryUrl } from "@/lib/cloudflare-images";
 import { MAX_NEW_USER_MARKS } from "@/lib/auto-exposure-repository";
+import { toDashboardPhotoLike } from "@/lib/member-repository";
 
 const READ_ONLY_BROWSE_TOKEN_PREFIX = "bbro_";
 const READ_ONLY_BROWSE_TOUCH_WINDOW_MS = 15 * 60 * 1000;
@@ -511,15 +511,17 @@ async function getPhotosByUserIds(userIds: bigint[]) {
   for (const photo of photoRecords) {
     const photoRow = toUserPhotoRecord(photo);
     const bucket = photosByUserId.get(photoRow.userId) ?? [];
-    bucket.push({
-      id: photoRow.id,
-      url: (photoRow.fileUrl && isCloudflareDeliveryUrl(photoRow.fileUrl) ? photoRow.fileUrl : photoDisplayUrl(photoRow.id)) ?? "",
-      sourceUrl: photoSourceUrl(photoRow.filePath, photoRow.fileUrl),
-      originalFileName: photoRow.originalFileName,
-      isMain: photoRow.isMain,
-      sortOrder: photoRow.sortOrder,
-      uploadedAt: formatShortDateTime(photoRow.uploadedAt),
-    });
+    bucket.push(
+      toDashboardPhotoLike({
+        id: photoRow.id,
+        fileUrl: photoRow.fileUrl,
+        filePath: photoRow.filePath,
+        originalFileName: photoRow.originalFileName,
+        isMain: photoRow.isMain,
+        sortOrder: photoRow.sortOrder,
+        uploadedAt: photoRow.uploadedAt,
+      }),
+    );
     photosByUserId.set(photoRow.userId, bucket);
   }
 
@@ -604,27 +606,6 @@ function formatShortDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function photoDisplayUrl(photoId: number) {
-  return `/api/photos/${photoId}`;
-}
-
-function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
-  if (isUsablePhotoSource(filePath)) return filePath ?? "";
-  if (isCloudflareDeliveryUrl(fileUrl)) return fileUrl ?? "";
-  return "";
-}
-
-function isUsablePhotoSource(url: string | null | undefined) {
-  if (!url) return false;
-
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
-  } catch {
-    return false;
-  }
 }
 
 function toTokenRecord(
