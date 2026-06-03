@@ -53,11 +53,11 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
-      - name: Sync Pages secrets from GitHub Secrets
+      - name: Sync Worker secrets from GitHub Secrets
         shell: bash
         env:
-          # Cloudflare Pages project name, not wrangler.jsonc worker name.
-          PAGES_PROJECT_NAME: blackbean-match
+          # Cloudflare Worker name, not Pages project name.
+          WORKER_NAME: blackbean-match
         run: |
           secret_file="$(mktemp)"
           cleanup() {
@@ -135,7 +135,7 @@ jobs:
             exit 1
           fi
 
-          npx wrangler pages secret bulk "$secret_file" --project-name "$PAGES_PROJECT_NAME"
+          npx wrangler versions secret bulk "$secret_file" --name "$WORKER_NAME"
 
       - name: Build and deploy to Cloudflare
         run: npm run deploy
