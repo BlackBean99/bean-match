@@ -1,4 +1,5 @@
 import { getRuntimeEnv, isCloudflareRuntime } from "@/lib/runtime-env";
+import { createRequire } from "node:module";
 
 export type MigrationState = {
   status: "idle" | "success" | "error" | "queued";
@@ -25,7 +26,7 @@ type GitHubWorkflowRun = {
 
 export async function runNotionMigration(): Promise<MigrationState> {
   const env = getRuntimeEnv();
-  const runtime = isCloudflareRuntime() ? "cloudflare" : "node";
+  const runtime = isCloudflarePagesRuntime(env) ? "cloudflare" : "node";
   logMigrationEnvironment(runtime, env);
 
   if (runtime === "cloudflare") {
@@ -33,9 +34,8 @@ export async function runNotionMigration(): Promise<MigrationState> {
   }
 
   try {
-    const require = eval("require") as NodeRequire;
-    const { execFile } = require("child_process") as typeof import("child_process");
-    const { promisify } = require("util") as typeof import("util");
+    const { execFile } = createRequire(import.meta.url)("node:child_process") as typeof import("child_process");
+    const { promisify } = createRequire(import.meta.url)("node:util") as typeof import("util");
     const execFileAsync = promisify(execFile);
     const { stdout } = await execFileAsync("node", ["scripts/sync-notion-to-supabase.mjs", "--write"], {
       cwd: process.cwd(),
@@ -153,6 +153,10 @@ function getNotionSyncWorkflowSettings(env: ReturnType<typeof getRuntimeEnv>): N
     workflow: env.NOTION_SYNC_GITHUB_WORKFLOW || "notion-sync.yml",
     ref: env.NOTION_SYNC_GITHUB_REF || "main",
   };
+}
+
+function isCloudflarePagesRuntime(env: ReturnType<typeof getRuntimeEnv>) {
+  return Boolean(env.CF_PAGES || env.CF_PAGES_URL || env.CF_PAGES_BRANCH || isCloudflareRuntime());
 }
 
 async function dispatchNotionSyncWorkflow(settings: NotionSyncWorkflowSettings): Promise<MigrationState> {
