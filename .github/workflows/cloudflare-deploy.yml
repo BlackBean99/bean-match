@@ -30,7 +30,6 @@ jobs:
       NOTION_USERS_DATABASE_ID: ${{ secrets.NOTION_USERS_DATABASE_ID }}
       NOTION_INVITOR_DATA_SOURCE_ID: ${{ secrets.NOTION_INVITOR_DATA_SOURCE_ID }}
       NOTION_MATCHING_HISTORY_DATA_SOURCE_ID: ${{ secrets.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID }}
-      NOTION_SYNC_GITHUB_TOKEN: ${{ secrets.NOTION_SYNC_GITHUB_TOKEN }}
       CLOUDFLARE_IMAGES_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_IMAGES_ACCOUNT_ID }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -53,11 +52,11 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
-      - name: Sync Pages secrets from GitHub Secrets
+      - name: Sync Worker secrets from GitHub Secrets
         shell: bash
         env:
-          # Cloudflare Pages project name, not wrangler.jsonc worker name.
-          PAGES_PROJECT_NAME: bean-match-admin
+          # Cloudflare Worker name, not Pages project name.
+          WORKER_NAME: blackbean-match
         run: |
           secret_file="$(mktemp)"
           cleanup() {
@@ -92,7 +91,6 @@ jobs:
             fi
           }
 
-          require_value NOTION_SYNC_GITHUB_TOKEN "$NOTION_SYNC_GITHUB_TOKEN"
           require_value NOTION_TOKEN "$NOTION_TOKEN"
           require_value SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
@@ -105,10 +103,6 @@ jobs:
             fi
           }
 
-          append_secret NOTION_SYNC_GITHUB_TOKEN "$NOTION_SYNC_GITHUB_TOKEN"
-          append_secret NOTION_SYNC_GITHUB_REPOSITORY "$NOTION_SYNC_GITHUB_REPOSITORY"
-          append_secret NOTION_SYNC_GITHUB_WORKFLOW "$NOTION_SYNC_GITHUB_WORKFLOW"
-          append_secret NOTION_SYNC_GITHUB_REF "$NOTION_SYNC_GITHUB_REF"
           append_secret SUPABASE_URL "$SUPABASE_URL"
           append_secret NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
           append_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
@@ -134,7 +128,7 @@ jobs:
             exit 1
           fi
 
-          npx wrangler pages secret bulk "$secret_file" --project-name "$PAGES_PROJECT_NAME"
+          npx wrangler versions secret bulk "$secret_file" --name "$WORKER_NAME"
 
       - name: Build and deploy to Cloudflare
         run: npm run deploy
