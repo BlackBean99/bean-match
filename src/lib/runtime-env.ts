@@ -8,7 +8,15 @@ export function getRuntimeEnv(): RuntimeEnv {
 }
 
 export function isCloudflareRuntime() {
-  return Boolean(getCloudflareEnv());
+  const env = process.env;
+  return Boolean(
+    getCloudflareEnv() ||
+      env.CF_PAGES ||
+      env.CF_PAGES_URL ||
+      env.CF_PAGES_BRANCH ||
+      env.CLOUDFLARE_ACCOUNT_ID ||
+      env.CLOUDFLARE_IMAGES_ACCOUNT_ID,
+  );
 }
 
 export function getAppBaseUrl() {
@@ -27,7 +35,12 @@ export function getSupabaseServerKey() {
 }
 
 export function hasDatabaseUrl() {
-  return Boolean(getRuntimeEnv().DATABASE_URL);
+  return canUsePrismaRuntime();
+}
+
+export function canUsePrismaRuntime() {
+  const env = getRuntimeEnv();
+  return Boolean(env.DATABASE_URL) && !isCloudflareRuntime();
 }
 
 export function getCloudflareImagesToken() {

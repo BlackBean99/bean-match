@@ -7,7 +7,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
-const prisma = createPrismaClient();
+const prisma = canUsePrismaRuntime() ? new PrismaClient() : null;
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2022-06-28";
 const NOTION_TOKEN = requiredEnv("NOTION_TOKEN");
 const MAIN_DATA_SOURCE_ID =
@@ -1477,6 +1477,17 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
+}
+
+function canUsePrismaRuntime() {
+  return Boolean(process.env.DATABASE_URL) && !isCloudflareRuntime();
+}
+
+function isCloudflareRuntime() {
+  return (
+    Boolean(process.env.CF_PAGES || process.env.CF_PAGES_URL || process.env.CF_PAGES_BRANCH) ||
+    typeof WebSocketPair === "function"
+  );
 }
 
 function loadEnvFile(path) {

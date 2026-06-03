@@ -114,7 +114,7 @@ Apply changes:
 npm run sync:notion -- --write
 ```
 
-Operators can also run the same write sync from the admin web UI with the header `동기화` button. The button now starts the sync job in the app runtime, tracks the actual phase/progress returned by the sync runner, and refreshes the users/matches views after the job finishes.
+Operators can also run the same write sync from the admin web UI with the header `동기화` button. In local Node environments, the button executes `scripts/sync-notion-to-supabase.mjs --write` directly; in Cloudflare Pages production, runtime data access should use the Supabase REST credentials (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) instead of a Prisma `DATABASE_URL`.
 
 The sync runner is shared with the CLI script `scripts/sync-notion-to-supabase.mjs --write`, so local Node usage and the deployed app use the same sync logic and the same progress states.
 

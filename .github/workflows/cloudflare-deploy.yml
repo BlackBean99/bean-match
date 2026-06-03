@@ -92,7 +92,7 @@ jobs:
           }
 
           require_value NOTION_TOKEN "$NOTION_TOKEN"
-          require_one_of "SUPABASE_SERVICE_ROLE_KEY or DATABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$DATABASE_URL"
+          require_value SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
 
           append_secret() {
@@ -107,7 +107,6 @@ jobs:
           append_secret NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
           append_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
           append_secret NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          append_secret DATABASE_URL "$DATABASE_URL"
           append_secret NOTION_TOKEN "$NOTION_TOKEN"
           append_secret NOTION_API_VERSION "$NOTION_API_VERSION"
           append_secret NOTION_MAIN_DATA_SOURCE_ID "$NOTION_MAIN_DATA_SOURCE_ID"
