@@ -180,6 +180,7 @@ async function dispatchNotionSyncWorkflow(settings: NotionSyncWorkflowSettings):
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          "User-Agent": "blackbean-match/1.0",
           "X-GitHub-Api-Version": "2022-11-28",
         },
         body: JSON.stringify({ ref }),
@@ -219,6 +220,7 @@ async function fetchLatestNotionSyncRun(settings: NotionSyncWorkflowSettings): P
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${settings.token}`,
+        "User-Agent": "blackbean-match/1.0",
         "X-GitHub-Api-Version": "2022-11-28",
       },
     },
