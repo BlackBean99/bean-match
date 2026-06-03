@@ -56,7 +56,8 @@ jobs:
       - name: Sync Pages secrets from GitHub Secrets
         shell: bash
         env:
-          PAGES_PROJECT_NAME: bean-match
+          # Cloudflare Pages project name, not wrangler.jsonc worker name.
+          PAGES_PROJECT_NAME: match-admin
         run: |
           secret_file="$(mktemp)"
           cleanup() {

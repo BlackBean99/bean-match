@@ -53,7 +53,12 @@ Conventional Commits 사용.
 - migration risk label 없음
 - security review 필요 label 없음
 
-## 4. Auto Merge 금지 조건
+## 4. PR 완료 기준
+- 모든 개발 변경은 PR 생성이 완료되어야 작업 종료로 본다.
+- 에이전트는 사용자 요청이 있으면 스스로 PR을 생성할 수 있다.
+- PR 본문은 Summary, Changes, Domain Impact, Validation, Risk, Rollback을 포함한다.
+
+## 5. Auto Merge 금지 조건
 아래 항목이 있으면 사람 승인 전 merge 금지
 - `breaking-change`
 - `db-destructive`
