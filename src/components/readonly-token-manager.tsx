@@ -17,6 +17,7 @@ import {
   adminSecondaryButtonClassName,
   adminTablePanelClassName,
 } from "@/components/admin-ui";
+import { ResolvedUrlText } from "@/components/resolved-url-text";
 import type { ReadOnlyBrowseTokenSummary } from "@/lib/readonly-browse-repository";
 
 type ReadOnlyTokenManagerProps = {
@@ -59,12 +60,13 @@ export function ReadOnlyTokenManager({
             </p>
           </div>
           <div className="rounded-[24px] border border-[#ffd5df] bg-[#fff7fa] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#e63a68]">Access URL</p>
-            <p className="mt-2 break-all text-sm font-semibold text-zinc-700">{accessUrl}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#e63a68]">Offer URL</p>
+            <ResolvedUrlText url={accessUrl} className="mt-2 break-all text-sm font-semibold text-zinc-700" />
             <div className="mt-3 flex flex-wrap gap-2">
               <CopyLinkButton
                 url={accessUrl}
                 className={adminPrimaryButtonClassName}
+                idleLabel="오퍼 링크 복사"
               />
               <span className="inline-flex items-center rounded-2xl border border-[#ffd5df] bg-white px-3 text-xs font-semibold text-zinc-500">
                 Token required
@@ -138,8 +140,9 @@ export function ReadOnlyTokenManager({
                   className={adminPrimaryButtonClassName}
                 />
                 <CopyLinkButton
-                  url={state.createdToken.accessUrl}
+                  url={state.createdToken.accessPath}
                   className={adminSecondaryButtonClassName}
+                  idleLabel="오퍼 링크 복사"
                 />
               </div>
             </div>

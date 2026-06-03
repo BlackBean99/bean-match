@@ -15,7 +15,7 @@ import { submitBrowseInterests } from "@/lib/auto-exposure-repository";
 export type CreateReadOnlyBrowseTokenActionState = {
   createdToken:
     | {
-        accessUrl: string;
+        accessPath: string;
         expiresAt: string | null;
         label: string;
         rawToken: string;
@@ -57,7 +57,7 @@ export async function createReadOnlyBrowseTokenWithStateAction(
 
     return {
       createdToken: {
-        accessUrl: createdToken.accessUrl,
+        accessPath: createdToken.accessPath,
         expiresAt: createdToken.token.expiresAt,
         label: createdToken.token.label,
         rawToken: createdToken.rawToken,
@@ -86,6 +86,26 @@ export async function revokeReadOnlyBrowseTokenAction(formData: FormData) {
   revalidatePath(getReadOnlyBrowseAccessPath(userId));
 }
 
+export async function createQuickOfferClipboardAction(userId: number) {
+  const createdToken = await createReadOnlyBrowseToken(BigInt(userId), {
+    label: `회원 관리 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date())}`,
+    expiresAt: null,
+  });
+
+  revalidatePath(`/users/${userId}`);
+
+  return {
+    accessPath: createdToken.accessPath,
+    rawToken: createdToken.rawToken,
+  };
+}
+
 export async function unlockReadOnlyBrowseAction(
   _prevState: UnlockReadOnlyBrowseActionState,
   formData: FormData,
@@ -112,7 +132,7 @@ export async function unlockReadOnlyBrowseAction(
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: getReadOnlyBrowseAccessPath(userId),
+    path: "/",
     ...(validation.expiresAt ? { expires: validation.expiresAt } : {}),
   });
 
@@ -178,7 +198,7 @@ export async function clearReadOnlyBrowseAccessAction(formData: FormData) {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: getReadOnlyBrowseAccessPath(userId),
+    path: "/",
   });
 
   redirect(getReadOnlyBrowseAccessPath(userId));

@@ -24,7 +24,6 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
     ]);
 
     if (!user) notFound();
-    const readOnly = user.roles.includes("INVITOR") && !user.roles.includes("PARTICIPANT") && !user.roles.includes("ADMIN");
 
     return (
       <AdminShell title={`${user.name} 상세`} description="개인 프로필과 여러 장의 사진을 관리합니다." active="users">
@@ -32,7 +31,6 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
           user={user}
           onboardingAccessTokenManager={onboardingAccessTokenManager}
           readOnlyTokenManager={readOnlyTokenManager}
-          readOnly={readOnly}
         />
       </AdminShell>
     );
