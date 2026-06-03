@@ -117,7 +117,11 @@ export function UsersDashboard({ users, allUsers, canManage = false, databaseCon
       <section className="space-y-5">
         <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
         <MemberCreatePanel disabled={!databaseConnected || !canManage} />
-        <MemberTable users={participantUsers} editable={databaseConnected && canManage} />
+        <MemberTable
+          users={participantUsers}
+          editable={databaseConnected && canManage}
+          canShareOffer={databaseConnected}
+        />
         <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">
             모집인 보기
@@ -129,7 +133,12 @@ export function UsersDashboard({ users, allUsers, canManage = false, databaseCon
             `INVITOR` 역할이 있는 회원은 상태 필터와 무관하게 여기 포함됩니다.
           </p>
           <div className="mt-4">
-            <MemberTable users={invitorUsers} editable={databaseConnected && canManage} allowDelete={false} />
+            <MemberTable
+              users={invitorUsers}
+              editable={databaseConnected && canManage}
+              allowDelete={databaseConnected && canManage}
+              canShareOffer={databaseConnected}
+            />
           </div>
         </details>
       </section>
@@ -461,10 +470,12 @@ function MemberTable({
   users,
   editable,
   allowDelete = editable,
+  canShareOffer = false,
 }: {
   users: DashboardUser[];
   editable: boolean;
   allowDelete?: boolean;
+  canShareOffer?: boolean;
 }) {
   return (
     <AdminTableSection>
@@ -496,7 +507,15 @@ function MemberTable({
                 </td>
               </tr>
             ) : (
-              users.map((user) => <MemberRow key={user.id} user={user} editable={editable} allowDelete={allowDelete} />)
+              users.map((user) => (
+                <MemberRow
+                  key={user.id}
+                  user={user}
+                  editable={editable}
+                  allowDelete={allowDelete}
+                  canShareOffer={canShareOffer}
+                />
+              ))
             )}
           </tbody>
         </table>
@@ -509,10 +528,12 @@ function MemberRow({
   user,
   editable,
   allowDelete = editable,
+  canShareOffer = false,
 }: {
   user: DashboardUser;
   editable: boolean;
   allowDelete?: boolean;
+  canShareOffer?: boolean;
 }) {
   return (
     <tr className="align-middle hover:bg-[#fff7fa]">
@@ -578,36 +599,40 @@ function MemberRow({
         ) : null}
       </td>
       <td className="px-3 py-2">
-        {editable ? (
+        {editable || canShareOffer ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
                 자세히
               </Link>
-              <details className="relative w-14">
-                <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
-                <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
-                  <FormPendingFieldset className="grid gap-3">
-                    <input type="hidden" name="id" value={user.id} />
-                    <MemberFields user={user} compact />
-                    <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
-                  </FormPendingFieldset>
-                </form>
-                {allowDelete ? (
-                  <form action={deleteMemberAction} className="mt-2">
-                    <FormPendingFieldset className="contents">
+              {editable ? (
+                <details className="relative w-14">
+                  <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
+                  <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+                    <FormPendingFieldset className="grid gap-3">
                       <input type="hidden" name="id" value={user.id} />
-                      <FormSubmitButton
-                        label="삭제"
-                        pendingLabel="삭제 중..."
-                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                      />
+                      <MemberFields user={user} compact />
+                      <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
                     </FormPendingFieldset>
                   </form>
-                ) : null}
-              </details>
+                  {allowDelete ? (
+                    <form action={deleteMemberAction} className="mt-2">
+                      <FormPendingFieldset className="contents">
+                        <input type="hidden" name="id" value={user.id} />
+                        <FormSubmitButton
+                          label="삭제"
+                          pendingLabel="삭제 중..."
+                          className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                        />
+                      </FormPendingFieldset>
+                    </form>
+                  ) : null}
+                </details>
+              ) : (
+                <span className="text-xs font-semibold text-zinc-400">열람</span>
+              )}
             </div>
-            <OfferLinkQuickActions userId={user.id} />
+            {canShareOffer ? <OfferLinkQuickActions userId={user.id} /> : null}
           </div>
         ) : (
           <span className="text-xs font-semibold text-zinc-400">열람 전용</span>
