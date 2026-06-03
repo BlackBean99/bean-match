@@ -46,6 +46,15 @@
 - 로컬 개발은 `.env.local`, Pages 배포는 Pages Variables/Secrets를 사용합니다.
 - 배포 URL 생성용 `AUTH_URL` 이 없으면 `CF_PAGES_URL` 또는 로컬 기본값으로 폴백합니다.
 - 사진 조회는 `/api/photos/{photoId}`를 통해 Cloudflare Images delivery URL로 리다이렉트합니다.
+- 운영 로그인은 `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON` 으로 관리합니다.
+- `OPS_AUTH_ACCOUNTS_JSON` 예시:
+  ```json
+  [
+    { "id": "admin01", "name": "Blackbean Admin", "password": "strong-password", "role": "ADMIN" },
+    { "id": "invitor01", "name": "Recruiter One", "password": "strong-password", "role": "INVITOR" }
+  ]
+  ```
+- `ADMIN` 은 편집/삭제/동기화 가능, `INVITOR` 는 운영 화면 read-only 입니다.
 - Cloudflare Pages에서 운영 버튼을 눌러 sync를 실행하면 Functions 로그에 `scope=notion-sync` JSON이 남습니다. 여기서 `cloudflareTokenPresent`, `notionTokenPresent`, `supabaseServiceRoleKeyPresent` 같은 불리언을 확인합니다.
 - Cloudflare 로그는 Pages deployment 상세 화면 또는 `wrangler pages deployment tail` 로 확인합니다.
 

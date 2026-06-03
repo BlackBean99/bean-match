@@ -28,7 +28,9 @@ import {
   type DashboardUser,
 } from "@/lib/domain";
 
-type ExposureDashboardProps = DashboardExposureData;
+type ExposureDashboardProps = DashboardExposureData & {
+  canManage?: boolean;
+};
 
 export function ExposureDashboard({
   users,
@@ -38,6 +40,7 @@ export function ExposureDashboard({
   highDemandUsers,
   noInterestUsers,
   lowExposureUsers,
+  canManage = false,
   databaseConnected,
   loadError,
 }: ExposureDashboardProps) {
@@ -69,10 +72,10 @@ export function ExposureDashboard({
       </AdminMutedSection>
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <QueuePanel queue={queue} users={users} disabled={!databaseConnected} />
+        <QueuePanel queue={queue} users={users} disabled={!databaseConnected || !canManage} />
         <AdminSection className="grid gap-6 p-5">
-          <ManualCandidatePanel users={eligibleUsers} disabled={!databaseConnected} />
-          <ExpireInterestPanel disabled={!databaseConnected} />
+          <ManualCandidatePanel users={eligibleUsers} disabled={!databaseConnected || !canManage} />
+          <ExpireInterestPanel disabled={!databaseConnected || !canManage} />
           <SignalPanel title="과열 사용자" items={highDemandUsers} emptyMessage="과열 사용자 없음" />
           <SignalPanel title="무반응 사용자" items={noInterestUsers} emptyMessage="모든 사용자에 최소 한 번 이상 반응이 있습니다." />
           <SignalPanel title="저노출 사용자" items={lowExposureUsers} emptyMessage="노출이 낮은 사용자가 없습니다." />
@@ -81,7 +84,7 @@ export function ExposureDashboard({
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <InterestTable interests={interests} />
-        <CandidateTable introCandidates={introCandidates} disabled={!databaseConnected} />
+        <CandidateTable introCandidates={introCandidates} disabled={!databaseConnected || !canManage} />
       </section>
     </div>
   );

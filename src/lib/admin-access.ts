@@ -1,21 +1,33 @@
-const ADMIN_ACCESS_COOKIE_NAME = "bb_admin_access";
-const ADMIN_ACCESS_COOKIE_MAX_AGE = 60 * 60 * 12;
+const OPS_SESSION_COOKIE_NAME = "bb_ops_session";
+const OPS_SESSION_MAX_AGE = 60 * 60 * 12;
 const textEncoder = new TextEncoder();
 
-export function getAdminAccessCookieName() {
-  return ADMIN_ACCESS_COOKIE_NAME;
+export type OpsRole = "ADMIN" | "INVITOR";
+
+export type OpsAccount = {
+  id: string;
+  name: string;
+  password: string;
+  role: OpsRole;
+};
+
+export type OpsSession = {
+  id: string;
+  name: string;
+  role: OpsRole;
+  expiresAt: number;
+};
+
+export function getOpsSessionCookieName() {
+  return OPS_SESSION_COOKIE_NAME;
 }
 
-export function getAdminAccessCookieMaxAge() {
-  return ADMIN_ACCESS_COOKIE_MAX_AGE;
+export function getOpsSessionMaxAge() {
+  return OPS_SESSION_MAX_AGE;
 }
 
-export function getAdminAccessCode() {
-  return process.env.ADMIN_ACCESS_CODE?.trim() ?? "";
-}
-
-export function isAdminAccessConfigured() {
-  return getAdminAccessCode().length > 0;
+export function isOpsAuthConfigured() {
+  return Boolean(getOpsAuthSecret()) && getOpsAccounts().length > 0;
 }
 
 export function isPublicAppPath(pathname: string) {
@@ -29,19 +41,6 @@ export function isPublicAppPath(pathname: string) {
   );
 }
 
-export async function createAdminAccessCookieValue(accessCode: string) {
-  return hashAccessCode(accessCode.trim());
-}
-
-export async function hasValidAdminAccessCookie(cookieValue: string | undefined) {
-  if (!cookieValue) return false;
-
-  const configuredCode = getAdminAccessCode();
-  if (!configuredCode) return false;
-
-  return cookieValue === (await hashAccessCode(configuredCode));
-}
-
 export function normalizeAdminAccessReturnPath(pathname: string | null | undefined) {
   if (!pathname || !pathname.startsWith("/")) return "/matches";
   if (pathname.startsWith("//")) return "/matches";
@@ -49,7 +48,99 @@ export function normalizeAdminAccessReturnPath(pathname: string | null | undefin
   return pathname;
 }
 
-async function hashAccessCode(value: string) {
-  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+export function authenticateOpsCredentials(loginId: string, password: string) {
+  return getOpsAccounts().find((account) => account.id === loginId && account.password === password) ?? null;
+}
+
+export async function createOpsSessionCookieValue(account: Pick<OpsAccount, "id" | "name" | "role">) {
+  const payload: OpsSession = {
+    id: account.id,
+    name: account.name,
+    role: account.role,
+    expiresAt: Date.now() + getOpsSessionMaxAge() * 1000,
+  };
+  const encodedPayload = encodeURIComponent(JSON.stringify(payload));
+  const signature = await signValue(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+export async function readOpsSessionCookieValue(cookieValue: string | undefined) {
+  if (!cookieValue) return null;
+
+  const separatorIndex = cookieValue.lastIndexOf(".");
+  if (separatorIndex <= 0) return null;
+
+  const encodedPayload = cookieValue.slice(0, separatorIndex);
+  const signature = cookieValue.slice(separatorIndex + 1);
+  const expectedSignature = await signValue(encodedPayload);
+  if (signature !== expectedSignature) return null;
+
+  try {
+    const payload = JSON.parse(decodeURIComponent(encodedPayload)) as Partial<OpsSession>;
+    if (
+      typeof payload.id !== "string" ||
+      typeof payload.name !== "string" ||
+      (payload.role !== "ADMIN" && payload.role !== "INVITOR") ||
+      typeof payload.expiresAt !== "number"
+    ) {
+      return null;
+    }
+    if (payload.expiresAt <= Date.now()) return null;
+    return payload as OpsSession;
+  } catch {
+    return null;
+  }
+}
+
+function getOpsAuthSecret() {
+  return process.env.OPS_AUTH_SECRET?.trim() ?? "";
+}
+
+function getOpsAccounts(): OpsAccount[] {
+  const raw = process.env.OPS_AUTH_ACCOUNTS_JSON?.trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((candidate) => {
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        typeof candidate.id !== "string" ||
+        typeof candidate.name !== "string" ||
+        typeof candidate.password !== "string" ||
+        (candidate.role !== "ADMIN" && candidate.role !== "INVITOR")
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          id: candidate.id.trim(),
+          name: candidate.name.trim(),
+          password: candidate.password,
+          role: candidate.role,
+        } satisfies OpsAccount,
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function signValue(value: string) {
+  const secret = getOpsAuthSecret();
+  if (!secret) return "";
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(value));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

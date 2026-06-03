@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import type { OpenLevel, RoundStatus } from "@/lib/domain";
 import {
   createOnboardingUser,
@@ -18,6 +19,7 @@ const openLevelValues = new Set<OpenLevel>(["PRIVATE", "SEMI_OPEN", "FULL_OPEN"]
 const genderValues = new Set(["FEMALE", "MALE", "OTHER", "UNDISCLOSED"]);
 
 export async function createRoundAction(formData: FormData) {
+  await requireAdminOpsSession();
   const title = readRequiredString(formData, "title");
   const startAt = readDateTime(formData, "startAt");
   const endAt = readDateTime(formData, "endAt");
@@ -34,11 +36,13 @@ export async function createRoundAction(formData: FormData) {
 }
 
 export async function updateRoundStatusAction(formData: FormData) {
+  await requireAdminOpsSession();
   await updateRoundStatus(parseNamedId(formData, "roundId"), readEnum(formData, "status", roundStatusValues, "OPEN"));
   revalidateRounds();
 }
 
 export async function createRoundSelectionAction(formData: FormData) {
+  await requireAdminOpsSession();
   await createRoundSelection(
     parseNamedId(formData, "roundId"),
     parseNamedId(formData, "fromUserId"),

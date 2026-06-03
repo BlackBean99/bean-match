@@ -19,12 +19,14 @@ import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-r
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
 
 type UserDetailProps = {
+  canManage?: boolean;
   onboardingAccessTokenManager: OnboardingAccessTokenManagerData;
   readOnlyTokenManager: ReadOnlyBrowseTokenManagerData;
   user: DashboardUserDetail;
 };
 
 export function UserDetail({
+  canManage = false,
   onboardingAccessTokenManager,
   user,
   readOnlyTokenManager,
@@ -80,34 +82,45 @@ export function UserDetail({
             </span>
           </div>
 
-          <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} />
+          {canManage ? <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} /> : null}
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {user.photos.length === 0 ? (
               <p className="rounded-[24px] border border-[#ece7e4] p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
             ) : (
-              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={false} userId={user.id} photo={photo} />)
+              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={!canManage} userId={user.id} photo={photo} />)
             )}
           </div>
         </section>
       </div>
 
-      <OnboardingAccessTokenManager
-        databaseConnected={onboardingAccessTokenManager.databaseConnected}
-        loadError={onboardingAccessTokenManager.loadError}
-        tokens={onboardingAccessTokenManager.tokens}
-        userId={user.id}
-        userName={user.name}
-      />
+      {canManage ? (
+        <>
+          <OnboardingAccessTokenManager
+            databaseConnected={onboardingAccessTokenManager.databaseConnected}
+            loadError={onboardingAccessTokenManager.loadError}
+            tokens={onboardingAccessTokenManager.tokens}
+            userId={user.id}
+            userName={user.name}
+          />
 
-      <ReadOnlyTokenManager
-        accessUrl={accessUrl}
-        databaseConnected={readOnlyTokenManager.databaseConnected}
-        loadError={readOnlyTokenManager.loadError}
-        tokens={readOnlyTokenManager.tokens}
-        userId={user.id}
-        userName={user.name}
-      />
+          <ReadOnlyTokenManager
+            accessUrl={accessUrl}
+            databaseConnected={readOnlyTokenManager.databaseConnected}
+            loadError={readOnlyTokenManager.loadError}
+            tokens={readOnlyTokenManager.tokens}
+            userId={user.id}
+            userName={user.name}
+          />
+        </>
+      ) : (
+        <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-zinc-950">모집인 권한</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-600">
+            모집인 계정은 회원 상세를 열람할 수 있지만, 사진 편집과 토큰 발급, 사용자 수정/삭제는 할 수 없습니다.
+          </p>
+        </section>
+      )}
     </div>
   );
 }

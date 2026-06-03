@@ -115,7 +115,7 @@
 - 운영자만 전체 사용자 조회 가능
 - 사용자는 본인 프로필만 수정 가능
 - `/offer/pool/{userId}` 는 관리자 발급 토큰이 유효할 때만 접근 가능해야 한다.
-- `/offer/*`, `/invite/{invitorId}`, `/onboarding/access/{token}`, `/api/photos/*` 를 제외한 운영 경로는 접근 코드로 보호해야 한다.
+- `/offer/*`, `/invite/{invitorId}`, `/onboarding/access/{token}`, `/api/photos/*` 를 제외한 운영 경로는 운영 로그인 세션으로 보호해야 한다.
 - 오퍼 토큰은 사용자별로 발급하고, 서버에는 원문 대신 해시만 저장한다.
 - 연락처는 `CONNECTED` 전까지 비공개 정책을 권장
 

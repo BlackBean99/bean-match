@@ -10,7 +10,7 @@ const initialState = {
   progress: 0,
 };
 
-export function MigrationButton() {
+export function MigrationButton({ canManage = false }: { canManage?: boolean }) {
   const [state, setState] = useState<MigrationState>(initialState);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -87,8 +87,9 @@ export function MigrationButton() {
       <button
         type="button"
         className="rounded-lg border border-[#FF3131] bg-white px-4 py-2 text-sm font-bold text-[#E00E0E] hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isActive}
+        disabled={!canManage || isActive}
         onClick={() => {
+          if (!canManage) return;
           setState({ status: "queued", message: "동기화 요청 중.", progress: 12, phase: "요청 중" });
           startTransition(async () => {
             try {
@@ -116,7 +117,7 @@ export function MigrationButton() {
           });
         }}
       >
-        {pending ? "처리 중..." : state.status === "queued" ? "대기 중" : "동기화"}
+        {!canManage ? "관리자 전용" : pending ? "처리 중..." : state.status === "queued" ? "대기 중" : "동기화"}
       </button>
       <p className={state.status === "error" ? "text-xs font-semibold text-red-700" : "text-xs text-zinc-500"}>
         {state.message}

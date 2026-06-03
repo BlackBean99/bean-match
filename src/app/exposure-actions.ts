@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import type { OpenLevel } from "@/lib/domain";
 import {
   approveIntroCandidate,
@@ -122,6 +123,7 @@ export async function createBroadcastInterestAction(formData: FormData) {
 }
 
 export async function updateAutoExposureSettingsAction(formData: FormData) {
+  await requireAdminOpsSession();
   const userId = parseNamedId(formData, "userId");
 
   await updateAutoExposureSettings(userId, {
@@ -135,6 +137,7 @@ export async function updateAutoExposureSettingsAction(formData: FormData) {
 }
 
 export async function createManualIntroCandidateAction(formData: FormData) {
+  await requireAdminOpsSession();
   await createManualIntroCandidate({
     userAId: parseNamedId(formData, "userAId"),
     userBId: parseNamedId(formData, "userBId"),
@@ -144,21 +147,25 @@ export async function createManualIntroCandidateAction(formData: FormData) {
 }
 
 export async function approveIntroCandidateAction(formData: FormData) {
+  await requireAdminOpsSession();
   await approveIntroCandidate(parseNamedId(formData, "candidateId"));
   revalidateExposure();
 }
 
 export async function rejectIntroCandidateAction(formData: FormData) {
+  await requireAdminOpsSession();
   await rejectIntroCandidate(parseNamedId(formData, "candidateId"));
   revalidateExposure();
 }
 
 export async function convertIntroCandidateAction(formData: FormData) {
+  await requireAdminOpsSession();
   await convertIntroCandidateToIntroCase(parseNamedId(formData, "candidateId"));
   revalidateExposure();
 }
 
 export async function expireStaleInterestsAction() {
+  await requireAdminOpsSession();
   await expireStaleInterests();
   revalidateExposure();
 }

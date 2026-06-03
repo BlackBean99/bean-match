@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { UserDetail } from "@/components/user-detail";
+import { getOpsSession } from "@/lib/admin-access-server";
 import { getUserDetail } from "@/lib/member-repository";
 import { getOnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import { getReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
@@ -13,8 +14,10 @@ type UserDetailPageProps = {
 };
 
 export default async function UserDetailPage({ params }: UserDetailPageProps) {
+  const session = await getOpsSession();
   const { id } = await params;
   const userId = BigInt(id);
+  const canManage = session?.role === "ADMIN";
 
   try {
     const [user, onboardingAccessTokenManager, readOnlyTokenManager] = await Promise.all([
@@ -26,17 +29,32 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
     if (!user) notFound();
 
     return (
-      <AdminShell title={`${user.name} 상세`} description="개인 프로필과 여러 장의 사진을 관리합니다." active="users">
+      <AdminShell
+        title={`${user.name} 상세`}
+        description="개인 프로필과 여러 장의 사진을 관리합니다."
+        active="users"
+        canManage={canManage}
+        viewerName={session?.name ?? "운영"}
+        viewerRole={session?.role ?? "INVITOR"}
+      >
         <UserDetail
           user={user}
           onboardingAccessTokenManager={onboardingAccessTokenManager}
           readOnlyTokenManager={readOnlyTokenManager}
+          canManage={canManage}
         />
       </AdminShell>
     );
   } catch {
     return (
-      <AdminShell title="회원 상세" description="개인 프로필과 여러 장의 사진을 관리합니다." active="users">
+      <AdminShell
+        title="회원 상세"
+        description="개인 프로필과 여러 장의 사진을 관리합니다."
+        active="users"
+        canManage={canManage}
+        viewerName={session?.name ?? "운영"}
+        viewerRole={session?.role ?? "INVITOR"}
+      >
         <section className="rounded-lg border border-red-100 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-[#E00E0E]">사용자 상세를 불러오지 못했습니다</p>
           <p className="mt-2 text-sm leading-6 text-zinc-600">

@@ -1,10 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
-  getAdminAccessCookieName,
-  hasValidAdminAccessCookie,
-  isAdminAccessConfigured,
+  getOpsSessionCookieName,
+  isOpsAuthConfigured,
   isPublicAppPath,
+  readOpsSessionCookieValue,
 } from "./src/lib/admin-access";
 
 export async function middleware(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isAdminAccessConfigured()) {
+  if (!isOpsAuthConfigured()) {
     if (process.env.NODE_ENV !== "production") {
       return NextResponse.next();
     }
@@ -24,8 +24,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(lockedUrl);
   }
 
-  const cookieValue = request.cookies.get(getAdminAccessCookieName())?.value;
-  if (await hasValidAdminAccessCookie(cookieValue)) {
+  const cookieValue = request.cookies.get(getOpsSessionCookieName())?.value;
+  if (await readOpsSessionCookieValue(cookieValue)) {
     return NextResponse.next();
   }
 
