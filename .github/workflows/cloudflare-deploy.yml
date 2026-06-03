@@ -57,7 +57,7 @@ jobs:
         shell: bash
         env:
           # Cloudflare Pages project name, not wrangler.jsonc worker name.
-          PAGES_PROJECT_NAME: bean-match-admin
+          PAGES_PROJECT_NAME: blackbean-match
         run: |
           secret_file="$(mktemp)"
           cleanup() {
