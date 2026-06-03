@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "bean-match",
+  "name": "blackbean-match-admin",
   "compatibility_date": "2026-05-25",
   "compatibility_flags": [
     "nodejs_compat"
