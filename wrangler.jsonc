@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "blackbean-match-admin",
+  "name": "bean-match",
   "compatibility_date": "2026-05-25",
   "compatibility_flags": [
     "nodejs_compat"
@@ -13,7 +13,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "blackbean-match-admin"
+      "service": "bean-match"
     }
   ],
   "images": {
