@@ -11,6 +11,7 @@ type OfferLinkQuickActionsProps = {
 
 type IssuedOfferToken = {
   accessPath: string;
+  expiresAtIso: string;
   rawToken: string;
 };
 
@@ -29,10 +30,11 @@ export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
   }
 
   async function ensureIssuedToken() {
-    if (issuedToken) return issuedToken;
+    if (issuedToken && !isExpiredToken(issuedToken.expiresAtIso)) return issuedToken;
     const created = await createQuickOfferClipboardAction(userId);
     const nextIssuedToken = {
       accessPath: created.accessPath,
+      expiresAtIso: created.expiresAtIso,
       rawToken: created.rawToken,
     };
     setIssuedToken(nextIssuedToken);
@@ -93,4 +95,9 @@ export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
       </button>
     </div>
   );
+}
+
+function isExpiredToken(expiresAtIso: string) {
+  const parsed = Date.parse(expiresAtIso);
+  return Number.isFinite(parsed) && parsed <= Date.now();
 }

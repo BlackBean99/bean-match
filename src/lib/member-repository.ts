@@ -1243,14 +1243,35 @@ function toPrismaPhotoPayload(userId: bigint, input: PhotoInput) {
 }
 
 function toDashboardPhoto(photo: SupabasePhotoRow): DashboardUserPhoto {
-  return {
+  return toDashboardPhotoLike({
     id: photo.id,
-    url: photoDeliveryOrProxyUrl(photo.file_url, photo.file_path, photo.id) ?? "",
-    sourceUrl: photoSourceUrl(photo.file_path, photo.file_url) ?? "",
+    fileUrl: photo.file_url,
+    filePath: photo.file_path,
     originalFileName: photo.original_file_name,
     isMain: photo.is_main,
     sortOrder: photo.sort_order,
-    uploadedAt: formatDateTime(new Date(photo.uploaded_at)),
+    uploadedAt: new Date(photo.uploaded_at),
+  });
+}
+
+export function toDashboardPhotoLike(photo: {
+  id: bigint | number;
+  fileUrl: string | null | undefined;
+  filePath: string | null | undefined;
+  originalFileName: string;
+  isMain: boolean;
+  sortOrder: number;
+  uploadedAt: Date | string;
+}): DashboardUserPhoto {
+  const uploadedAt = photo.uploadedAt instanceof Date ? photo.uploadedAt : new Date(photo.uploadedAt);
+  return {
+    id: Number(photo.id),
+    url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
+    sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl) ?? "",
+    originalFileName: photo.originalFileName,
+    isMain: photo.isMain,
+    sortOrder: photo.sortOrder,
+    uploadedAt: formatDateTime(uploadedAt),
   };
 }
 
