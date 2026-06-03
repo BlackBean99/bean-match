@@ -35,6 +35,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_IMAGES_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_TOKEN }}
       CLOUDFLARE_IMAGES_VARIANT: ${{ secrets.CLOUDFLARE_IMAGES_VARIANT }}
+      OPS_AUTH_SECRET: ${{ secrets.OPS_AUTH_SECRET }}
+      OPS_AUTH_ACCOUNTS_JSON: ${{ secrets.OPS_AUTH_ACCOUNTS_JSON }}
 
     steps:
       - name: Checkout
@@ -93,6 +95,8 @@ jobs:
 
           require_value NOTION_TOKEN "$NOTION_TOKEN"
           require_value SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
+          require_value OPS_AUTH_SECRET "$OPS_AUTH_SECRET"
+          require_value OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
 
           append_secret() {
@@ -118,6 +122,8 @@ jobs:
           append_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
           append_secret CLOUDFLARE_IMAGES_TOKEN "$CLOUDFLARE_IMAGES_TOKEN"
           append_secret CLOUDFLARE_IMAGES_VARIANT "$CLOUDFLARE_IMAGES_VARIANT"
+          append_secret OPS_AUTH_SECRET "$OPS_AUTH_SECRET"
+          append_secret OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
 
           if [ "$missing" -ne 0 ]; then
             exit 1
