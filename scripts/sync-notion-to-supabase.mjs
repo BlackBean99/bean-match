@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
@@ -118,15 +117,6 @@ const activeIntroStatusSet = new Set([
 ]);
 
 const NOTION_SYNC_SCHEMA_VERSION = "photos-v2";
-
-function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return null;
-
-  return new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
-  });
-}
 
 class NotionApiError extends Error {
   constructor(status, message) {
