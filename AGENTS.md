@@ -30,6 +30,7 @@ Build and operate the intro platform according to the repository docs.
 - Update docs if domain, API, schema, or operations change.
 - All development changes must land through a PR; do not treat direct mainline edits as complete work.
 - When the owner has explicitly asked for a change, proceed with routine git push and environment/config edits without additional yes/no prompts unless a higher-level approval gate applies.
+- Treat each new deployment boundary as a new PR unit instead of appending unrelated deployment fixes to an already-open PR.
 
 ## RPI Workflow
 1. Read the relevant docs
