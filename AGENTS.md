@@ -28,6 +28,8 @@ Build and operate the intro platform according to the repository docs.
 - Treat privacy, security, and consent changes as high-risk.
 - Keep PRs small and scoped.
 - Update docs if domain, API, schema, or operations change.
+- All development changes must land through a PR; do not treat direct mainline edits as complete work.
+- When the owner has explicitly asked for a change, proceed with routine git push and environment/config edits without additional yes/no prompts unless a higher-level approval gate applies.
 
 ## RPI Workflow
 1. Read the relevant docs
@@ -36,6 +38,7 @@ Build and operate the intro platform according to the repository docs.
 4. Validate with lint/typecheck/test/build
 5. Commit with conventional commits
 6. Open PR with summary, impact, validation, and rollback
+7. Merge only through the repository's approved PR path
 
 ## Multi-Agent Governance
 - Human Owner is the final approver.

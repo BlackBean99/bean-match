@@ -1,11 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "bean-match",
+  "name": "blackbean-match",
   "compatibility_date": "2026-05-25",
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "build": {
+    "command": "npx @opennextjs/cloudflare build"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -13,7 +16,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "blackbean-match-admin"
+      "service": "blackbean-match"
     }
   ],
   "images": {
