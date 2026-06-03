@@ -27,10 +27,6 @@
 - `NOTION_API_VERSION` (선택)
 - `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` (비밀 아님, 하지만 외부 노출 주의)
 - `NOTION_INVITOR_DATA_SOURCE_ID` (선택)
-- `NOTION_SYNC_GITHUB_TOKEN` (Cloudflare Pages에서 운영 버튼이 GitHub Actions sync workflow를 dispatch할 때 사용)
-- `NOTION_SYNC_GITHUB_REPOSITORY` (선택, 기본값 `BlackBean99/bean-match`)
-- `NOTION_SYNC_GITHUB_WORKFLOW` (선택, 기본값 `notion-sync.yml`)
-- `NOTION_SYNC_GITHUB_REF` (선택, 기본값 `main`)
 
 ### 3.3 DB (Prisma 모드)
 - `DATABASE_URL` (비밀)
@@ -56,15 +52,10 @@
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
 - 이 workflow의 `WORKER_NAME` 은 Cloudflare Worker 이름 기준이며, 현재 운영 대상은 `blackbean-match` 입니다. `wrangler.jsonc` 의 `name` 은 Worker 이름이라 서로 다를 수 있습니다.
 - Cloudflare/CD 빌드에서는 `npm run build`가 먼저 `next build`를 수행하고, Wrangler가 custom build로 다시 호출할 때는 `WRANGLER_COMMAND`를 보고 OpenNext 재실행을 건너뛰어야 합니다. 이 방식이어야 `.open-next/worker.js`가 한 번만 생성됩니다.
-- 그 workflow는 배포 전에 `wrangler versions secret bulk` 로 GitHub Secrets를 Worker secrets로 동기화합니다. 즉, 실제 코드가 참조하는 `NOTION_SYNC_GITHUB_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NOTION_TOKEN`, `NOTION_API_VERSION`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID`, `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 만 GitHub Secrets에 넣고 workflow가 Worker 런타임에 주입합니다.
-- `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare Pages의 운영 버튼은 production에서 이 workflow를 dispatch합니다.
-- GitHub Secrets에는 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` 를 넣습니다.
-- Cloudflare Images를 쓰려면 Pages/앱 런타임과 GitHub Actions sync job에 `CLOUDFLARE_API_TOKEN` 또는 `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
+- 그 workflow는 배포 전에 `wrangler versions secret bulk` 로 GitHub Secrets를 Worker secrets로 동기화합니다. 즉, 실제 코드가 참조하는 `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NOTION_TOKEN`, `NOTION_API_VERSION`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID`, `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 만 GitHub Secrets에 넣고 workflow가 Worker 런타임에 주입합니다.
+- Cloudflare Images를 쓰려면 앱 런타임과 배포 workflow에 `CLOUDFLARE_API_TOKEN` 또는 `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
 - Cloudflare Worker 배포 워크플로우는 현재 코드가 참조하는 범위만 전달합니다. `AUTH_SECRET`, `R2_*`, `SENTRY_DSN`, `NEXT_PUBLIC_POSTHOG_*`, `CLOUDFLARE_ACCESS_CLIENT_ID`, `CLOUDFLARE_ACCESS_CLIENT_SECRET` 는 이 저장소의 현재 런타임에서 사용하지 않으므로 배포 secret 주입 대상에서 제외했습니다.
-- Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
 - 런타임이 참조하는 DB/Supabase/기타 비밀값은 Cloudflare 쪽 Variables and Secrets 에도 동일하게 설정합니다.
-- Cloudflare Pages 운영 버튼이 GitHub Actions sync를 dispatch하려면 `NOTION_SYNC_GITHUB_TOKEN` 과 `NOTION_SYNC_GITHUB_REPOSITORY` 가 필요합니다.
-- GitHub Actions의 `notion-sync.yml` 은 job 초반에 required secret presence 로그를 출력합니다. `Actions` 탭에서 workflow run을 열고 해당 job 로그를 확인합니다.
 - 백필 스크립트는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDFLARE_API_TOKEN` 또는 `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`) 가 필요하고, `NOTION_TOKEN`이 있으면 오래된 Notion 파일 URL을 재조회할 수 있습니다.
 - 운영자용 백필 실행 예시는 `npm run backfill:cloudflare-images -- --write` 입니다.
 

@@ -1,19 +1,19 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
-const prisma = process.env.DATABASE_URL ? new PrismaClient() : null;
+const prisma = createPrismaClient();
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2022-06-28";
 const NOTION_TOKEN = requiredEnv("NOTION_TOKEN");
 const MAIN_DATA_SOURCE_ID =
   process.env.NOTION_MAIN_DATA_SOURCE_ID || process.env.NOTION_USERS_DATABASE_ID;
 const INVITOR_DATA_SOURCE_ID = process.env.NOTION_INVITOR_DATA_SOURCE_ID;
 const MATCHING_HISTORY_DATA_SOURCE_ID = process.env.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID;
-const write = process.argv.includes("--write");
-let notionSources;
 
 const genderMap = new Map([
   ["female", "FEMALE"],
@@ -118,6 +118,15 @@ const activeIntroStatusSet = new Set([
 ]);
 
 const NOTION_SYNC_SCHEMA_VERSION = "photos-v2";
+
+function createPrismaClient() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  });
+}
 
 class NotionApiError extends Error {
   constructor(status, message) {
@@ -273,109 +282,142 @@ function normalizePersonName(name) {
     .trim();
 }
 
-notionSources = await buildNotionSources();
-
-try {
-  if (notionSources.length === 0) {
-    throw new Error("Missing required environment variable: NOTION_MAIN_DATA_SOURCE_ID");
-  }
-
+export async function runNotionSync({ write = false, onProgress } = {}) {
   const results = [];
+  const progress = typeof onProgress === "function" ? onProgress : null;
 
-  for (const source of notionSources) {
-    const users = await collectNotionPages(source.id);
+  try {
+    progress?.({ progress: 10, phase: "준비 중", message: write ? "쓰기 동기화를 준비합니다." : "동기화를 준비합니다." });
 
-    for (const page of users) {
-      let input;
-      try {
-        input =
-          source.sourceType === "matching_history"
-            ? await mapMatchingHistoryPage(page)
-            : mapUserPage(page, source.defaultRoles);
-      } catch (error) {
-        results.push({
-          pageId: page.id,
-          source: source.name,
-          action: "skipped",
-          reason: error instanceof Error ? error.message : "Invalid Notion page",
-        });
-        continue;
-      }
-      const checksum = sha256(stringifyForChecksum(stableInputForChecksum(input, source)));
-      const rawChecksum = sha256(JSON.stringify(page));
-      const existingSync = await findSyncRecord(page.id);
+    const sources = await buildNotionSources();
+    if (sources.length === 0 || (!MAIN_DATA_SOURCE_ID && !process.env.NOTION_USERS_DATABASE_ID)) {
+      throw new Error("Missing required environment variable: NOTION_MAIN_DATA_SOURCE_ID");
+    }
 
-      if (existingSync?.checksum === checksum) {
-        if (write && (source.sourceType === "main" || source.sourceType === "invitor")) {
-          try {
-            const refreshed = await refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source);
+    progress?.({ progress: 20, phase: "Notion 목록 수집", message: "Notion 페이지를 수집하는 중입니다." });
 
-            results.push({
-              pageId: page.id,
-              source: source.name,
-              action: "updated",
-              userId: refreshed.id.toString(),
-              name: refreshed.name,
-              reason: "photos_refreshed",
-            });
-            continue;
-          } catch (error) {
-            results.push({
-              pageId: page.id,
-              source: source.name,
-              action: "skipped",
-              reason: error instanceof Error ? error.message : "Photo refresh failed",
-            });
-            continue;
+    const batches = [];
+    let totalPages = 0;
+    for (const source of sources) {
+      const pages = await collectNotionPages(source.id);
+      batches.push({ source, pages });
+      totalPages += pages.length;
+    }
+
+    let processedPages = 0;
+    for (const { source, pages } of batches) {
+      progress?.({
+        progress: 20 + Math.round((processedPages / Math.max(totalPages, 1)) * 70),
+        phase: `${source.name} 동기화`,
+        message: `${source.name} 동기화를 진행하는 중입니다.`,
+      });
+
+      for (const page of pages) {
+        let input;
+        try {
+          input =
+            source.sourceType === "matching_history"
+              ? await mapMatchingHistoryPage(page)
+              : mapUserPage(page, source.defaultRoles);
+        } catch (error) {
+          results.push({
+            pageId: page.id,
+            source: source.name,
+            action: "skipped",
+            reason: error instanceof Error ? error.message : "Invalid Notion page",
+          });
+          processedPages += 1;
+          continue;
+        }
+        const checksum = sha256(stringifyForChecksum(stableInputForChecksum(input, source)));
+        const rawChecksum = sha256(JSON.stringify(page));
+        const existingSync = await findSyncRecord(page.id);
+
+        if (existingSync?.checksum === checksum) {
+          if (write && (source.sourceType === "main" || source.sourceType === "invitor")) {
+            try {
+              const refreshed = await refreshUserPhotosForExistingSync(existingSync, input, page, rawChecksum, source);
+
+              results.push({
+                pageId: page.id,
+                source: source.name,
+                action: "updated",
+                userId: refreshed.id.toString(),
+                name: refreshed.name,
+                reason: "photos_refreshed",
+              });
+              processedPages += 1;
+              continue;
+            } catch (error) {
+              results.push({
+                pageId: page.id,
+                source: source.name,
+                action: "skipped",
+                reason: error instanceof Error ? error.message : "Photo refresh failed",
+              });
+              processedPages += 1;
+              continue;
+            }
           }
+
+          results.push({ pageId: page.id, source: source.name, action: "skipped" });
+          processedPages += 1;
+          continue;
         }
 
-        results.push({ pageId: page.id, source: source.name, action: "skipped" });
-        continue;
-      }
+        if (!write) {
+          results.push({
+            pageId: page.id,
+            source: source.name,
+            action: existingSync ? "would_update" : "would_create",
+            ...(source.sourceType === "matching_history"
+              ? { introStatus: input.status, participants: input.participants.map((p) => p.name).join(" / ") }
+              : { name: input.user.name, status: input.user.status, roles: input.roles }),
+          });
+          processedPages += 1;
+          continue;
+        }
 
-      if (!write) {
+        let result;
+        try {
+          result =
+            source.sourceType === "matching_history"
+              ? await writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source)
+              : await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
+        } catch (error) {
+          results.push({
+            pageId: page.id,
+            source: source.name,
+            action: "skipped",
+            reason: error instanceof Error ? error.message : "Write failed",
+          });
+          processedPages += 1;
+          continue;
+        }
+
         results.push({
           pageId: page.id,
           source: source.name,
-          action: existingSync ? "would_update" : "would_create",
+          action: existingSync ? "updated" : "created",
           ...(source.sourceType === "matching_history"
-            ? { introStatus: input.status, participants: input.participants.map((p) => p.name).join(" / ") }
-            : { name: input.user.name, status: input.user.status, roles: input.roles }),
+            ? { introCaseId: result.id.toString(), participants: result.participants }
+            : { userId: result.id.toString(), name: result.name }),
         });
-        continue;
-      }
-
-      let result;
-      try {
-        result =
-          source.sourceType === "matching_history"
-            ? await writeIntroCaseFromNotion(existingSync, input, page, checksum, rawChecksum, source)
-            : await writeUserFromNotion(existingSync, input, page, checksum, rawChecksum, source);
-      } catch (error) {
-        results.push({
-          pageId: page.id,
-          source: source.name,
-          action: "skipped",
-          reason: error instanceof Error ? error.message : "Write failed",
+        processedPages += 1;
+        progress?.({
+          progress: 20 + Math.round((processedPages / Math.max(totalPages, 1)) * 70),
+          phase: `${source.name} 동기화`,
+          message: `${source.name} ${processedPages}/${Math.max(totalPages, 1)}건을 처리했습니다.`,
         });
-        continue;
       }
-
-      results.push({
-        pageId: page.id,
-        source: source.name,
-        action: existingSync ? "updated" : "created",
-        ...(source.sourceType === "matching_history"
-          ? { introCaseId: result.id.toString(), participants: result.participants }
-          : { userId: result.id.toString(), name: result.name }),
-      });
     }
-  }
 
-  console.log(JSON.stringify({ write, users: results }, null, 2));
-} finally {
-  await prisma?.$disconnect();
+    progress?.({ progress: 95, phase: "정리 중", message: "동기화 결과를 정리하는 중입니다." });
+
+    return { write, users: results };
+  } finally {
+    await prisma?.$disconnect();
+  }
 }
 
 async function findSyncRecord(notionPageId) {
@@ -1453,5 +1495,17 @@ function loadEnvFile(path) {
     }
 
     process.env[match[1]] = value;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const write = process.argv.includes("--write");
+
+  try {
+    const result = await runNotionSync({ write });
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.stack || error.message : String(error));
+    process.exitCode = 1;
   }
 }

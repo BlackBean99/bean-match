@@ -37,7 +37,7 @@ export function MigrationButton() {
             return {
               ...current,
               ...next,
-              progress: next.progress ?? current.progress ?? 65,
+              progress: next.progress ?? current.progress ?? 15,
               phase: next.phase ?? current.phase ?? "대기 중",
             };
           }
@@ -89,7 +89,7 @@ export function MigrationButton() {
         className="rounded-lg border border-[#FF3131] bg-white px-4 py-2 text-sm font-bold text-[#E00E0E] hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isActive}
         onClick={() => {
-          setState({ status: "idle", message: "동기화 요청 중.", progress: 12, phase: "요청 중" });
+          setState({ status: "queued", message: "동기화 요청 중.", progress: 12, phase: "요청 중" });
           startTransition(async () => {
             try {
               const response = await fetch("/api/migration/notion", {
@@ -102,7 +102,7 @@ export function MigrationButton() {
               }
               setState({
                 ...result,
-                progress: result.status === "success" ? 100 : result.status === "error" ? 100 : result.progress ?? 65,
+                progress: result.status === "success" ? 100 : result.status === "error" ? 100 : result.progress ?? 15,
                 phase: result.phase ?? (result.status === "success" ? "완료" : result.status === "error" ? "실패" : "대기 중"),
               });
             } catch (error) {
