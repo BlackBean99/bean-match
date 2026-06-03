@@ -1,11 +1,17 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { logoutAdminAccessAction } from "@/app/admin-access/actions";
+import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { MigrationButton } from "@/components/migration-button";
+import type { OpsRole } from "@/lib/admin-access";
 
 type AdminShellProps = {
   title: string;
   description: string;
   active: "users" | "matches" | "rounds";
+  canManage?: boolean;
+  viewerName: string;
+  viewerRole: OpsRole;
   children: ReactNode;
 };
 
@@ -21,7 +27,7 @@ const navItems: Array<{
   { key: "onboarding", href: "/onboarding", label: "참여 링크" },
 ];
 
-export function AdminShell({ title, description, active, children }: AdminShellProps) {
+export function AdminShell({ title, description, active, canManage = false, viewerName, viewerRole, children }: AdminShellProps) {
   return (
     <main className="min-h-screen bg-transparent text-[#18181b]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-5 px-4 py-4 lg:flex-row lg:px-5 lg:py-5">
@@ -42,13 +48,13 @@ export function AdminShell({ title, description, active, children }: AdminShellP
                   bb
                 </div>
                 <div>
-                  <p className="font-bold text-white">blackbean</p>
+                  <p className="font-bold text-white">{viewerName}</p>
                   <div className="mt-1 inline-flex items-center rounded-full bg-[#ff5d89]/15 px-2.5 py-1 text-[11px] font-semibold text-[#ff8cab]">
-                    매니저
+                    {viewerRole === "ADMIN" ? "관리자" : "모집인"}
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-white/60">모집인 코드: BB1001</p>
+              <p className="mt-3 text-xs text-white/60">등록된 운영 계정 세션</p>
             </div>
 
             <nav className="mt-8 grid gap-1.5">
@@ -70,8 +76,18 @@ export function AdminShell({ title, description, active, children }: AdminShellP
                 연락처는 CONNECTED 이전까지 숨김 유지. PROGRESSING 사용자는 새 소개 생성 금지.
               </p>
               <div className="mt-4 rounded-[20px] bg-white/5 p-3">
-                <MigrationButton />
+                <MigrationButton canManage={canManage} />
               </div>
+              <form action={logoutAdminAccessAction} className="mt-3">
+                <FormPendingFieldset className="contents">
+                  <button
+                    type="submit"
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/78 transition hover:bg-white/10"
+                  >
+                    로그아웃
+                  </button>
+                </FormPendingFieldset>
+              </form>
             </div>
           </div>
         </aside>
@@ -87,7 +103,7 @@ export function AdminShell({ title, description, active, children }: AdminShellP
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="inline-flex items-center rounded-2xl border border-[#ffd5df] bg-[#fff4f7] px-4 py-3 text-sm font-semibold text-[#e63a68]">
-                    내 프로필 전체 오픈
+                    {viewerRole === "ADMIN" ? "관리자 편집 권한" : "모집인 열람 전용"}
                   </div>
                   <div className="inline-flex h-12 items-center justify-center rounded-2xl border border-[#ececf2] bg-white px-4 text-sm font-semibold text-zinc-600">
                     운영 중

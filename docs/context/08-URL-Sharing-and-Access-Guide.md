@@ -86,7 +86,7 @@
 - 공개 공유 URL은 `/onboarding/access/{token}`, `/offer/pool/{userId}` 이다.
 - `/onboarding` 과 `/invite/{invitorId}` 는 직접 입장용이 아니라 토큰 링크 안내용 화면이다.
 - `/invite/{invitorId}` 는 모집인 출처를 확인하는 안내 화면이다.
-- 관리자 URL은 접근 코드가 있는 관리자에게만 공유한다.
+- 관리자 URL은 등록된 운영 로그인 계정이 있는 관리자에게만 공유한다.
 - 연락처는 `CONNECTED` 전까지 어떤 URL에서도 노출하지 않는다.
 - `PROGRESSING` 사용자는 자동 노출 후보와 신규 소개 생성에서 제외한다.
 - `/offer/pool/{userId}` 는 관리자 발급 프로필 열람 토큰을 통과해야만 진입할 수 있다.

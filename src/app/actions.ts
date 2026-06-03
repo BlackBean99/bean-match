@@ -2,6 +2,7 @@
 
 import { Gender, IntroCaseStatus, UserRole, UserStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import type { OpenLevel } from "@/lib/domain";
 import {
   addUserPhoto,
@@ -38,23 +39,27 @@ export type IntroCaseActionState = {
 };
 
 export async function createMemberAction(formData: FormData) {
+  await requireAdminOpsSession();
   await createMember(parseMemberForm(formData));
   revalidatePath("/");
 }
 
 export async function updateMemberAction(formData: FormData) {
+  await requireAdminOpsSession();
   const id = parseId(formData);
   await updateMember(id, parseMemberForm(formData));
   revalidatePath("/");
 }
 
 export async function deleteMemberAction(formData: FormData) {
+  await requireAdminOpsSession();
   const id = parseId(formData);
   await deleteMember(id);
   revalidatePath("/");
 }
 
 export async function updateMemberExposureAction(formData: FormData) {
+  await requireAdminOpsSession();
   const id = parseId(formData);
   await updateMemberExposure(id, {
     status: readEnum(formData, "status", statusValues, UserStatus.INCOMPLETE),
@@ -67,6 +72,7 @@ export async function updateMemberExposureAction(formData: FormData) {
 }
 
 export async function bulkApplyRoundParticipationDefaultsAction(formData: FormData) {
+  await requireAdminOpsSession();
   if (formData.get("confirm") !== "on") {
     throw new Error("확인 체크가 필요합니다.");
   }
@@ -81,6 +87,7 @@ export async function bulkApplyRoundParticipationDefaultsAction(formData: FormDa
 }
 
 export async function createIntroCaseAction(formData: FormData) {
+  await requireAdminOpsSession();
   await createIntroCase(parseIntroCaseForm(formData));
   revalidatePath("/");
 }
@@ -89,6 +96,7 @@ export async function createIntroCaseWithStateAction(
   _prevState: IntroCaseActionState,
   formData: FormData,
 ): Promise<IntroCaseActionState> {
+  await requireAdminOpsSession();
   const values = {
     personAId: readString(formData, "personAId") ?? "",
     personBId: readString(formData, "personBId") ?? "",
@@ -123,6 +131,7 @@ export async function createIntroCaseWithStateAction(
 }
 
 export async function updateIntroCaseAction(formData: FormData) {
+  await requireAdminOpsSession();
   const id = parseId(formData);
   await updateIntroCase(id, {
     status: readEnum(formData, "status", introStatusValues, IntroCaseStatus.OFFERED),
@@ -132,12 +141,14 @@ export async function updateIntroCaseAction(formData: FormData) {
 }
 
 export async function deleteIntroCaseAction(formData: FormData) {
+  await requireAdminOpsSession();
   const id = parseId(formData);
   await deleteIntroCase(id);
   revalidatePath("/");
 }
 
 export async function addUserPhotoAction(formData: FormData) {
+  await requireAdminOpsSession();
   const userId = parseNamedId(formData, "userId");
   await addUserPhoto(userId, await parsePhotoForm(userId, formData));
   revalidatePath(`/users/${userId.toString()}`);
@@ -145,6 +156,7 @@ export async function addUserPhotoAction(formData: FormData) {
 }
 
 export async function updateUserPhotoAction(formData: FormData) {
+  await requireAdminOpsSession();
   const photoId = parseNamedId(formData, "photoId");
   const userId = parseNamedId(formData, "userId");
   await updateUserPhoto(photoId, await parsePhotoForm(userId, formData));
@@ -153,6 +165,7 @@ export async function updateUserPhotoAction(formData: FormData) {
 }
 
 export async function setMainUserPhotoAction(formData: FormData) {
+  await requireAdminOpsSession();
   const photoId = parseNamedId(formData, "photoId");
   const userId = parseNamedId(formData, "userId");
   await setMainUserPhoto(photoId);
@@ -161,6 +174,7 @@ export async function setMainUserPhotoAction(formData: FormData) {
 }
 
 export async function deleteUserPhotoAction(formData: FormData) {
+  await requireAdminOpsSession();
   const photoId = parseNamedId(formData, "photoId");
   const userId = parseNamedId(formData, "userId");
   await deleteUserPhoto(photoId);

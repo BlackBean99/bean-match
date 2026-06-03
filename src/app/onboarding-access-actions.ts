@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import {
   createOnboardingAccessToken,
   revokeOnboardingAccessToken,
@@ -27,6 +28,7 @@ export async function createOnboardingAccessTokenWithStateAction(
   _prevState: CreateOnboardingAccessTokenActionState,
   formData: FormData,
 ): Promise<CreateOnboardingAccessTokenActionState> {
+  await requireAdminOpsSession();
   const values = {
     label: readString(formData, "label") ?? "",
     expiresAt: readString(formData, "expiresAt") ?? "",
@@ -64,6 +66,7 @@ export async function createOnboardingAccessTokenWithStateAction(
 }
 
 export async function revokeOnboardingAccessTokenAction(formData: FormData) {
+  await requireAdminOpsSession();
   const tokenId = parseNamedId(formData, "tokenId");
   const userId = parseNamedId(formData, "userId");
 

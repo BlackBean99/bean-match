@@ -84,12 +84,13 @@ type DashboardProps = {
   users: DashboardUser[];
   allUsers: DashboardUser[];
   introCases: DashboardIntroCase[];
+  canManage?: boolean;
   databaseConnected: boolean;
   loadError: string | null;
   filters: MemberFilterState;
 };
 
-export function UsersDashboard({ users, allUsers, databaseConnected, loadError, filters }: DashboardProps) {
+export function UsersDashboard({ users, allUsers, canManage = false, databaseConnected, loadError, filters }: DashboardProps) {
   const participantUsers = users.filter(isParticipantUser);
   const invitorUsers = allUsers.filter(isInvitorUser);
   const openCount = participantUsers.filter((user) => user.openLevel === "FULL_OPEN").length;
@@ -115,8 +116,8 @@ export function UsersDashboard({ users, allUsers, databaseConnected, loadError, 
 
       <section className="space-y-5">
         <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
-        <MemberCreatePanel disabled={!databaseConnected} />
-        <MemberTable users={participantUsers} editable={databaseConnected} />
+        <MemberCreatePanel disabled={!databaseConnected || !canManage} />
+        <MemberTable users={participantUsers} editable={databaseConnected && canManage} />
         <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">
             모집인 보기
@@ -125,10 +126,10 @@ export function UsersDashboard({ users, allUsers, databaseConnected, loadError, 
             </span>
           </summary>
           <p className="mt-3 text-sm leading-6 text-zinc-500">
-            `INVITOR` 역할이 있는 회원은 상태 필터와 무관하게 여기 포함됩니다. 여기서도 프로필과 역할 정보를 수정할 수 있습니다.
+            `INVITOR` 역할이 있는 회원은 상태 필터와 무관하게 여기 포함됩니다.
           </p>
           <div className="mt-4">
-            <MemberTable users={invitorUsers} editable={databaseConnected} allowDelete={false} />
+            <MemberTable users={invitorUsers} editable={databaseConnected && canManage} allowDelete={false} />
           </div>
         </details>
       </section>
@@ -136,7 +137,7 @@ export function UsersDashboard({ users, allUsers, databaseConnected, loadError, 
   );
 }
 
-export function MatchesDashboard({ allUsers, introCases, databaseConnected, loadError, filters }: DashboardProps) {
+export function MatchesDashboard({ allUsers, introCases, canManage = false, databaseConnected, loadError, filters }: DashboardProps) {
   const selectedUser = allUsers.find((user) => user.id.toString() === filters.recommendationFor) ?? null;
   const recommendations = selectedUser ? getOppositeGenderRecommendations(selectedUser, allUsers, introCases) : [];
   const filteredIntroCases =
@@ -171,8 +172,8 @@ export function MatchesDashboard({ allUsers, introCases, databaseConnected, load
             filters={filters}
           />
           <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-            <IntroCreatePanel users={allUsers} disabled={!databaseConnected} />
-            <IntroCaseTable introCases={filteredIntroCases} editable={databaseConnected} />
+            <IntroCreatePanel users={allUsers} disabled={!databaseConnected || !canManage} />
+            <IntroCaseTable introCases={filteredIntroCases} editable={databaseConnected && canManage} />
           </section>
         </>
       )}
