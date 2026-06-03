@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdminOpsSession } from "@/lib/admin-access-server";
+import { requireAdminOpsSession, requireOpsSession } from "@/lib/admin-access-server";
 import {
   createReadOnlyBrowseToken,
   getReadOnlyBrowseAccessPath,
@@ -90,7 +90,7 @@ export async function revokeReadOnlyBrowseTokenAction(formData: FormData) {
 }
 
 export async function createQuickOfferClipboardAction(userId: number) {
-  await requireAdminOpsSession();
+  await requireOpsSession();
   const expiresAt = oneWeekFromNow();
   const createdToken = await createReadOnlyBrowseToken(BigInt(userId), {
     label: `회원 관리 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {

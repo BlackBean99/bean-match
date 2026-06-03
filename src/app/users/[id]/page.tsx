@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { UserDetail } from "@/components/user-detail";
-import { getOpsSession } from "@/lib/admin-access-server";
+import { requireOpsSession } from "@/lib/admin-access-server";
 import { getUserDetail } from "@/lib/member-repository";
 import { getOnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import { getReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
@@ -14,10 +14,10 @@ type UserDetailPageProps = {
 };
 
 export default async function UserDetailPage({ params }: UserDetailPageProps) {
-  const session = await getOpsSession();
+  const session = await requireOpsSession();
   const { id } = await params;
   const userId = BigInt(id);
-  const canManage = session?.role === "ADMIN";
+  const canManage = session.role === "ADMIN";
 
   try {
     const [user, onboardingAccessTokenManager, readOnlyTokenManager] = await Promise.all([
@@ -34,8 +34,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
         description="개인 프로필과 여러 장의 사진을 관리합니다."
         active="users"
         canManage={canManage}
-        viewerName={session?.name ?? "운영"}
-        viewerRole={session?.role ?? "INVITOR"}
+        viewerName={session.name}
+        viewerRole={session.role}
       >
         <UserDetail
           user={user}
@@ -52,8 +52,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
         description="개인 프로필과 여러 장의 사진을 관리합니다."
         active="users"
         canManage={canManage}
-        viewerName={session?.name ?? "운영"}
-        viewerRole={session?.role ?? "INVITOR"}
+        viewerName={session.name}
+        viewerRole={session.role}
       >
         <section className="rounded-lg border border-red-100 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold text-[#E00E0E]">사용자 상세를 불러오지 못했습니다</p>

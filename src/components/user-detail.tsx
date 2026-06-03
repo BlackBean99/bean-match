@@ -4,10 +4,12 @@ import type { ReactNode } from "react";
 import { openLevelLabels } from "@/lib/domain";
 import type { DashboardUserDetail, DashboardUserPhoto } from "@/lib/domain";
 import {
+  deleteMemberAction,
   deleteUserPhotoAction,
   setMainUserPhotoAction,
   updateUserPhotoAction,
 } from "@/app/actions";
+import { OfferLinkQuickActions } from "@/components/offer-link-quick-actions";
 import { OnboardingAccessTokenManager } from "@/components/onboarding-access-token-manager";
 import { ReadOnlyTokenManager } from "@/components/readonly-token-manager";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
@@ -53,7 +55,21 @@ export function UserDetail({
               </p>
               <p className="mt-1 text-sm font-bold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
             </div>
-            <StatusBadge status={user.status} />
+            <div className="flex flex-col items-end gap-3">
+              <StatusBadge status={user.status} />
+              {canManage ? (
+                <form action={deleteMemberAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="id" value={user.id} />
+                    <FormSubmitButton
+                      label="회원 삭제"
+                      pendingLabel="삭제 중..."
+                      className="rounded-2xl border border-red-100 bg-red-50 px-4 py-2 text-sm font-bold text-[#b10606] hover:bg-red-100"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
+            </div>
           </div>
           <div className="mt-5 space-y-4 text-sm leading-6 text-zinc-700">
             <ProfileText label="자기소개" value={user.selfIntro} />
@@ -94,6 +110,14 @@ export function UserDetail({
         </section>
       </div>
 
+      <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-zinc-950">오퍼 공유</h2>
+        <p className="mt-2 text-sm leading-6 text-zinc-600">
+          상세 화면에서도 오퍼 링크와 토큰을 바로 복사할 수 있습니다. 유효한 원문 토큰이 없으면 7일 만료 토큰을 새로 발급합니다.
+        </p>
+        <OfferLinkQuickActions userId={user.id} />
+      </section>
+
       {canManage ? (
         <>
           <OnboardingAccessTokenManager
@@ -117,7 +141,7 @@ export function UserDetail({
         <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-zinc-950">모집인 권한</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-600">
-            모집인 계정은 회원 상세를 열람할 수 있지만, 사진 편집과 토큰 발급, 사용자 수정/삭제는 할 수 없습니다.
+            모집인 계정은 회원 상세와 오퍼 공유 기능은 사용할 수 있지만, 사진 편집과 사용자 수정/삭제, 동기화는 할 수 없습니다.
           </p>
         </section>
       )}
