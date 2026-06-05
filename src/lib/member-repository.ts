@@ -1377,9 +1377,15 @@ function photoDeliveryOrProxyUrl(
   filePath: string | null | undefined,
   photoId: bigint | number | null | undefined,
 ) {
+  if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
+  if (filePath && isCloudflareDeliveryUrl(filePath)) return filePath;
+
+  const proxiedUrl = photoDisplayUrl(photoId);
+  if (proxiedUrl) return proxiedUrl;
+
   if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
   if (filePath && isUsableImageUrl(filePath)) return filePath;
-  return photoDisplayUrl(photoId);
+  return undefined;
 }
 
 function photoSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined): string | undefined {
