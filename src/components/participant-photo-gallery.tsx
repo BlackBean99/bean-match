@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
 import Image from "next/image";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type TouchEvent,
+} from "react";
 import type { DashboardUserPhoto } from "@/lib/domain";
 
 type ParticipantPhotoGalleryProps = {
@@ -10,9 +17,33 @@ type ParticipantPhotoGalleryProps = {
   fallbackUrl?: string;
 };
 
+type GalleryPhoto = DashboardUserPhoto & {
+  backupUrl?: string;
+};
+
+type ViewerTouchState = {
+  active: boolean;
+  startX: number;
+  currentX: number;
+  width: number;
+};
+
+const swipeThresholdRatio = 0.18;
+
 export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: ParticipantPhotoGalleryProps) {
-  const galleryPhotos = useMemo(() => {
-    if (photos.length > 0) return photos;
+  const galleryPhotos = useMemo<GalleryPhoto[]>(() => {
+    if (photos.length > 0) {
+      return photos
+        .map((photo) => ({
+          ...photo,
+          backupUrl:
+            photo.sourceUrl && photo.sourceUrl !== photo.url && isUsableClientImageUrl(photo.sourceUrl)
+              ? photo.sourceUrl
+              : undefined,
+        }))
+        .filter((photo) => Boolean(photo.url || photo.backupUrl));
+    }
+
     if (!fallbackUrl) return [];
 
     return [
@@ -20,118 +51,199 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
         id: 0,
         url: fallbackUrl,
         sourceUrl: fallbackUrl,
+        backupUrl: undefined,
         originalFileName: `${name} 사진`,
         isMain: true,
         sortOrder: 0,
         uploadedAt: "",
       },
-    ] satisfies DashboardUserPhoto[];
+    ];
   }, [fallbackUrl, name, photos]);
+
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
-  const selectedPhoto = galleryPhotos[selectedIndex] ?? null;
+  const [loadedSources, setLoadedSources] = useState<Record<string, true>>({});
+  const [fallbackSourceIndex, setFallbackSourceIndex] = useState<Record<number, number>>({});
+  const [dragOffset, setDragOffset] = useState(0);
+  const touchStateRef = useRef<ViewerTouchState>({
+    active: false,
+    startX: 0,
+    currentX: 0,
+    width: 0,
+  });
+
+  useEffect(() => {
+    if (selectedIndex < galleryPhotos.length) return;
+    setSelectedIndex(0);
+  }, [galleryPhotos.length, selectedIndex]);
+
+  const activePhoto = galleryPhotos[selectedIndex] ?? null;
+  const activePhotoSource = activePhoto ? resolvePhotoSource(activePhoto, fallbackSourceIndex[selectedIndex] ?? 0) : null;
+
+  useEffect(() => {
+    if (!galleryPhotos.length) return;
+
+    const preloadIndexes = [selectedIndex, (selectedIndex + 1) % galleryPhotos.length];
+    const preloadTargets = preloadIndexes
+      .map((index) => {
+        const photo = galleryPhotos[index];
+        if (!photo) return null;
+        return resolvePhotoSource(photo, fallbackSourceIndex[index] ?? 0);
+      })
+      .filter((source): source is string => Boolean(source));
+
+    for (const source of preloadTargets) {
+      if (loadedSources[source]) continue;
+      const image = new window.Image();
+      image.decoding = "async";
+      image.src = source;
+    }
+  }, [fallbackSourceIndex, galleryPhotos, loadedSources, selectedIndex]);
 
   function blockCardSelection(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
     event.stopPropagation();
   }
 
-  if (!selectedPhoto) {
+  function setLoaded(source: string) {
+    setLoadedSources((current) => (current[source] ? current : { ...current, [source]: true }));
+  }
+
+  function handleImageError(index: number) {
+    setFallbackSourceIndex((current) => {
+      const nextIndex = (current[index] ?? 0) + 1;
+      const photo = galleryPhotos[index];
+      if (!photo || !photo.backupUrl || nextIndex > 1) return current;
+      return { ...current, [index]: nextIndex };
+    });
+  }
+
+  function moveSelection(step: number) {
+    if (galleryPhotos.length <= 1) return;
+    setSelectedIndex((current) => modulo(current + step, galleryPhotos.length));
+    setDragOffset(0);
+  }
+
+  function openViewer(event: MouseEvent<HTMLElement>) {
+    blockCardSelection(event);
+    setIsViewerOpen(true);
+  }
+
+  function onTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (galleryPhotos.length <= 1) return;
+    const touch = event.touches[0];
+    touchStateRef.current = {
+      active: true,
+      startX: touch.clientX,
+      currentX: touch.clientX,
+      width: event.currentTarget.clientWidth,
+    };
+    setDragOffset(0);
+  }
+
+  function onTouchMove(event: TouchEvent<HTMLDivElement>) {
+    if (!touchStateRef.current.active) return;
+    const touch = event.touches[0];
+    touchStateRef.current.currentX = touch.clientX;
+    setDragOffset(touch.clientX - touchStateRef.current.startX);
+  }
+
+  function onTouchEnd() {
+    if (!touchStateRef.current.active) return;
+
+    const { startX, currentX, width } = touchStateRef.current;
+    const delta = currentX - startX;
+    const threshold = Math.max(width * swipeThresholdRatio, 36);
+    touchStateRef.current.active = false;
+
+    if (Math.abs(delta) >= threshold) {
+      moveSelection(delta > 0 ? -1 : 1);
+      return;
+    }
+
+    setDragOffset(0);
+  }
+
+  if (!activePhoto || !activePhotoSource) {
     return (
-      <div className="flex h-full items-center justify-center text-[11px] font-semibold text-zinc-400">
+      <div className="flex h-full items-center justify-center rounded-[24px] border border-white/10 bg-zinc-900/70 text-[11px] font-semibold text-zinc-400">
         사진 없음
       </div>
     );
   }
 
+  const compactLoaded = Boolean(loadedSources[activePhotoSource]);
+
   return (
     <>
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md">
-        <button
-          type="button"
-          onClick={(event) => {
-            blockCardSelection(event);
-            setIsViewerOpen(true);
-          }}
-          className="relative block h-full w-full overflow-hidden rounded-md"
-        >
-          <Image
-            src={selectedPhoto.url}
-            alt={`${name} 사진 ${selectedIndex + 1}`}
-            fill
-            sizes="(max-width: 640px) 116px, 144px"
-            className="object-cover"
-            unoptimized
-          />
+      <div className="grid gap-2">
+        <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
+          <button type="button" onClick={openViewer} className="group relative block h-full w-full overflow-hidden rounded-[24px]">
+            <PhotoStage
+              src={activePhotoSource}
+              alt={`${name} 사진 ${selectedIndex + 1}`}
+              loaded={compactLoaded}
+              priority
+              sizes="(max-width: 640px) 48vw, 220px"
+              fit="contain"
+              onLoad={() => setLoaded(activePhotoSource)}
+              onError={() => handleImageError(selectedIndex)}
+            />
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex gap-1 px-3 pt-3">
+              {galleryPhotos.map((photo, index) => (
+                <span
+                  key={`${photo.id}-${index}`}
+                  className={`h-1 flex-1 rounded-full transition ${
+                    index === selectedIndex ? "bg-white" : "bg-white/30"
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-3 pb-3 pt-10 text-white">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Offer Photo</p>
+                  <p className="mt-1 text-sm font-semibold">{galleryPhotos.length > 1 ? `${selectedIndex + 1} / ${galleryPhotos.length}` : "탭해서 확대"}</p>
+                </div>
+                <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
+                  Swipe Ready
+                </span>
+              </div>
+            </div>
+          </button>
+
           {galleryPhotos.length > 1 ? (
-            <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-              {selectedIndex + 1}/{galleryPhotos.length}
-            </span>
-          ) : (
-            <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-              사진 보기
-            </span>
-          )}
-        </button>
-
-        {galleryPhotos.length > 1 ? (
-          <>
-            <button
-              type="button"
-              aria-label="이전 사진"
-              onClick={(event) => {
-                blockCardSelection(event);
-                setSelectedIndex((selectedIndex - 1 + galleryPhotos.length) % galleryPhotos.length);
-              }}
-              className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white shadow-sm"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              aria-label="다음 사진"
-              onClick={(event) => {
-                blockCardSelection(event);
-                setSelectedIndex((selectedIndex + 1) % galleryPhotos.length);
-              }}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white shadow-sm"
-            >
-              ›
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      {galleryPhotos.length > 1 ? (
-        <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
-          {galleryPhotos.map((photo, index) => (
-            <button
-              key={`${photo.id}-${index}`}
-              type="button"
-              onClick={(event) => {
-                blockCardSelection(event);
-                setSelectedIndex(index);
-              }}
-              className={`relative h-12 w-10 shrink-0 overflow-hidden rounded-md border ${
-                index === selectedIndex ? "border-[#FF3131]" : "border-zinc-200"
-              }`}
-            >
-              <Image
-                src={photo.url}
-                alt={`${name} 썸네일 ${index + 1}`}
-                fill
-                sizes="40px"
-                className="object-cover"
-                unoptimized
-              />
-            </button>
-          ))}
+            <>
+              <button
+                type="button"
+                aria-label="이전 사진"
+                onClick={(event) => {
+                  blockCardSelection(event);
+                  moveSelection(-1);
+                }}
+                className="absolute left-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="다음 사진"
+                onClick={(event) => {
+                  blockCardSelection(event);
+                  moveSelection(1);
+                }}
+                className="absolute right-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
+              >
+                ›
+              </button>
+            </>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       {isViewerOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
+          className="fixed inset-0 z-50 bg-[rgba(5,5,7,0.92)] px-3 py-3 text-white backdrop-blur-xl sm:px-6 sm:py-6"
           role="dialog"
           aria-modal="true"
           onClick={(event) => {
@@ -139,58 +251,143 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
             setIsViewerOpen(false);
           }}
         >
-          <div
-            className="w-full max-w-md overflow-hidden rounded-lg bg-white"
-            onClick={(event) => blockCardSelection(event)}
-          >
-            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-              <p className="truncate text-sm font-bold text-zinc-950">{name} 사진</p>
+          <div className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.94),rgba(9,9,11,0.98))] shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 sm:px-6">
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Profile Viewer</p>
+                <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-white">{name}</h2>
+              </div>
               <button
                 type="button"
                 onClick={(event) => {
                   blockCardSelection(event);
                   setIsViewerOpen(false);
                 }}
-                className="text-sm font-bold text-zinc-500"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white backdrop-blur-md"
               >
                 닫기
               </button>
             </div>
-            <div className="relative aspect-[3/4] bg-black">
-              <Image
-                src={selectedPhoto.url}
-                alt={`${name} 사진 크게 보기 ${selectedIndex + 1}`}
-                fill
-                sizes="(max-width: 768px) 100vw, 480px"
-                className="object-contain"
-                unoptimized
-              />
+
+            <div className="flex gap-1 px-4 pb-3 sm:px-6">
+              {galleryPhotos.map((photo, index) => (
+                <span
+                  key={`${photo.id}-viewer-${index}`}
+                  className={`h-1 flex-1 rounded-full transition ${
+                    index === selectedIndex ? "bg-white" : "bg-white/20"
+                  }`}
+                />
+              ))}
             </div>
+
+            <div
+              className="relative min-h-0 flex-1 overflow-hidden px-2 pb-2 sm:px-4 sm:pb-4"
+              onClick={(event) => blockCardSelection(event)}
+            >
+              <div
+                className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/10 bg-zinc-950/80"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onTouchCancel={onTouchEnd}
+                style={{ touchAction: "pan-y" }}
+              >
+                <div
+                  className="flex h-full w-[300%] will-change-transform"
+                  style={{
+                    transform: `translate3d(calc(-33.333% + ${dragOffset}px), 0, 0)`,
+                    transition: touchStateRef.current.active ? "none" : "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  }}
+                >
+                  {[-1, 0, 1].map((step) => {
+                    const index = modulo(selectedIndex + step, galleryPhotos.length);
+                    const photo = galleryPhotos[index];
+                    const src = resolvePhotoSource(photo, fallbackSourceIndex[index] ?? 0);
+                    const loaded = src ? Boolean(loadedSources[src]) : false;
+
+                    return (
+                      <div key={`${photo.id}-${step}`} className="relative h-full w-1/3 shrink-0 p-2 sm:p-4">
+                        {src ? (
+                          <PhotoStage
+                            src={src}
+                            alt={`${name} 사진 ${index + 1}`}
+                            loaded={loaded}
+                            priority={step === 0}
+                            sizes="100vw"
+                            fit="contain"
+                            onLoad={() => setLoaded(src)}
+                            onError={() => handleImageError(index)}
+                          />
+                        ) : (
+                          <div className="h-full rounded-[24px] bg-zinc-900" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {galleryPhotos.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="이전 사진"
+                      onClick={(event) => {
+                        blockCardSelection(event);
+                        moveSelection(-1);
+                      }}
+                      className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-lg font-semibold text-white backdrop-blur-md"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="다음 사진"
+                      onClick={(event) => {
+                        blockCardSelection(event);
+                        moveSelection(1);
+                      }}
+                      className="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-lg font-semibold text-white backdrop-blur-md"
+                    >
+                      ›
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
             {galleryPhotos.length > 1 ? (
-              <div className="flex items-center justify-between gap-2 border-t border-zinc-200 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    blockCardSelection(event);
-                    setSelectedIndex((selectedIndex - 1 + galleryPhotos.length) % galleryPhotos.length);
-                  }}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700"
-                >
-                  이전
-                </button>
-                <p className="text-xs font-semibold text-zinc-500">
-                  {selectedIndex + 1} / {galleryPhotos.length}
-                </p>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    blockCardSelection(event);
-                    setSelectedIndex((selectedIndex + 1) % galleryPhotos.length);
-                  }}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-semibold text-zinc-700"
-                >
-                  다음
-                </button>
+              <div className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6 sm:pb-5">
+                {galleryPhotos.map((photo, index) => {
+                  const src = resolvePhotoSource(photo, fallbackSourceIndex[index] ?? 0);
+                  if (!src) return null;
+
+                  return (
+                    <button
+                      key={`${photo.id}-thumb-${index}`}
+                      type="button"
+                      onClick={(event) => {
+                        blockCardSelection(event);
+                        setSelectedIndex(index);
+                        setDragOffset(0);
+                      }}
+                      className={`relative h-16 w-12 shrink-0 overflow-hidden rounded-2xl border transition ${
+                        index === selectedIndex
+                          ? "border-white/70 ring-2 ring-white/30"
+                          : "border-white/10 opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      <Image
+                        src={src}
+                        alt={`${name} 썸네일 ${index + 1}`}
+                        fill
+                        sizes="48px"
+                        className="object-cover"
+                        unoptimized
+                        loading="lazy"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -198,4 +395,71 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
       ) : null}
     </>
   );
+}
+
+function PhotoStage({
+  src,
+  alt,
+  loaded,
+  priority = false,
+  sizes,
+  fit,
+  onLoad,
+  onError,
+}: {
+  src: string;
+  alt: string;
+  loaded: boolean;
+  priority?: boolean;
+  sizes: string;
+  fit: "contain" | "cover";
+  onLoad: () => void;
+  onError: () => void;
+}) {
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-[24px] bg-zinc-950">
+      <div
+        className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-2xl"
+        style={{ backgroundImage: `url("${src}")` }}
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_40%),linear-gradient(180deg,rgba(7,7,10,0.18),rgba(7,7,10,0.72))]" />
+      {!loaded ? (
+        <div className="absolute inset-0 animate-pulse bg-[linear-gradient(120deg,rgba(255,255,255,0.08),rgba(255,255,255,0.16),rgba(255,255,255,0.08))]" />
+      ) : null}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        priority={priority}
+        sizes={sizes}
+        className={`relative z-[1] transition duration-300 ${fit === "cover" ? "object-cover object-center" : "object-contain object-center"} ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
+        unoptimized
+        loading={priority ? undefined : "lazy"}
+        onLoad={onLoad}
+        onError={onError}
+      />
+    </div>
+  );
+}
+
+function resolvePhotoSource(photo: GalleryPhoto, fallbackIndex: number) {
+  const sources = [photo.url, photo.backupUrl].filter((value, index, list): value is string => {
+    return Boolean(value) && list.indexOf(value) === index;
+  });
+  return sources[Math.min(fallbackIndex, Math.max(sources.length - 1, 0))] ?? null;
+}
+
+function isUsableClientImageUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function modulo(value: number, length: number) {
+  return ((value % length) + length) % length;
 }
