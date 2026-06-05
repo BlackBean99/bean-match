@@ -117,7 +117,11 @@ export function UsersDashboard({ users, allUsers, canManage = false, databaseCon
       <section className="space-y-5">
         <ConnectionStatus databaseConnected={databaseConnected} loadError={loadError} />
         <MemberCreatePanel disabled={!databaseConnected || !canManage} />
-        <MemberTable users={participantUsers} editable={databaseConnected && canManage} />
+        <MemberTable
+          users={participantUsers}
+          editable={databaseConnected && canManage}
+          canShareOffer={databaseConnected}
+        />
         <details className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
           <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">
             모집인 보기
@@ -129,7 +133,12 @@ export function UsersDashboard({ users, allUsers, canManage = false, databaseCon
             `INVITOR` 역할이 있는 회원은 상태 필터와 무관하게 여기 포함됩니다.
           </p>
           <div className="mt-4">
-            <MemberTable users={invitorUsers} editable={databaseConnected && canManage} allowDelete={false} />
+            <MemberTable
+              users={invitorUsers}
+              editable={databaseConnected && canManage}
+              allowDelete={databaseConnected && canManage}
+              canShareOffer={databaseConnected}
+            />
           </div>
         </details>
       </section>
@@ -461,10 +470,12 @@ function MemberTable({
   users,
   editable,
   allowDelete = editable,
+  canShareOffer = false,
 }: {
   users: DashboardUser[];
   editable: boolean;
   allowDelete?: boolean;
+  canShareOffer?: boolean;
 }) {
   return (
     <AdminTableSection>
@@ -472,7 +483,22 @@ function MemberTable({
         <h2 className="text-lg font-bold text-zinc-950">사용자 목록</h2>
         <p className="text-xs text-zinc-500">연락처는 목록에 표시하지 않습니다.</p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="grid gap-3 p-4 md:hidden">
+        {users.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">조건에 맞는 사용자가 없습니다.</p>
+        ) : (
+          users.map((user) => (
+            <MemberCard
+              key={user.id}
+              user={user}
+              editable={editable}
+              allowDelete={allowDelete}
+              canShareOffer={canShareOffer}
+            />
+          ))
+        )}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[1160px] table-fixed border-collapse text-left text-sm">
           <thead className="bg-[#fafafc] text-xs font-bold uppercase text-zinc-500">
             <tr>
@@ -496,7 +522,15 @@ function MemberTable({
                 </td>
               </tr>
             ) : (
-              users.map((user) => <MemberRow key={user.id} user={user} editable={editable} allowDelete={allowDelete} />)
+              users.map((user) => (
+                <MemberRow
+                  key={user.id}
+                  user={user}
+                  editable={editable}
+                  allowDelete={allowDelete}
+                  canShareOffer={canShareOffer}
+                />
+              ))
             )}
           </tbody>
         </table>
@@ -505,14 +539,121 @@ function MemberTable({
   );
 }
 
-function MemberRow({
+function MemberCard({
   user,
   editable,
   allowDelete = editable,
+  canShareOffer = false,
 }: {
   user: DashboardUser;
   editable: boolean;
   allowDelete?: boolean;
+  canShareOffer?: boolean;
+}) {
+  return (
+    <article className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+      <div className="flex items-start gap-3">
+        <div
+          className={
+            user.mainPhotoUrl
+              ? "photo-skeleton relative h-16 w-16 shrink-0 overflow-hidden rounded-[18px] border border-zinc-200 bg-zinc-100"
+              : "relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-zinc-200 bg-zinc-100 text-[11px] text-zinc-400"
+          }
+        >
+          {user.mainPhotoUrl ? (
+            <Image
+              src={user.mainPhotoUrl}
+              alt={`${user.name} 대표 사진`}
+              fill
+              sizes="64px"
+              className="relative z-10 object-cover"
+              unoptimized
+            />
+          ) : (
+            "사진 없음"
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-base font-bold text-zinc-950">{user.name}</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-500">ID {user.id}</p>
+            </div>
+            <StatusBadge status={user.status} />
+          </div>
+          <p className="mt-2 text-sm text-zinc-600">
+            {user.gender} · {formatAge(user)} · {user.heightCm > 0 ? `${user.heightCm}cm` : "키 미입력"}
+          </p>
+          <p className="mt-1 text-sm text-zinc-600">
+            {user.jobTitle || "-"}
+            {user.companyName ? ` · ${user.companyName}` : ""}
+          </p>
+          <p className="mt-2 text-xs font-semibold text-[#E00E0E]">{openLevelLabels[user.openLevel]}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {user.roles.map((role) => (
+          <span key={role} className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
+            {roleLabels[role] ?? role}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+        <p className="line-clamp-3 break-words">{user.selfIntro || "-"}</p>
+        {user.idealTypeDescription ? (
+          <p className="mt-2 line-clamp-2 break-words text-xs text-zinc-500">이상형 {user.idealTypeDescription}</p>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Link href={`/users/${user.id}`} className="text-sm font-bold text-zinc-700 hover:text-[#e63a68]">
+          자세히
+        </Link>
+        {editable ? (
+          <details className="relative">
+            <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">수정</summary>
+            <form action={updateMemberAction} className="absolute left-0 z-20 mt-3 grid w-[min(88vw,20rem)] gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+              <FormPendingFieldset className="grid gap-3">
+                <input type="hidden" name="id" value={user.id} />
+                <MemberFields user={user} compact />
+                <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
+              </FormPendingFieldset>
+            </form>
+          </details>
+        ) : (
+          <span className="text-sm font-semibold text-zinc-400">열람 전용</span>
+        )}
+        {editable && allowDelete ? (
+          <form action={deleteMemberAction}>
+            <FormPendingFieldset className="contents">
+              <input type="hidden" name="id" value={user.id} />
+              <FormSubmitButton
+                label="삭제"
+                pendingLabel="삭제 중..."
+                className="text-sm font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+              />
+            </FormPendingFieldset>
+          </form>
+        ) : null}
+      </div>
+
+      {canShareOffer ? <OfferLinkQuickActions userId={user.id} /> : null}
+    </article>
+  );
+}
+
+function MemberRow({
+  user,
+  editable,
+  allowDelete = editable,
+  canShareOffer = false,
+}: {
+  user: DashboardUser;
+  editable: boolean;
+  allowDelete?: boolean;
+  canShareOffer?: boolean;
 }) {
   return (
     <tr className="align-middle hover:bg-[#fff7fa]">
@@ -578,36 +719,40 @@ function MemberRow({
         ) : null}
       </td>
       <td className="px-3 py-2">
-        {editable ? (
+        {editable || canShareOffer ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
                 자세히
               </Link>
-              <details className="relative w-14">
-                <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
-                <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
-                  <FormPendingFieldset className="grid gap-3">
-                    <input type="hidden" name="id" value={user.id} />
-                    <MemberFields user={user} compact />
-                    <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
-                  </FormPendingFieldset>
-                </form>
-                {allowDelete ? (
-                  <form action={deleteMemberAction} className="mt-2">
-                    <FormPendingFieldset className="contents">
+              {editable ? (
+                <details className="relative w-14">
+                  <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>
+                  <form action={updateMemberAction} className="absolute right-0 z-20 mt-3 grid w-80 gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+                    <FormPendingFieldset className="grid gap-3">
                       <input type="hidden" name="id" value={user.id} />
-                      <FormSubmitButton
-                        label="삭제"
-                        pendingLabel="삭제 중..."
-                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                      />
+                      <MemberFields user={user} compact />
+                      <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
                     </FormPendingFieldset>
                   </form>
-                ) : null}
-              </details>
+                  {allowDelete ? (
+                    <form action={deleteMemberAction} className="mt-2">
+                      <FormPendingFieldset className="contents">
+                        <input type="hidden" name="id" value={user.id} />
+                        <FormSubmitButton
+                          label="삭제"
+                          pendingLabel="삭제 중..."
+                          className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                        />
+                      </FormPendingFieldset>
+                    </form>
+                  ) : null}
+                </details>
+              ) : (
+                <span className="text-xs font-semibold text-zinc-400">열람</span>
+              )}
             </div>
-            <OfferLinkQuickActions userId={user.id} />
+            {canShareOffer ? <OfferLinkQuickActions userId={user.id} /> : null}
           </div>
         ) : (
           <span className="text-xs font-semibold text-zinc-400">열람 전용</span>
@@ -658,7 +803,63 @@ function IntroCaseTable({
       <div className="border-b border-[#f1f5f9] px-5 py-4">
         <h2 className="text-lg font-bold text-zinc-950">매칭 기록</h2>
       </div>
-      <div className="overflow-x-auto">
+      <div className="grid gap-3 p-4 md:hidden">
+        {introCases.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">매칭 기록이 없습니다.</p>
+        ) : (
+          introCases.map((introCase) => (
+            <article key={introCase.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-500">#{introCase.id}</p>
+                  <p className="mt-1 text-base font-bold text-zinc-950">{formatParticipants(introCase)}</p>
+                  <p className="mt-1 text-sm text-zinc-600">{introCase.invitor}</p>
+                </div>
+                <IntroStatusBadge status={introCase.status} />
+              </div>
+              <div className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                <p>{introCase.memo || "메모 없음"}</p>
+              </div>
+              {editable ? (
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <details className="relative">
+                    <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">수정</summary>
+                    <form action={updateIntroCaseAction} className="absolute left-0 z-20 mt-3 grid w-[min(88vw,18rem)] gap-3 rounded-[24px] border border-[#f1f5f9] bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+                      <FormPendingFieldset className="grid gap-3">
+                        <input type="hidden" name="id" value={introCase.id} />
+                        <Field label="상태">
+                          <select name="status" defaultValue={introCase.status} className={inputClassName}>
+                            {introStatusOrder.map((status) => (
+                              <option key={status} value={status}>
+                                {introStatusLabels[status]}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="메모">
+                          <textarea name="memo" defaultValue={introCase.memo} rows={3} className={inputClassName} />
+                        </Field>
+                        <FormSubmitButton label="저장" pendingLabel="저장 중..." className={adminPrimaryButtonClassName} />
+                      </FormPendingFieldset>
+                    </form>
+                  </details>
+                  <form action={deleteIntroCaseAction}>
+                    <FormPendingFieldset className="contents">
+                      <input type="hidden" name="id" value={introCase.id} />
+                      <FormSubmitButton
+                        label="삭제"
+                        pendingLabel="삭제 중..."
+                        className="text-sm font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                      />
+                    </FormPendingFieldset>
+                  </form>
+                </div>
+              ) : null}
+            </article>
+          ))
+        )}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] table-fixed text-left text-sm">
           <thead className="bg-[#fafafc] text-xs font-bold uppercase text-zinc-500">
             <tr>

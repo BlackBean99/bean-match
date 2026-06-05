@@ -81,8 +81,8 @@ export function ParticipantExposureHub({
                         className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-sm has-[:checked]:border-[#FF3131] has-[:checked]:bg-red-50/60"
                       >
                         <div className="grid gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
-                          <div className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
-                            <div className="relative aspect-[3/4]">
+                          <div className="rounded-md border border-zinc-200 bg-zinc-100 p-2">
+                            <div className="w-full">
                               <ParticipantPhotoGallery
                                 name={candidate.name}
                                 photos={candidate.photos}
@@ -157,8 +157,8 @@ export function ParticipantExposureHub({
                   </div>
                   <p className="mt-2 text-sm leading-6 text-zinc-600">{notification.body}</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-[96px_minmax(0,1fr)]">
-                    <div className="overflow-hidden rounded-md border border-zinc-200 bg-white">
-                      <div className="relative aspect-[3/4]">
+                    <div className="rounded-md border border-zinc-200 bg-white p-2">
+                      <div className="w-full">
                         <ParticipantPhotoGallery
                           name={notification.subject.name}
                           photos={notification.subject.photos}

@@ -35,6 +35,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_IMAGES_TOKEN: ${{ secrets.CLOUDFLARE_IMAGES_TOKEN }}
       CLOUDFLARE_IMAGES_VARIANT: ${{ secrets.CLOUDFLARE_IMAGES_VARIANT }}
+      OPS_AUTH_SECRET: ${{ secrets.OPS_AUTH_SECRET }}
+      OPS_AUTH_ACCOUNTS_JSON: ${{ secrets.OPS_AUTH_ACCOUNTS_JSON }}
 
     steps:
       - name: Checkout
@@ -93,6 +95,8 @@ jobs:
 
           require_value NOTION_TOKEN "$NOTION_TOKEN"
           require_value SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
+          require_value OPS_AUTH_SECRET "$OPS_AUTH_SECRET"
+          require_value OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
 
           append_secret() {
@@ -101,6 +105,37 @@ jobs:
             if [ -n "$value" ]; then
               printf '%s=%s\n' "$key" "$value" >> "$secret_file"
             fi
+          }
+
+          normalize_secret_value() {
+            local key="$1"
+            local value="$2"
+            printf '%s' "$value" | sed -E "s/^${key}[[:space:]]*[:=][[:space:]]*//"
+          }
+
+          append_json_secret() {
+            local key="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              return
+            fi
+
+            local normalized
+            if ! normalized="$(node -e '
+              const raw = (process.argv[1] ?? "").trim();
+              const stripped = raw.replace(/^OPS_AUTH_ACCOUNTS_JSON\s*[:=]\s*/i, "");
+              const parsed = JSON.parse(stripped);
+              if (!Array.isArray(parsed)) {
+                throw new Error("OPS_AUTH_ACCOUNTS_JSON must be a JSON array");
+              }
+              process.stdout.write(JSON.stringify(parsed));
+            ' "$value")"; then
+              echo "::error::Invalid GitHub secret format: $key must be a valid JSON array"
+              missing=1
+              return
+            fi
+
+            printf '%s=%s\n' "$key" "$normalized" >> "$secret_file"
           }
 
           append_secret SUPABASE_URL "$SUPABASE_URL"
@@ -118,6 +153,8 @@ jobs:
           append_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
           append_secret CLOUDFLARE_IMAGES_TOKEN "$CLOUDFLARE_IMAGES_TOKEN"
           append_secret CLOUDFLARE_IMAGES_VARIANT "$CLOUDFLARE_IMAGES_VARIANT"
+          append_secret OPS_AUTH_SECRET "$(normalize_secret_value OPS_AUTH_SECRET "$OPS_AUTH_SECRET")"
+          append_json_secret OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
 
           if [ "$missing" -ne 0 ]; then
             exit 1

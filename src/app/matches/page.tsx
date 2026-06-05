@@ -1,6 +1,6 @@
 import { AdminShell } from "@/components/admin-shell";
 import { MatchesDashboard } from "@/components/dashboard";
-import { getOpsSession } from "@/lib/admin-access-server";
+import { requireOpsSession } from "@/lib/admin-access-server";
 import { parseMemberFilters, type SearchParamMap } from "@/lib/filter-utils";
 import { getMemberDashboardData } from "@/lib/member-repository";
 
@@ -11,7 +11,7 @@ type MatchesPageProps = {
 };
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
-  const session = await getOpsSession();
+  const session = await requireOpsSession();
   const resolvedSearchParams = (await searchParams) ?? {};
   const view = typeof resolvedSearchParams.view === "string" ? resolvedSearchParams.view : undefined;
   const filters = parseMemberFilters({ ...resolvedSearchParams, view: view ?? "recommend" });
@@ -24,8 +24,8 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
       description="등록된 회원을 관리하고 매칭 기회를 빠르게 구성합니다."
       active="matches"
       canManage={canManage}
-      viewerName={session?.name ?? "운영"}
-      viewerRole={session?.role ?? "INVITOR"}
+      viewerName={session.name}
+      viewerRole={session.role}
     >
       <MatchesDashboard {...data} filters={filters} canManage={canManage} />
     </AdminShell>

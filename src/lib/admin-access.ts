@@ -1,3 +1,5 @@
+import { getRuntimeEnv } from "@/lib/runtime-env";
+
 const OPS_SESSION_COOKIE_NAME = "bb_ops_session";
 const OPS_SESSION_MAX_AGE = 60 * 60 * 12;
 const textEncoder = new TextEncoder();
@@ -93,17 +95,15 @@ export async function readOpsSessionCookieValue(cookieValue: string | undefined)
 }
 
 function getOpsAuthSecret() {
-  return process.env.OPS_AUTH_SECRET?.trim() ?? "";
+  const raw = getRuntimeEnv().OPS_AUTH_SECRET?.trim() ?? "";
+  return raw.replace(/^OPS_AUTH_SECRET\s*=\s*/i, "").trim();
 }
 
 function getOpsAccounts(): OpsAccount[] {
-  const raw = process.env.OPS_AUTH_ACCOUNTS_JSON?.trim();
-  if (!raw) return [];
+  const parsed = parseOpsAccountsJson(getRuntimeEnv().OPS_AUTH_ACCOUNTS_JSON);
+  if (!Array.isArray(parsed)) return [];
 
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
     return parsed.flatMap((candidate) => {
       if (
         !candidate ||
@@ -128,6 +128,45 @@ function getOpsAccounts(): OpsAccount[] {
   } catch {
     return [];
   }
+}
+
+function parseOpsAccountsJson(rawValue: string | undefined) {
+  const raw = rawValue?.trim().replace(/^OPS_AUTH_ACCOUNTS_JSON\s*[:=]\s*/i, "") ?? "";
+  if (!raw) return [];
+
+  const candidates = [
+    raw,
+    unwrapMatchingQuotes(raw),
+  ].filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (typeof parsed === "string") {
+        try {
+          return JSON.parse(parsed) as unknown;
+        } catch {
+          continue;
+        }
+      }
+      return parsed;
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
+
+function unwrapMatchingQuotes(value: string) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1).trim();
+  }
+
+  return value;
 }
 
 async function signValue(value: string) {
