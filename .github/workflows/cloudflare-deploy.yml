@@ -54,7 +54,7 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
-      - name: Sync Worker secrets from GitHub Secrets
+      - name: Build and deploy Worker with runtime secrets
         shell: bash
         env:
           # Cloudflare Worker name, not Pages project name.
@@ -99,73 +99,61 @@ jobs:
           require_value OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
 
-          append_secret() {
-            local key="$1"
-            local value="$2"
-            if [ -n "$value" ]; then
-              printf '%s=%s\n' "$key" "$value" >> "$secret_file"
-            fi
-          }
-
           normalize_secret_value() {
             local key="$1"
             local value="$2"
             printf '%s' "$value" | sed -E "s/^${key}[[:space:]]*[:=][[:space:]]*//"
           }
 
-          append_json_secret() {
-            local key="$1"
-            local value="$2"
-            if [ -z "$value" ]; then
-              return
-            fi
-
-            local normalized
-            if ! normalized="$(node -e '
-              const raw = (process.argv[1] ?? "").trim();
-              const stripped = raw.replace(/^OPS_AUTH_ACCOUNTS_JSON\s*[:=]\s*/i, "");
-              const parsed = JSON.parse(stripped);
-              if (!Array.isArray(parsed)) {
-                throw new Error("OPS_AUTH_ACCOUNTS_JSON must be a JSON array");
-              }
-              process.stdout.write(JSON.stringify(parsed));
-            ' "$value")"; then
-              echo "::error::Invalid GitHub secret format: $key must be a valid JSON array"
-              missing=1
-              return
-            fi
-
-            printf '%s=%s\n' "$key" "$normalized" >> "$secret_file"
-          }
-
-          append_secret SUPABASE_URL "$SUPABASE_URL"
-          append_secret NEXT_PUBLIC_SUPABASE_URL "$NEXT_PUBLIC_SUPABASE_URL"
-          append_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
-          append_secret NEXT_PUBLIC_SUPABASE_ANON_KEY "$NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          append_secret NOTION_TOKEN "$NOTION_TOKEN"
-          append_secret NOTION_API_VERSION "$NOTION_API_VERSION"
-          append_secret NOTION_MAIN_DATA_SOURCE_ID "$NOTION_MAIN_DATA_SOURCE_ID"
-          append_secret NOTION_USERS_DATABASE_ID "$NOTION_USERS_DATABASE_ID"
-          append_secret NOTION_INVITOR_DATA_SOURCE_ID "$NOTION_INVITOR_DATA_SOURCE_ID"
-          append_secret NOTION_MATCHING_HISTORY_DATA_SOURCE_ID "$NOTION_MATCHING_HISTORY_DATA_SOURCE_ID"
-          append_secret CLOUDFLARE_IMAGES_ACCOUNT_ID "$CLOUDFLARE_IMAGES_ACCOUNT_ID"
-          append_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
-          append_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
-          append_secret CLOUDFLARE_IMAGES_TOKEN "$CLOUDFLARE_IMAGES_TOKEN"
-          append_secret CLOUDFLARE_IMAGES_VARIANT "$CLOUDFLARE_IMAGES_VARIANT"
-          append_secret OPS_AUTH_SECRET "$(normalize_secret_value OPS_AUTH_SECRET "$OPS_AUTH_SECRET")"
-          append_json_secret OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
-
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
 
-          if [ ! -s "$secret_file" ]; then
-            echo "No Pages secrets were provided from GitHub Secrets."
+          if ! node - "$secret_file" <<'EOF'
+          const fs = require("node:fs");
+          const secretFile = process.argv[2];
+          const normalize = (key, value) => {
+            if (!value) return "";
+            return String(value).replace(new RegExp(`^${key}\\s*[:=]\\s*`, "i"), "").trim();
+          };
+
+          const parseAccounts = (value) => {
+            const normalized = normalize("OPS_AUTH_ACCOUNTS_JSON", value);
+            const parsed = JSON.parse(normalized);
+            if (!Array.isArray(parsed)) {
+              throw new Error("OPS_AUTH_ACCOUNTS_JSON must be a JSON array");
+            }
+            return JSON.stringify(parsed);
+          };
+
+          const secrets = Object.fromEntries(
+            Object.entries({
+              SUPABASE_URL: process.env.SUPABASE_URL,
+              NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+              SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+              NOTION_TOKEN: process.env.NOTION_TOKEN,
+              NOTION_API_VERSION: process.env.NOTION_API_VERSION,
+              NOTION_MAIN_DATA_SOURCE_ID: process.env.NOTION_MAIN_DATA_SOURCE_ID,
+              NOTION_USERS_DATABASE_ID: process.env.NOTION_USERS_DATABASE_ID,
+              NOTION_INVITOR_DATA_SOURCE_ID: process.env.NOTION_INVITOR_DATA_SOURCE_ID,
+              NOTION_MATCHING_HISTORY_DATA_SOURCE_ID: process.env.NOTION_MATCHING_HISTORY_DATA_SOURCE_ID,
+              CLOUDFLARE_IMAGES_ACCOUNT_ID: process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID,
+              CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+              CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+              CLOUDFLARE_IMAGES_TOKEN: process.env.CLOUDFLARE_IMAGES_TOKEN,
+              CLOUDFLARE_IMAGES_VARIANT: process.env.CLOUDFLARE_IMAGES_VARIANT,
+              OPS_AUTH_SECRET: normalize("OPS_AUTH_SECRET", process.env.OPS_AUTH_SECRET),
+              OPS_AUTH_ACCOUNTS_JSON: parseAccounts(process.env.OPS_AUTH_ACCOUNTS_JSON),
+            }).filter(([, value]) => value !== undefined && value !== "")
+          );
+
+          fs.writeFileSync(secretFile, JSON.stringify(secrets, null, 2));
+          EOF
+          then
+            echo "::error::Failed to normalize Worker secrets payload"
             exit 1
           fi
 
-          npx wrangler versions secret bulk "$secret_file" --name "$WORKER_NAME"
-
-      - name: Build and deploy to Cloudflare
-        run: npm run deploy
+          npm run build
+          npx wrangler deploy --name "$WORKER_NAME" --keep-vars --secrets-file "$secret_file"
