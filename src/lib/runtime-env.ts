@@ -7,6 +7,11 @@ export function getRuntimeEnv(): RuntimeEnv {
   return cloudflareEnv ? { ...process.env, ...cloudflareEnv } : process.env;
 }
 
+export async function getRuntimeEnvAsync(): Promise<RuntimeEnv> {
+  const cloudflareEnv = await getCloudflareEnvAsync();
+  return cloudflareEnv ? { ...process.env, ...cloudflareEnv } : process.env;
+}
+
 export function isCloudflareRuntime() {
   const env = process.env;
   return Boolean(
@@ -62,5 +67,13 @@ function getCloudflareEnv(): Partial<CloudflareEnv> | null {
     return getCloudflareContext().env;
   } catch {
     return null;
+  }
+}
+
+async function getCloudflareEnvAsync(): Promise<Partial<CloudflareEnv> | null> {
+  try {
+    return (await getCloudflareContext({ async: true })).env;
+  } catch {
+    return getCloudflareEnv();
   }
 }

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppErrorView } from "@/components/app-error-view";
 import { AdminAccessGate } from "@/components/admin-access-gate";
 import { getOpsSession } from "@/lib/admin-access-server";
-import { isOpsAuthConfigured, normalizeAdminAccessReturnPath } from "@/lib/admin-access";
+import { isOpsAuthConfiguredAsync, normalizeAdminAccessReturnPath } from "@/lib/admin-access";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function AdminAccessPage({ searchParams }: AdminAccessPageP
     redirect(returnPath);
   }
 
-  if (!isOpsAuthConfigured()) {
+  if (!(await isOpsAuthConfiguredAsync())) {
     return (
       <main className="min-h-screen bg-white px-5 py-8 text-zinc-950">
         <AppErrorView

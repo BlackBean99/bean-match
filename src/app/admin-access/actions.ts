@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import {
-  authenticateOpsCredentials,
-  isOpsAuthConfigured,
+  authenticateOpsCredentialsAsync,
+  isOpsAuthConfiguredAsync,
   normalizeAdminAccessReturnPath,
 } from "@/lib/admin-access";
 import { clearOpsSession, setOpsSession } from "@/lib/admin-access-server";
@@ -20,13 +20,13 @@ export async function unlockAdminAccessAction(
   const password = formData.get("password")?.toString() ?? "";
   const returnPath = normalizeAdminAccessReturnPath(formData.get("returnPath")?.toString());
 
-  if (!isOpsAuthConfigured()) {
+  if (!(await isOpsAuthConfiguredAsync())) {
     return {
       error: "운영 로그인 계정이 설정되지 않았습니다. 환경 변수부터 설정해 주세요.",
     };
   }
 
-  const account = authenticateOpsCredentials(loginId, password);
+  const account = await authenticateOpsCredentialsAsync(loginId, password);
   if (!account) {
     return {
       error: "ID 또는 비밀번호가 올바르지 않습니다.",
