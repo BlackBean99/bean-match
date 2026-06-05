@@ -1,4 +1,4 @@
-import { getRuntimeEnv } from "@/lib/runtime-env";
+import { getRuntimeEnv, getRuntimeEnvAsync } from "@/lib/runtime-env";
 
 const OPS_SESSION_COOKIE_NAME = "bb_ops_session";
 const OPS_SESSION_MAX_AGE = 60 * 60 * 12;
@@ -32,6 +32,10 @@ export function isOpsAuthConfigured() {
   return Boolean(getOpsAuthSecret()) && getOpsAccounts().length > 0;
 }
 
+export async function isOpsAuthConfiguredAsync() {
+  return Boolean(await getOpsAuthSecretAsync()) && (await getOpsAccountsAsync()).length > 0;
+}
+
 export function isPublicAppPath(pathname: string) {
   return (
     pathname.startsWith("/admin-access") ||
@@ -52,6 +56,10 @@ export function normalizeAdminAccessReturnPath(pathname: string | null | undefin
 
 export function authenticateOpsCredentials(loginId: string, password: string) {
   return getOpsAccounts().find((account) => account.id === loginId && account.password === password) ?? null;
+}
+
+export async function authenticateOpsCredentialsAsync(loginId: string, password: string) {
+  return (await getOpsAccountsAsync()).find((account) => account.id === loginId && account.password === password) ?? null;
 }
 
 export async function createOpsSessionCookieValue(account: Pick<OpsAccount, "id" | "name" | "role">) {
@@ -99,8 +107,44 @@ function getOpsAuthSecret() {
   return raw.replace(/^OPS_AUTH_SECRET\s*=\s*/i, "").trim();
 }
 
+async function getOpsAuthSecretAsync() {
+  const raw = (await getRuntimeEnvAsync()).OPS_AUTH_SECRET?.trim() ?? "";
+  return raw.replace(/^OPS_AUTH_SECRET\s*=\s*/i, "").trim();
+}
+
 function getOpsAccounts(): OpsAccount[] {
   const parsed = parseOpsAccountsJson(getRuntimeEnv().OPS_AUTH_ACCOUNTS_JSON);
+  if (!Array.isArray(parsed)) return [];
+
+  try {
+    return parsed.flatMap((candidate) => {
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        typeof candidate.id !== "string" ||
+        typeof candidate.name !== "string" ||
+        typeof candidate.password !== "string" ||
+        (candidate.role !== "ADMIN" && candidate.role !== "INVITOR")
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          id: candidate.id.trim(),
+          name: candidate.name.trim(),
+          password: candidate.password,
+          role: candidate.role,
+        } satisfies OpsAccount,
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function getOpsAccountsAsync(): Promise<OpsAccount[]> {
+  const parsed = parseOpsAccountsJson((await getRuntimeEnvAsync()).OPS_AUTH_ACCOUNTS_JSON);
   if (!Array.isArray(parsed)) return [];
 
   try {
@@ -170,7 +214,7 @@ function unwrapMatchingQuotes(value: string) {
 }
 
 async function signValue(value: string) {
-  const secret = getOpsAuthSecret();
+  const secret = await getOpsAuthSecretAsync();
   if (!secret) return "";
 
   const key = await crypto.subtle.importKey(

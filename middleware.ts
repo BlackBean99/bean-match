@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   getOpsSessionCookieName,
-  isOpsAuthConfigured,
+  isOpsAuthConfiguredAsync,
   isPublicAppPath,
   readOpsSessionCookieValue,
 } from "./src/lib/admin-access";
@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isOpsAuthConfigured()) {
+  if (!(await isOpsAuthConfiguredAsync())) {
     const lockedUrl = new URL("/admin-access", request.url);
     lockedUrl.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(lockedUrl);
