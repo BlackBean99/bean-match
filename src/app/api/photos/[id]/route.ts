@@ -36,7 +36,7 @@ async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
 async function proxyPhotoResponse(sourceUrl: string, headOnly: boolean) {
   try {
     const upstream = await fetch(sourceUrl, {
-      method: headOnly ? "HEAD" : "GET",
+      method: "GET",
       cache: "no-store",
       redirect: "follow",
     });
