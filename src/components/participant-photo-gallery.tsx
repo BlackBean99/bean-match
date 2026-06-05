@@ -81,7 +81,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
   const activePhotoSource = activePhoto ? resolvePhotoSource(activePhoto, fallbackSourceIndex[selectedIndex] ?? 0) : null;
 
   useEffect(() => {
-    if (!galleryPhotos.length) return;
+    if (!isViewerOpen || galleryPhotos.length <= 1) return;
 
     const preloadIndexes = [selectedIndex, (selectedIndex + 1) % galleryPhotos.length];
     const preloadTargets = preloadIndexes
@@ -98,7 +98,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
       image.decoding = "async";
       image.src = source;
     }
-  }, [fallbackSourceIndex, galleryPhotos, loadedSources, selectedIndex]);
+  }, [fallbackSourceIndex, galleryPhotos, isViewerOpen, loadedSources, selectedIndex]);
 
   function blockCardSelection(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
@@ -179,13 +179,11 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
       <div className="grid gap-2">
         <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
           <button type="button" onClick={openViewer} className="group relative block h-full w-full overflow-hidden rounded-[24px]">
-            <PhotoStage
+            <PreviewPhotoStage
               src={activePhotoSource}
               alt={`${name} 사진 ${selectedIndex + 1}`}
               loaded={compactLoaded}
-              priority
               sizes="(max-width: 640px) 48vw, 220px"
-              fit="contain"
               onLoad={() => setLoaded(activePhotoSource)}
               onError={() => handleImageError(selectedIndex)}
             />
@@ -432,11 +430,46 @@ function PhotoStage({
         fill
         priority={priority}
         sizes={sizes}
-        className={`relative z-[1] transition duration-300 ${fit === "cover" ? "object-cover object-center" : "object-contain object-center"} ${
+        className={`z-[1] transition duration-300 ${fit === "cover" ? "object-cover object-center" : "object-contain object-center"} ${
           loaded ? "opacity-100" : "opacity-0"
         }`}
         unoptimized
         loading={priority ? undefined : "lazy"}
+        onLoad={onLoad}
+        onError={onError}
+      />
+    </div>
+  );
+}
+
+function PreviewPhotoStage({
+  src,
+  alt,
+  loaded,
+  sizes,
+  onLoad,
+  onError,
+}: {
+  src: string;
+  alt: string;
+  loaded: boolean;
+  sizes: string;
+  onLoad: () => void;
+  onError: () => void;
+}) {
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-[24px] bg-zinc-950">
+      {!loaded ? (
+        <div className="absolute inset-0 animate-pulse bg-[linear-gradient(120deg,rgba(255,255,255,0.08),rgba(255,255,255,0.16),rgba(255,255,255,0.08))]" />
+      ) : null}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes={sizes}
+        className={`transition duration-300 ${loaded ? "opacity-100" : "opacity-0"} object-cover object-center`}
+        unoptimized
+        loading="lazy"
         onLoad={onLoad}
         onError={onError}
       />
