@@ -1,3 +1,5 @@
+import { getRuntimeEnv } from "@/lib/runtime-env";
+
 const OPS_SESSION_COOKIE_NAME = "bb_ops_session";
 const OPS_SESSION_MAX_AGE = 60 * 60 * 12;
 const textEncoder = new TextEncoder();
@@ -93,11 +95,12 @@ export async function readOpsSessionCookieValue(cookieValue: string | undefined)
 }
 
 function getOpsAuthSecret() {
-  return process.env.OPS_AUTH_SECRET?.trim() ?? "";
+  const raw = getRuntimeEnv().OPS_AUTH_SECRET?.trim() ?? "";
+  return raw.replace(/^OPS_AUTH_SECRET\s*=\s*/i, "").trim();
 }
 
 function getOpsAccounts(): OpsAccount[] {
-  const parsed = parseOpsAccountsJson(process.env.OPS_AUTH_ACCOUNTS_JSON);
+  const parsed = parseOpsAccountsJson(getRuntimeEnv().OPS_AUTH_ACCOUNTS_JSON);
   if (!Array.isArray(parsed)) return [];
 
   try {
@@ -128,7 +131,7 @@ function getOpsAccounts(): OpsAccount[] {
 }
 
 function parseOpsAccountsJson(rawValue: string | undefined) {
-  const raw = rawValue?.trim();
+  const raw = rawValue?.trim().replace(/^OPS_AUTH_ACCOUNTS_JSON\s*[:=]\s*/i, "") ?? "";
   if (!raw) return [];
 
   const candidates = [
