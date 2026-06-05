@@ -9,7 +9,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { prisma, hasDatabaseUrl } from "@/lib/prisma";
 import {
-  getRuntimeEnv,
+  getRuntimeEnvAsync,
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
@@ -532,7 +532,17 @@ export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<U
   };
 }
 
-export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | null> {
+export type PhotoServeTarget =
+  | {
+      kind: "redirect";
+      url: string;
+    }
+  | {
+      kind: "proxy";
+      url: string;
+    };
+
+export async function getPhotoServeTarget(photoId: bigint): Promise<PhotoServeTarget | null> {
   if (hasDatabaseUrl()) {
     const photo = await prisma.userPhoto.findFirst({
       where: { id: photoId, deletedAt: null },
@@ -545,7 +555,7 @@ export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | nul
     });
     if (!photo) return null;
 
-    return getOrCreatePhotoDeliveryUrl(
+    return getPhotoServeTargetForRecord(
       {
         id: Number(photo.id),
         storedFileName: photo.storedFileName,
@@ -568,7 +578,7 @@ export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | nul
   );
   if (!photo) return null;
 
-  return getOrCreatePhotoDeliveryUrl(
+  return getPhotoServeTargetForRecord(
     {
       id: photo.id,
       storedFileName: photo.stored_file_name,
@@ -582,6 +592,11 @@ export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | nul
       });
     },
   );
+}
+
+export async function getPhotoRedirectUrl(photoId: bigint): Promise<string | null> {
+  const target = await getPhotoServeTarget(photoId);
+  return target?.url ?? null;
 }
 
 export async function addUserPhoto(userId: bigint, input: PhotoInput) {
@@ -1401,30 +1416,57 @@ type PhotoRedirectRecord = {
   fileUrl: string | null;
 };
 
-async function getOrCreatePhotoDeliveryUrl(
+async function getPhotoServeTargetForRecord(
   photo: PhotoRedirectRecord,
   persistFreshUrl: (freshUrl: string) => Promise<unknown>,
-) {
-  if (isCloudflareDeliveryUrl(photo.fileUrl)) return photo.fileUrl;
+): Promise<PhotoServeTarget | null> {
+  if (isCloudflareDeliveryUrl(photo.fileUrl)) {
+    const deliveryUrl = photo.fileUrl;
+    if (deliveryUrl) {
+      return { kind: "redirect", url: deliveryUrl };
+    }
+  }
+  if (isCloudflareDeliveryUrl(photo.filePath)) {
+    return { kind: "redirect", url: photo.filePath };
+  }
 
   const sourceUrl = isUsableImageUrl(photo.fileUrl)
     ? photo.fileUrl
     : isUsableImageUrl(photo.filePath)
       ? photo.filePath
       : null;
-  if (!sourceUrl) return retryCloudflareFromNotionSource(photo, persistFreshUrl);
+  if (sourceUrl) {
+    const freshUrl = await ensureCloudflareCachedImage({
+      customId: photo.storedFileName,
+      sourceUrl,
+      metadata: {
+        photoId: photo.id.toString(),
+      },
+    });
+    if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
+    if (freshUrl) {
+      return { kind: "redirect", url: freshUrl };
+    }
+  }
+
+  const notionSourceUrl = await resolveNotionPhotoSourceUrl(photo.storedFileName);
+  if (!notionSourceUrl) {
+    return sourceUrl ? { kind: "proxy", url: sourceUrl } : null;
+  }
 
   const freshUrl = await ensureCloudflareCachedImage({
     customId: photo.storedFileName,
-    sourceUrl,
+    sourceUrl: notionSourceUrl,
     metadata: {
       photoId: photo.id.toString(),
     },
   });
   if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
-  if (freshUrl) return freshUrl;
+  if (freshUrl) {
+    return { kind: "redirect", url: freshUrl };
+  }
 
-  return retryCloudflareFromNotionSource(photo, persistFreshUrl);
+  return { kind: "proxy", url: notionSourceUrl };
 }
 
 async function refreshPhotoCloudflareDelivery(
@@ -1465,30 +1507,8 @@ function resolveStoredSourceUrl(filePath: string | null | undefined, fileUrl: st
   return isUsableImageUrl(fileUrl) ? fileUrl : isUsableImageUrl(filePath) ? filePath : null;
 }
 
-async function retryCloudflareFromNotionSource(
-  photo: PhotoRedirectRecord,
-  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
-) {
-  const notionSourceUrl = await resolveNotionPhotoSourceUrl(photo.storedFileName);
-  if (!notionSourceUrl || notionSourceUrl === photo.fileUrl) return null;
-
-  const freshUrl = await ensureCloudflareCachedImage({
-    customId: photo.storedFileName,
-    sourceUrl: notionSourceUrl,
-    metadata: {
-      photoId: photo.id.toString(),
-    },
-  });
-  if (freshUrl && freshUrl !== photo.fileUrl) {
-    await persistFreshUrl(freshUrl);
-    return freshUrl;
-  }
-
-  return null;
-}
-
 async function resolveNotionPhotoSourceUrl(storedFileName: string) {
-  const env = getRuntimeEnv();
+  const env = await getRuntimeEnvAsync();
   const notionToken = env.NOTION_TOKEN;
   if (!notionToken) return null;
 

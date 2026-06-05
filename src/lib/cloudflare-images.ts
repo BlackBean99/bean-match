@@ -1,7 +1,7 @@
 import {
-  getCloudflareImagesAccountId,
-  getCloudflareImagesToken,
-  getCloudflareImagesVariant,
+  getCloudflareImagesAccountIdAsync,
+  getCloudflareImagesTokenAsync,
+  getCloudflareImagesVariantAsync,
 } from "@/lib/runtime-env";
 
 type CloudflareImageResult = {
@@ -48,7 +48,7 @@ export async function ensureCloudflareCachedImage(input: {
   fileName?: string;
   metadata?: Record<string, string>;
 }) {
-  if (!isCloudflareImagesConfigured()) return null;
+  if (!(await isCloudflareImagesConfiguredAsync())) return null;
 
   const existing = await getCloudflareImage(input.customId);
   if (existing) return toDeliveryUrl(existing);
@@ -69,7 +69,7 @@ export async function ensureCloudflareCachedImage(input: {
 }
 
 export async function uploadCloudflareImageFile(input: CloudflareUploadInput) {
-  if (!isCloudflareImagesConfigured()) return null;
+  if (!(await isCloudflareImagesConfiguredAsync())) return null;
 
   const file = normalizeUploadFile(input.file, input.fileName);
   return uploadCloudflareImage({
@@ -81,7 +81,7 @@ export async function uploadCloudflareImageFile(input: CloudflareUploadInput) {
 }
 
 export async function deleteCloudflareImage(imageId: string) {
-  if (!isCloudflareImagesConfigured()) return false;
+  if (!(await isCloudflareImagesConfiguredAsync())) return false;
 
   const response = await requestCloudflareImages(`/images/v1/${encodeURIComponent(imageId)}`, {
     method: "DELETE",
@@ -155,7 +155,7 @@ async function getCloudflareImage(imageId: string) {
 }
 
 async function requestCloudflareImages(path: string, init: RequestInit = {}) {
-  const accountId = getCloudflareImagesAccountId();
+  const accountId = await getCloudflareImagesAccountIdAsync();
   const batchToken = await getCloudflareBatchToken();
   const endpoints: Array<{ baseUrl: string; path: string; token: string; isBatch: boolean }> = [];
 
@@ -169,7 +169,7 @@ async function requestCloudflareImages(path: string, init: RequestInit = {}) {
   }
 
   if (accountId) {
-    const apiToken = getCloudflareImagesToken();
+    const apiToken = await getCloudflareImagesTokenAsync();
     if (apiToken) {
       endpoints.push({
         baseUrl: cloudflareApiBaseUrl,
@@ -210,9 +210,9 @@ async function requestCloudflareImages(path: string, init: RequestInit = {}) {
 }
 
 async function getCloudflareBatchToken() {
-  if (!isCloudflareImagesConfigured()) return null;
+  if (!(await isCloudflareImagesConfiguredAsync())) return null;
 
-  const accountId = getCloudflareImagesAccountId();
+  const accountId = await getCloudflareImagesAccountIdAsync();
   if (!accountId) return null;
 
   if (batchTokenState.token && batchTokenState.expiresAt - batchTokenRefreshBufferMs > Date.now()) {
@@ -225,7 +225,7 @@ async function getCloudflareBatchToken() {
     const response = await fetch(`${cloudflareApiBaseUrl}/accounts/${accountId}/images/v1/batch_token`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${getCloudflareImagesToken()}`,
+        Authorization: `Bearer ${await getCloudflareImagesTokenAsync()}`,
       },
       cache: "no-store",
     });
@@ -263,12 +263,15 @@ function normalizeUploadFile(file: File | Blob | ArrayBuffer | Uint8Array, fileN
   return new File([file], fileName);
 }
 
-function isCloudflareImagesConfigured() {
-  return Boolean(getCloudflareImagesToken() && getCloudflareImagesAccountId()) && !cloudflareImagesAvailability.disabled;
+async function isCloudflareImagesConfiguredAsync() {
+  return (
+    Boolean((await getCloudflareImagesTokenAsync()) && (await getCloudflareImagesAccountIdAsync())) &&
+    !cloudflareImagesAvailability.disabled
+  );
 }
 
-function toDeliveryUrl(result: CloudflareImageResult) {
-  const preferredVariant = getCloudflareImagesVariant();
+async function toDeliveryUrl(result: CloudflareImageResult) {
+  const preferredVariant = await getCloudflareImagesVariantAsync();
   return (
     result.variants?.find((variant) => variant.endsWith(`/${preferredVariant}`)) ??
     result.variants?.[0] ??
