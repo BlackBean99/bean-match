@@ -54,7 +54,8 @@
     { "id": "invitor01", "name": "Recruiter One", "password": "strong-password", "role": "INVITOR" }
   ]
   ```
-- secret 값은 위 JSON 배열 본문 그대로 저장합니다. 바깥에 추가로 `"` 로 감싼 문자열이나 임의의 평문으로 넣지 않습니다.
+- secret 값은 raw value로 저장합니다. 예를 들어 `OPS_AUTH_SECRET` secret 값에 `OPS_AUTH_SECRET=` 접두사를 붙이지 않습니다.
+- `OPS_AUTH_ACCOUNTS_JSON` 은 위 JSON 배열 본문 그대로 저장합니다. 여러 줄 JSON도 허용하지만, 배열이 아닌 평문/CSV/설명 문구는 허용하지 않습니다.
 - GitHub Actions 배포를 쓰면 `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON` 도 GitHub Secrets에 같은 이름으로 넣어야 하며, deploy workflow가 Worker runtime secret으로 동기화합니다.
 - `ADMIN` 은 편집/삭제/동기화 가능, `INVITOR` 는 운영 화면 read-only 입니다.
 - Cloudflare Pages에서 운영 버튼을 눌러 sync를 실행하면 Functions 로그에 `scope=notion-sync` JSON이 남습니다. 여기서 `cloudflareTokenPresent`, `notionTokenPresent`, `supabaseServiceRoleKeyPresent` 같은 불리언을 확인합니다.

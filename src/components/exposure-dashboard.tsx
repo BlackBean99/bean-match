@@ -105,8 +105,70 @@ function QueuePanel({
         <h2 className="text-lg font-bold text-zinc-950">New Member Queue</h2>
         <p className="mt-1 text-sm text-zinc-500">최근 READY 진입 사용자와 현재 자동 노출 설정을 함께 관리합니다.</p>
       </div>
+      <div className="grid gap-3 p-4 md:hidden">
+        {queue.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">자동 노출 큐 대상이 없습니다.</p>
+        ) : (
+          queue.map((item) => {
+            const user = users.find((candidate) => candidate.id === item.userId);
+            if (!user) return null;
+
+            return (
+              <article key={item.userId} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-bold text-zinc-950">{item.userName}</p>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {user.gender} · {openLevelLabels[user.openLevel]}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">{item.readyAt}</span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-zinc-600">
+                  <MetricChip label="관심 보냄" value={`${item.outgoingInterestCount}건`} />
+                  <MetricChip label="관심 받음" value={`${item.incomingInterestCount}건`} />
+                  <MetricChip label="상호 관심" value={`${item.mutualInterestCount}건`} />
+                  <MetricChip label="누적 노출" value={`${item.exposureCount}회`} />
+                </div>
+                <form action={updateAutoExposureSettingsAction} className="mt-4 grid gap-2">
+                  <FormPendingFieldset className="grid gap-2">
+                    <input type="hidden" name="userId" value={item.userId} />
+                    <select name="openLevel" defaultValue={user.openLevel} className={adminSmallInputClassName}>
+                      <option value="PRIVATE">운영자 검토만</option>
+                      <option value="SEMI_OPEN">제한 자동 노출</option>
+                      <option value="FULL_OPEN">전체 자동 노출</option>
+                    </select>
+                    <label className="inline-flex items-center gap-2 text-xs text-zinc-600">
+                      <input type="checkbox" name="exposureConsent" defaultChecked={user.exposureConsent} />
+                      노출 동의
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-xs text-zinc-600">
+                      <input
+                        type="checkbox"
+                        name="newMemberNotificationsEnabled"
+                        defaultChecked={user.newMemberNotificationsEnabled}
+                      />
+                      신규 알림
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-xs text-zinc-600">
+                      <input type="checkbox" name="exposurePaused" defaultChecked={user.exposurePaused} />
+                      일시중지
+                    </label>
+                    <FormSubmitButton
+                      label="저장"
+                      pendingLabel="저장 중..."
+                      disabled={disabled}
+                      className="rounded-2xl border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-700 disabled:text-zinc-300"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              </article>
+            );
+          })
+        )}
+      </div>
       <div className="max-h-[760px] overflow-auto">
-        <table className="w-full min-w-[980px] text-left text-sm">
+        <table className="hidden w-full min-w-[980px] text-left text-sm md:table">
           <thead className="bg-[#fafafc] text-xs text-zinc-500">
             <tr>
               <th className="px-3 py-3">회원</th>
@@ -280,8 +342,32 @@ function InterestTable({ interests }: { interests: ExposureDashboardProps["inter
       <div className="border-b border-[#f1f5f9] px-5 py-4">
         <h2 className="text-lg font-bold text-zinc-950">Interest Dashboard</h2>
       </div>
+      <div className="grid gap-3 p-4 md:hidden">
+        {interests.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">관심 데이터가 없습니다.</p>
+        ) : (
+          interests.map((interest) => (
+            <article key={interest.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-bold text-zinc-950">{interest.fromUserName}</p>
+                  <p className="mt-1 text-sm text-zinc-600">→ {interest.toUserName}</p>
+                </div>
+                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
+                  {interest.isMutual ? "상호 관심" : "편향 관심"}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-zinc-600">
+                <MetricChip label="소스" value={interestSourceLabels[interest.source]} />
+                <MetricChip label="상태" value={interestStatusLabels[interest.status]} />
+              </div>
+              <p className="mt-4 text-xs text-zinc-500">{interest.createdAt}</p>
+            </article>
+          ))
+        )}
+      </div>
       <div className="max-h-[560px] overflow-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className="hidden w-full min-w-[760px] text-left text-sm md:table">
           <thead className="bg-[#fafafc] text-xs text-zinc-500">
             <tr>
               <th className="px-3 py-3">From</th>
@@ -330,8 +416,56 @@ function CandidateTable({
       <div className="border-b border-[#f1f5f9] px-5 py-4">
         <h2 className="text-lg font-bold text-zinc-950">Intro Candidates</h2>
       </div>
+      <div className="grid gap-3 p-4 md:hidden">
+        {introCandidates.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">운영 검토 후보가 없습니다.</p>
+        ) : (
+          introCandidates.map((candidate) => (
+            <article key={candidate.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-bold text-zinc-950">
+                    {candidate.userAName} · {candidate.userBName}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">{introCandidateSourceLabels[candidate.source]}</p>
+                </div>
+                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
+                  {introCandidateStatusLabels[candidate.status]}
+                </span>
+              </div>
+              <div className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                {candidate.reason}
+              </div>
+              <p className="mt-4 text-xs text-zinc-500">{candidate.createdAt}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <CandidateActionForm
+                  action={approveIntroCandidateAction}
+                  candidateId={candidate.id}
+                  label="승인"
+                  pendingLabel="승인 중..."
+                  disabled={disabled || candidate.status === "CONVERTED_TO_INTRO_CASE"}
+                />
+                <CandidateActionForm
+                  action={rejectIntroCandidateAction}
+                  candidateId={candidate.id}
+                  label="반려"
+                  pendingLabel="반려 중..."
+                  disabled={disabled || candidate.status === "CONVERTED_TO_INTRO_CASE"}
+                />
+                <CandidateActionForm
+                  action={convertIntroCandidateAction}
+                  candidateId={candidate.id}
+                  label="소개 생성"
+                  pendingLabel="생성 중..."
+                  disabled={disabled || candidate.status === "CONVERTED_TO_INTRO_CASE"}
+                />
+              </div>
+            </article>
+          ))
+        )}
+      </div>
       <div className="max-h-[560px] overflow-auto">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="hidden w-full min-w-[860px] text-left text-sm md:table">
           <thead className="bg-[#fafafc] text-xs text-zinc-500">
             <tr>
               <th className="px-3 py-3">참여자</th>
@@ -428,6 +562,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {label}
       {children}
     </label>
+  );
+}
+
+function MetricChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</p>
+      <p className="mt-1 font-semibold text-zinc-700">{value}</p>
+    </div>
   );
 }
 
