@@ -1133,16 +1133,73 @@ export async function bulkApplyRoundParticipationDefaults(input: { exceptNames: 
 
 export async function deleteMember(id: bigint) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
-    return supabaseRest(`/users?id=eq.${id.toString()}`, {
+    const numericUserId = Number(id);
+    const [photos, introParticipants] = await Promise.all([
+      supabaseRest<Pick<SupabasePhotoRow, "stored_file_name">[]>(
+        `/user_photos?select=stored_file_name&user_id=eq.${numericUserId}`,
+      ),
+      supabaseRest<Pick<SupabaseIntroParticipantRow, "intro_case_id">[]>(
+        `/intro_case_participants?select=intro_case_id&user_id=eq.${numericUserId}`,
+      ),
+    ]);
+
+    const introCaseIds = [...new Set(introParticipants.map((participant) => participant.intro_case_id))];
+    if (introCaseIds.length > 0) {
+      await supabaseRest(`/intro_cases?id=in.(${introCaseIds.join(",")})`, {
+        method: "DELETE",
+      });
+    }
+
+    await supabaseRest(`/notifications?subject_user_id=eq.${numericUserId}`, {
       method: "DELETE",
     });
+    await supabaseRest(`/users?id=eq.${numericUserId}`, {
+      method: "DELETE",
+    });
+
+    await Promise.allSettled(
+      photos
+        .map((photo) => photo.stored_file_name)
+        .filter((storedFileName): storedFileName is string => Boolean(storedFileName))
+        .map((storedFileName) => deleteCloudflareImage(storedFileName)),
+    );
+    return;
   }
 
   assertDatabaseUrl();
 
-  return prisma.user.delete({
-    where: { id },
+  const { photoIds } = await prisma.$transaction(async (tx) => {
+    const [photos, introParticipants] = await Promise.all([
+      tx.userPhoto.findMany({
+        where: { userId: id },
+        select: { storedFileName: true },
+      }),
+      tx.introCaseParticipant.findMany({
+        where: { userId: id },
+        select: { introCaseId: true },
+      }),
+    ]);
+
+    const introCaseIds = [...new Set(introParticipants.map((participant) => participant.introCaseId))];
+    if (introCaseIds.length > 0) {
+      await tx.introCase.deleteMany({
+        where: { id: { in: introCaseIds } },
+      });
+    }
+
+    await tx.notification.deleteMany({
+      where: { subjectUserId: id },
+    });
+    await tx.user.delete({
+      where: { id },
+    });
+
+    return {
+      photoIds: photos.map((photo) => photo.storedFileName).filter(Boolean),
+    };
   });
+
+  await Promise.allSettled(photoIds.map((storedFileName) => deleteCloudflareImage(storedFileName)));
 }
 
 function assertDatabaseUrl() {

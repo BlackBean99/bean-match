@@ -2,6 +2,7 @@
 
 import { Gender, IntroCaseStatus, UserRole, UserStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import type { OpenLevel } from "@/lib/domain";
 import {
@@ -56,6 +57,12 @@ export async function deleteMemberAction(formData: FormData) {
   const id = parseId(formData);
   await deleteMember(id);
   revalidatePath("/");
+  revalidatePath("/users");
+  revalidatePath(`/users/${id.toString()}`);
+  revalidatePath("/matches");
+  revalidatePath("/rounds");
+  revalidatePath("/onboarding");
+  redirect("/users");
 }
 
 export async function updateMemberExposureAction(formData: FormData) {
