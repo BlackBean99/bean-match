@@ -238,7 +238,7 @@ async function getMemberDashboardDataFromPrisma(
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
         hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
+        mainPhotoUrl: photoThumbnailUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -325,7 +325,7 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: photoDeliveryOrProxyUrl(
+        mainPhotoUrl: photoThumbnailUrl(
           mainPhotoByUserId.get(user.id)?.file_url,
           mainPhotoByUserId.get(user.id)?.file_path,
           mainPhotoByUserId.get(user.id)?.id,
@@ -453,7 +453,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       exposurePaused: user.exposurePaused,
       roles: user.roles.map((role) => role.role),
       hasMainPhoto: Boolean(mainPhoto),
-      mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
+      mainPhotoUrl: photoThumbnailUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
       photos: user.photos.map((photo) => ({
         id: Number(photo.id),
@@ -499,7 +499,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     exposurePaused: user.exposure_paused,
     roles: roles.map((role) => role.role),
     hasMainPhoto: Boolean(mainPhoto),
-    mainPhotoUrl: photoDeliveryOrProxyUrl(mainPhoto?.file_url, mainPhoto?.file_path, mainPhoto?.id),
+    mainPhotoUrl: photoThumbnailUrl(mainPhoto?.file_url, mainPhoto?.file_path, mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: photos.map(toDashboardPhoto),
   };
@@ -543,7 +543,10 @@ export type PhotoServeTarget =
       reference: string;
     };
 
-export async function getPhotoServeTarget(photoId: bigint): Promise<PhotoServeTarget | null> {
+export async function getPhotoServeTarget(
+  photoId: bigint,
+  variant: "original" | "thumb" = "original",
+): Promise<PhotoServeTarget | null> {
   if (hasDatabaseUrl()) {
     const photo = await prisma.userPhoto.findFirst({
       where: { id: photoId, deletedAt: null },
@@ -563,6 +566,7 @@ export async function getPhotoServeTarget(photoId: bigint): Promise<PhotoServeTa
         filePath: photo.filePath,
         fileUrl: photo.fileUrl,
       },
+      variant,
       async (freshUrl) => {
         await prisma.userPhoto.update({
           where: { id: photo.id },
@@ -586,6 +590,7 @@ export async function getPhotoServeTarget(photoId: bigint): Promise<PhotoServeTa
       filePath: photo.file_path,
       fileUrl: photo.file_url,
     },
+    variant,
     async (freshUrl) => {
       await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
         method: "PATCH",
@@ -1341,6 +1346,7 @@ export function toDashboardPhotoLike(photo: {
   return {
     id: Number(photo.id),
     url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
+    thumbnailUrl: photoThumbnailUrl(photo.fileUrl, photo.filePath, photo.id),
     sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl, photo.id) ?? "",
     originalFileName: photo.originalFileName,
     isMain: photo.isMain,
@@ -1450,13 +1456,22 @@ function photoDisplayUrl(photoId: bigint | number | null | undefined) {
   return photoId === null || photoId === undefined ? undefined : `/api/photos/${photoId.toString()}`;
 }
 
+function photoVariantDisplayUrl(
+  photoId: bigint | number | null | undefined,
+  variant: "original" | "thumb" = "original",
+) {
+  const baseUrl = photoDisplayUrl(photoId);
+  if (!baseUrl) return undefined;
+  return variant === "thumb" ? `${baseUrl}?variant=thumb` : baseUrl;
+}
+
 function photoDeliveryOrProxyUrl(
   fileUrl: string | null | undefined,
   filePath: string | null | undefined,
   photoId: bigint | number | null | undefined,
 ) {
   if (isSupabaseStorageReference(fileUrl) || isSupabaseStorageReference(filePath)) {
-    return photoDisplayUrl(photoId);
+    return photoVariantDisplayUrl(photoId, "original");
   }
 
   if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
@@ -1468,6 +1483,19 @@ function photoDeliveryOrProxyUrl(
   if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
   if (filePath && isUsableImageUrl(filePath)) return filePath;
   return undefined;
+}
+
+function photoThumbnailUrl(
+  fileUrl: string | null | undefined,
+  filePath: string | null | undefined,
+  photoId: bigint | number | null | undefined,
+) {
+  const variantUrl = photoVariantDisplayUrl(photoId, "thumb");
+  if (variantUrl && (isSupabaseStorageReference(fileUrl) || isSupabaseStorageReference(filePath))) {
+    return variantUrl;
+  }
+
+  return photoDeliveryOrProxyUrl(fileUrl, filePath, photoId);
 }
 
 function photoSourceUrl(
@@ -1493,9 +1521,10 @@ type PhotoRedirectRecord = {
 
 async function getPhotoServeTargetForRecord(
   photo: PhotoRedirectRecord,
+  variant: "original" | "thumb",
   persistFreshUrl: (freshUrl: string) => Promise<unknown>,
 ): Promise<PhotoServeTarget | null> {
-  const storageReference = parseSupabaseStorageReference(photo.fileUrl) ?? parseSupabaseStorageReference(photo.filePath);
+  const storageReference = selectStorageReferenceForVariant(photo, variant);
   if (storageReference) {
     return {
       kind: "storage",
@@ -1550,6 +1579,20 @@ async function getPhotoServeTargetForRecord(
   }
 
   return { kind: "proxy", url: notionSourceUrl };
+}
+
+function selectStorageReferenceForVariant(
+  photo: PhotoRedirectRecord,
+  variant: "original" | "thumb",
+) {
+  const originalReference = parseSupabaseStorageReference(photo.fileUrl);
+  const pathReference = parseSupabaseStorageReference(photo.filePath);
+
+  if (variant === "thumb") {
+    return pathReference ?? originalReference;
+  }
+
+  return originalReference ?? pathReference;
 }
 
 async function refreshPhotoCloudflareDelivery(

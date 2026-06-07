@@ -132,6 +132,7 @@ export type DashboardIntroCase = {
 export type DashboardUserPhoto = {
   id: number;
   url: string;
+  thumbnailUrl?: string;
   sourceUrl: string;
   originalFileName: string;
   isMain: boolean;

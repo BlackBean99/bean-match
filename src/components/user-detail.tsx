@@ -155,7 +155,7 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
       <div className="bg-[#f6f3ef] p-3">
         <div className="photo-skeleton relative aspect-[4/3] overflow-hidden rounded-[18px] bg-white">
           <Image
-            src={photo.url}
+            src={photo.thumbnailUrl || photo.url}
             alt={photo.originalFileName}
             fill
             sizes="360px"
