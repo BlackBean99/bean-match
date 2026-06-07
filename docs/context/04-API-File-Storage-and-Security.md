@@ -30,7 +30,7 @@
 - `PATCH /api/users/{id}/photos/{photoId}/main` : 대표 사진 변경
 - `DELETE /api/users/{id}/photos/{photoId}` : 사진 삭제
 - `GET /api/users/{id}/photos/{photoId}` : 사진 조회/다운로드
-- `GET /api/photos/{photoId}` : 앱 내부 사진 표시 URL. 저장된 사진이 Cloudflare Images에 있으면 delivery URL로 리다이렉트하고, 아직 캐시가 없으면 source URL을 Cloudflare Images에 올린 뒤 delivery URL로 연결한다. 캐시 생성이 일시적으로 실패해도 source 이미지를 서버 프록시로 반환해 fallback 이미지에 멈추지 않도록 한다.
+- `GET /api/photos/{photoId}` : 앱 내부 사진 표시 URL. Supabase Storage에 저장된 사진은 서버가 직접 프록시하고, 기존 Cloudflare Images 레코드는 delivery URL로 리다이렉트한다. 오래된 source URL만 남아 있으면 source 이미지를 서버 프록시로 반환해 fallback 이미지에 멈추지 않도록 한다.
 
 ### 2.5 IntroCase
 - `POST /api/intro-cases` : 소개 건 생성
@@ -76,9 +76,9 @@
 ### 4.1 저장 원칙
 - DB에는 이미지 바이너리를 저장하지 않는다.
 - 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
-- 직접 업로드/클립보드 붙여넣기 이미지는 Cloudflare Images에 직접 업로드한다.
-- Notion에서 가져온 파일은 source URL을 Cloudflare Images에 업로드하고, `file_url`에 delivery URL만 저장한다.
-- UI는 Cloudflare Images delivery URL을 우선 사용한다. 오래된 레코드는 `/api/photos/{photoId}`를 통해 Cloudflare Images delivery URL로 정리한다. 이 라우트는 저장된 delivery URL을 반환하고, 아직 캐시가 없으면 Notion source를 다시 읽어 Cloudflare Images에 업로드한 뒤 delivery URL로 연결한다. 업로드가 일시적으로 실패해도 서버가 source 이미지를 프록시 응답해 사용자 화면이 fallback SVG로 멈추지 않도록 한다. Notion presigned URL은 최종 렌더링 URL로 직접 노출하지 않는다.
+- 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage `beanmatch-image-storage` 버킷에 저장한다.
+- Notion에서 가져온 파일도 Supabase Storage `beanmatch-image-storage` 버킷에 저장하고, `file_path` / `file_url`에는 `supabase-storage:{bucket}/{path}` 참조를 기록한다.
+- UI는 `/api/photos/{photoId}` 프록시 URL을 기본으로 사용한다. 기존 Cloudflare Images delivery URL이 남아 있는 레코드는 그대로 fallback 지원한다. 오래된 source URL만 남아 있으면 서버가 source 이미지를 프록시 응답해 사용자 화면이 fallback SVG로 멈추지 않도록 한다. Notion presigned URL은 최종 렌더링 URL로 직접 노출하지 않는다.
 - DB에는 메타데이터를 저장한다.
 
 ### 4.2 저장 예시
@@ -87,8 +87,8 @@
 저장 메타데이터:
 - `original_file_name`
 - `stored_file_name`
-- `file_path`: source URL 또는 Cloudflare Images 식별자 메모
-- `file_url`: Cloudflare Images delivery URL
+- `file_path`: source URL 또는 `supabase-storage:{bucket}/{path}` 참조
+- `file_url`: `supabase-storage:{bucket}/{path}` 참조 또는 기존 Cloudflare Images delivery URL
 - `mime_type`
 - `file_size_bytes`
 - `width_px`
@@ -101,7 +101,7 @@
 - 확장자는 화이트리스트 검증 후 허용
 
 ### 4.4 디렉터리 구조 권장
-- 애플리케이션은 별도 업로드 디렉터리를 만들지 않는다. 이미지 저장과 전송은 Cloudflare Images가 담당한다.
+- 애플리케이션은 별도 업로드 디렉터리를 만들지 않는다. 이미지 원본 저장은 Supabase Storage가 담당하고, 화면 노출은 `/api/photos/{photoId}` 서버 프록시가 담당한다.
 
 ### 4.5 삭제 정책
 - DB soft delete + 파일 비동기 삭제 또는 보존 정책 선택
