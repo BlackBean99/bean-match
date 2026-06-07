@@ -20,6 +20,29 @@ type NotionSyncResult = {
   users: { action?: string; source?: string }[];
 };
 
+type GitHubWorkflowRun = {
+  id: number;
+  html_url: string;
+  status: "queued" | "in_progress" | "completed";
+  conclusion:
+    | "success"
+    | "failure"
+    | "cancelled"
+    | "timed_out"
+    | "action_required"
+    | "neutral"
+    | "skipped"
+    | null;
+  created_at: string;
+  updated_at: string;
+  run_started_at: string | null;
+  name: string;
+};
+
+type GitHubWorkflowRunsResponse = {
+  workflow_runs: GitHubWorkflowRun[];
+};
+
 const initialMigrationState: MigrationState = {
   status: "idle",
   message: "동기화 대기 중입니다.",
@@ -29,6 +52,8 @@ const initialMigrationState: MigrationState = {
 
 let latestMigrationState: MigrationState = initialMigrationState;
 let currentMigrationPromise: Promise<MigrationState> | null = null;
+let latestWorkflowRunId: number | null = null;
+let latestWorkflowDispatchAt: string | null = null;
 
 export async function runNotionMigration(): Promise<MigrationState> {
   const env = getRuntimeEnv();
@@ -36,6 +61,13 @@ export async function runNotionMigration(): Promise<MigrationState> {
 
   if (currentMigrationPromise) {
     return latestMigrationState;
+  }
+
+  if (isCloudflareRuntime() && latestMigrationState.status === "queued") {
+    latestMigrationState = await refreshWorkflowRunStatus(env);
+    if (latestMigrationState.status === "queued") {
+      return latestMigrationState;
+    }
   }
 
   latestMigrationState = {
@@ -62,6 +94,10 @@ export async function runNotionMigration(): Promise<MigrationState> {
 }
 
 export async function getNotionMigrationStatus(): Promise<MigrationState> {
+  if (isCloudflareRuntime() && latestMigrationState.status === "queued") {
+    const env = getRuntimeEnv();
+    latestMigrationState = await refreshWorkflowRunStatus(env);
+  }
   return latestMigrationState;
 }
 
@@ -94,6 +130,10 @@ async function startNotionSyncJob(env: ReturnType<typeof getRuntimeEnv>): Promis
       progress: 15,
       phase: "초기화",
     };
+
+    if (isCloudflareRuntime()) {
+      return dispatchNotionSyncWorkflow(env);
+    }
 
     // @ts-expect-error: the sync runner is a .mjs CLI module that is shared with the worker runtime.
     const syncModule = (await import("../../scripts/sync-notion-to-supabase.mjs")) as {
@@ -143,6 +183,144 @@ async function startNotionSyncJob(env: ReturnType<typeof getRuntimeEnv>): Promis
     };
     return latestMigrationState;
   }
+}
+
+async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>): Promise<MigrationState> {
+  const token = getGitHubWorkflowToken(env);
+  if (!token) {
+    return {
+      status: "error",
+      message: "동기화 실패: GITHUB_ACTIONS_WORKFLOW_TOKEN 이 설정되지 않았습니다.",
+      progress: 100,
+      phase: "실패",
+    };
+  }
+
+  const repository = getGitHubRepository(env);
+  const workflowFile = env.GITHUB_NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
+  const workflowRef = env.GITHUB_NOTION_SYNC_REF || "main";
+  const dispatchUrl = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+
+  latestWorkflowDispatchAt = new Date().toISOString();
+  latestWorkflowRunId = null;
+
+  const response = await fetch(dispatchUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "bean-match-worker-sync",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ ref: workflowRef }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub Actions dispatch failed (${response.status}) - ${text || "unknown error"}`);
+  }
+
+  latestMigrationState = {
+    status: "queued",
+    message: "GitHub Actions로 동기화를 넘겼습니다. 실행 대기 중입니다.",
+    progress: 18,
+    phase: "대기열 등록",
+  };
+
+  return refreshWorkflowRunStatus(env);
+}
+
+async function refreshWorkflowRunStatus(env: ReturnType<typeof getRuntimeEnv>): Promise<MigrationState> {
+  const token = getGitHubWorkflowToken(env);
+  if (!token) {
+    return latestMigrationState;
+  }
+
+  const run = await fetchLatestNotionSyncRun(env, token);
+  if (!run) {
+    return latestMigrationState;
+  }
+
+  latestWorkflowRunId = run.id;
+
+  if (run.status === "completed") {
+    if (run.conclusion === "success") {
+      revalidatePath("/users");
+      revalidatePath("/matches");
+      return {
+        status: "success",
+        message: `동기화 완료: GitHub Actions run #${run.id}`,
+        progress: 100,
+        phase: "완료",
+      };
+    }
+
+    return {
+      status: "error",
+      message: `동기화 실패: GitHub Actions run #${run.id} (${run.conclusion ?? "unknown"})`,
+      progress: 100,
+      phase: "실패",
+    };
+  }
+
+  return {
+    status: "queued",
+    message:
+      run.status === "in_progress"
+        ? `GitHub Actions run #${run.id} 에서 동기화 진행 중입니다.`
+        : `GitHub Actions run #${run.id} 대기 중입니다.`,
+    progress: run.status === "in_progress" ? 60 : 25,
+    phase: run.status === "in_progress" ? "GitHub Actions 실행 중" : "GitHub Actions 대기 중",
+  };
+}
+
+async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, token: string) {
+  const repository = getGitHubRepository(env);
+  const workflowFile = env.GITHUB_NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
+  const workflowRef = env.GITHUB_NOTION_SYNC_REF || "main";
+  const runsUrl = new URL(
+    `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
+  );
+  runsUrl.searchParams.set("event", "workflow_dispatch");
+  runsUrl.searchParams.set("branch", workflowRef);
+  runsUrl.searchParams.set("per_page", "10");
+
+  const response = await fetch(runsUrl, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "bean-match-worker-sync",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as GitHubWorkflowRunsResponse;
+  const dispatchAt = latestWorkflowDispatchAt ? Date.parse(latestWorkflowDispatchAt) : null;
+
+  return (
+    payload.workflow_runs.find((run) => run.id === latestWorkflowRunId) ??
+    payload.workflow_runs.find((run) => {
+      if (dispatchAt === null) return true;
+      const createdAt = Date.parse(run.created_at);
+      return Number.isFinite(createdAt) && createdAt >= dispatchAt - 30_000;
+    }) ??
+    null
+  );
+}
+
+function getGitHubWorkflowToken(env: ReturnType<typeof getRuntimeEnv>) {
+  return env.GITHUB_ACTIONS_WORKFLOW_TOKEN || env.GITHUB_TOKEN || "";
+}
+
+function getGitHubRepository(env: ReturnType<typeof getRuntimeEnv>) {
+  return env.GITHUB_REPOSITORY || "BlackBean99/bean-match";
 }
 
 function summarizeSources(users: NotionSyncResult["users"]) {

@@ -37,6 +37,8 @@ jobs:
       CLOUDFLARE_IMAGES_VARIANT: ${{ secrets.CLOUDFLARE_IMAGES_VARIANT }}
       OPS_AUTH_SECRET: ${{ secrets.OPS_AUTH_SECRET }}
       OPS_AUTH_ACCOUNTS_JSON: ${{ secrets.OPS_AUTH_ACCOUNTS_JSON }}
+      GITHUB_ACTIONS_WORKFLOW_TOKEN: ${{ secrets.GITHUB_ACTIONS_WORKFLOW_TOKEN }}
+      GITHUB_REPOSITORY: ${{ secrets.GITHUB_REPOSITORY }}
 
     steps:
       - name: Checkout
@@ -97,6 +99,7 @@ jobs:
           require_value SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
           require_value OPS_AUTH_SECRET "$OPS_AUTH_SECRET"
           require_value OPS_AUTH_ACCOUNTS_JSON "$OPS_AUTH_ACCOUNTS_JSON"
+          require_value GITHUB_ACTIONS_WORKFLOW_TOKEN "$GITHUB_ACTIONS_WORKFLOW_TOKEN"
           require_one_of "SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL"
 
           normalize_secret_value() {
@@ -145,6 +148,8 @@ jobs:
               CLOUDFLARE_IMAGES_VARIANT: process.env.CLOUDFLARE_IMAGES_VARIANT,
               OPS_AUTH_SECRET: normalize("OPS_AUTH_SECRET", process.env.OPS_AUTH_SECRET),
               OPS_AUTH_ACCOUNTS_JSON: parseAccounts(process.env.OPS_AUTH_ACCOUNTS_JSON),
+              GITHUB_ACTIONS_WORKFLOW_TOKEN: process.env.GITHUB_ACTIONS_WORKFLOW_TOKEN,
+              GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
             }).filter(([, value]) => value !== undefined && value !== "")
           );
 
