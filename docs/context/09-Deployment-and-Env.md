@@ -61,7 +61,8 @@
 - Cloudflare Pages에서 운영 버튼을 눌러 sync를 실행하면 Functions 로그에 `scope=notion-sync` JSON이 남습니다. 여기서 `cloudflareTokenPresent`, `notionTokenPresent`, `supabaseServiceRoleKeyPresent` 같은 불리언을 확인합니다.
 - Cloudflare 로그는 Pages deployment 상세 화면 또는 `wrangler pages deployment tail` 로 확인합니다.
 - free Cloudflare Workers 플랜은 단일 invocation 당 subrequest 50개 제한이 있으므로, production의 운영 버튼은 Worker 안에서 전체 Notion sync를 직접 실행하지 않고 GitHub Actions `workflow_dispatch` 로 넘깁니다.
-- 이를 위해 Worker runtime secret에 `GITHUB_ACTIONS_WORKFLOW_TOKEN` 이 필요합니다. `GITHUB_REPOSITORY` 는 선택이며 기본값은 `BlackBean99/bean-match` 입니다.
+- 이를 위해 Worker runtime secret에 `NOTION_SYNC_WORKFLOW_TOKEN` 이 필요합니다. `NOTION_SYNC_WORKFLOW_REPOSITORY` 는 선택이며 기본값은 `BlackBean99/bean-match` 입니다.
+- GitHub Actions secret 이름은 `GITHUB_` 로 시작할 수 없으므로, workflow dispatch 토큰은 `NOTION_SYNC_WORKFLOW_TOKEN` 이름으로 저장합니다.
 
 ### 3.6 GitHub Actions CD
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
@@ -69,7 +70,7 @@
 - Cloudflare Workers Builds를 쓰는 경우 build command는 `npx @opennextjs/cloudflare build`, deploy command는 `npx @opennextjs/cloudflare deploy` 로 맞춰야 `.open-next/worker.js` entry point가 생성됩니다.
 - 그 workflow는 배포 전에 `wrangler versions secret bulk` 로 GitHub Secrets를 Cloudflare Worker runtime secret으로 동기화합니다. 운영 runtime에는 `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL` 또는 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NOTION_TOKEN`, `NOTION_API_VERSION`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID`, `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT`, `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON` 를 주입합니다. `DATABASE_URL` 은 Worker runtime secret로 주입하지 않습니다.
 - `.github/workflows/notion-sync.yml` 은 `workflow_dispatch` 로 수동 sync를 수행합니다. Cloudflare production 운영 버튼은 이 workflow를 dispatch하고, 로컬 Node 환경에서는 기존처럼 `npm run sync:notion -- --write` 를 직접 실행합니다.
-- GitHub Secrets에는 최소 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON`, `GITHUB_ACTIONS_WORKFLOW_TOKEN` 를 넣습니다.
+- GitHub Secrets에는 최소 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON`, `NOTION_SYNC_WORKFLOW_TOKEN` 를 넣습니다.
 - Cloudflare Images를 쓰려면 Pages/앱 런타임과 GitHub Actions sync job에 `CLOUDFLARE_API_TOKEN` 또는 `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_ID`(또는 `CLOUDFLARE_ACCOUNT_ID`), `CLOUDFLARE_IMAGES_VARIANT` 를 넣습니다.
 - Cloudflare Pages 배포 워크플로우는 현재 코드가 참조하는 범위만 전달합니다. `AUTH_SECRET`, `R2_*`, `SENTRY_DSN`, `NEXT_PUBLIC_POSTHOG_*`, `CLOUDFLARE_ACCESS_CLIENT_ID`, `CLOUDFLARE_ACCESS_CLIENT_SECRET` 는 이 저장소의 현재 런타임에서 사용하지 않으므로 배포 secret 주입 대상에서 제외했습니다.
 - Notion sync workflow를 쓰려면 GitHub Actions Secrets에 `NOTION_TOKEN`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NOTION_MAIN_DATA_SOURCE_ID` 또는 `NOTION_USERS_DATABASE_ID` 를 넣습니다. 필요하면 `NOTION_INVITOR_DATA_SOURCE_ID`, `NOTION_MATCHING_HISTORY_DATA_SOURCE_ID` 도 함께 넣습니다.
