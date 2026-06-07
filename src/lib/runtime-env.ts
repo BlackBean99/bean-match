@@ -18,9 +18,7 @@ export function isCloudflareRuntime() {
     getCloudflareEnv() ||
       env.CF_PAGES ||
       env.CF_PAGES_URL ||
-      env.CF_PAGES_BRANCH ||
-      env.CLOUDFLARE_ACCOUNT_ID ||
-      env.CLOUDFLARE_IMAGES_ACCOUNT_ID,
+      env.CF_PAGES_BRANCH,
   );
 }
 

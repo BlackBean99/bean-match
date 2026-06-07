@@ -219,7 +219,11 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`GitHub Actions dispatch failed (${response.status}) - ${text || "unknown error"}`);
+    const permissionHint =
+      response.status === 403
+        ? " Fine-grained PAT는 repository Actions permission을 write로 줘야 합니다."
+        : "";
+    throw new Error(`GitHub Actions dispatch failed (${response.status}) - ${text || "unknown error"}${permissionHint}`);
   }
 
   latestMigrationState = {
