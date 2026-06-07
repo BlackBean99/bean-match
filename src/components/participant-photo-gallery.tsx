@@ -19,6 +19,7 @@ type ParticipantPhotoGalleryProps = {
 
 type GalleryPhoto = DashboardUserPhoto & {
   backupUrl?: string;
+  previewUrl?: string;
 };
 
 type ViewerTouchState = {
@@ -36,6 +37,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
       return photos
         .map((photo) => ({
           ...photo,
+          previewUrl: photo.thumbnailUrl || photo.url,
           backupUrl:
             photo.sourceUrl && photo.sourceUrl !== photo.url && isUsableClientImageUrl(photo.sourceUrl)
               ? photo.sourceUrl
@@ -79,6 +81,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
 
   const activePhoto = galleryPhotos[selectedIndex] ?? null;
   const activePhotoSource = activePhoto ? resolvePhotoSource(activePhoto, fallbackSourceIndex[selectedIndex] ?? 0) : null;
+  const activePreviewSource = activePhoto?.previewUrl || activePhotoSource;
 
   useEffect(() => {
     if (!isViewerOpen || galleryPhotos.length <= 1) return;
@@ -164,7 +167,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
     setDragOffset(0);
   }
 
-  if (!activePhoto || !activePhotoSource) {
+  if (!activePhoto || !activePhotoSource || !activePreviewSource) {
     return (
       <div className="flex h-full items-center justify-center rounded-[24px] border border-white/10 bg-zinc-900/70 text-[11px] font-semibold text-zinc-400">
         사진 없음
@@ -172,7 +175,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
     );
   }
 
-  const compactLoaded = Boolean(loadedSources[activePhotoSource]);
+  const compactLoaded = Boolean(loadedSources[activePreviewSource]);
 
   return (
     <>
@@ -180,11 +183,11 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
         <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
           <button type="button" onClick={openViewer} className="group relative block h-full w-full overflow-hidden rounded-[24px]">
             <PreviewPhotoStage
-              src={activePhotoSource}
+              src={activePreviewSource}
               alt={`${name} 사진 ${selectedIndex + 1}`}
               loaded={compactLoaded}
               sizes="(max-width: 640px) 48vw, 220px"
-              onLoad={() => setLoaded(activePhotoSource)}
+              onLoad={() => setLoaded(activePreviewSource)}
               onError={() => handleImageError(selectedIndex)}
             />
             <div className="pointer-events-none absolute inset-x-0 top-0 flex gap-1 px-3 pt-3">
@@ -356,7 +359,7 @@ export function ParticipantPhotoGallery({ name, photos, fallbackUrl }: Participa
             {galleryPhotos.length > 1 ? (
               <div className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6 sm:pb-5">
                 {galleryPhotos.map((photo, index) => {
-                  const src = resolvePhotoSource(photo, fallbackSourceIndex[index] ?? 0);
+                  const src = photo.previewUrl || resolvePhotoSource(photo, fallbackSourceIndex[index] ?? 0);
                   if (!src) return null;
 
                   return (

@@ -5,15 +5,17 @@ import { fetchSupabaseStorageObject } from "@/lib/supabase-storage";
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  return servePhoto(params, false);
+  return servePhoto(_request, params, false);
 }
 
 export async function HEAD(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  return servePhoto(params, true);
+  return servePhoto(_request, params, true);
 }
 
-async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
+async function servePhoto(request: Request, params: Promise<{ id: string }>, headOnly: boolean) {
   const { id } = await params;
+  const url = new URL(request.url);
+  const variant = url.searchParams.get("variant") === "thumb" ? "thumb" : "original";
 
   let photoId: bigint;
   try {
@@ -22,7 +24,7 @@ async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
     return photoFallbackResponse(headOnly);
   }
 
-  const target = await getPhotoServeTarget(photoId);
+  const target = await getPhotoServeTarget(photoId, variant);
   if (!target) return photoFallbackResponse(headOnly);
 
   if (target.kind === "redirect") {

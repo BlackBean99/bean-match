@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import sharp from "sharp";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
@@ -117,6 +118,11 @@ const activeIntroStatusSet = new Set([
 ]);
 
 const NOTION_SYNC_SCHEMA_VERSION = "photos-v3";
+const notionPhotoOriginalMaxWidth = 1600;
+const notionPhotoOriginalQuality = 78;
+const notionPhotoThumbnailMaxWidth = 480;
+const notionPhotoThumbnailMaxHeight = 640;
+const notionPhotoThumbnailQuality = 68;
 
 class NotionApiError extends Error {
   constructor(status, message) {
@@ -1425,52 +1431,91 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   const sourceResponse = await fetch(sourceUrl, { cache: "no-store" });
   if (!sourceResponse.ok) return sourceUrl;
 
-  const contentType = sourceResponse.headers.get("content-type") || mimeTypeForName(photo.name);
   const bytes = await sourceResponse.arrayBuffer();
-  const storedFileName = `notion:${notionPageId}:${index}`;
-  const storagePath = `notion/${notionPageId}/${index}-${sanitizeStorageFileName(photo.name)}`;
 
   try {
-    await deleteStoredPhotoAsset(
-      buildSupabaseStorageReference(storagePath),
-      null,
-      storedFileName,
-    );
-    return await uploadSupabaseStorageObject({
-      path: storagePath,
-      body: bytes,
-      contentType,
-    });
+    return await buildOptimizedNotionPhotoAssets(notionPageId, photo.name, index, bytes);
   } catch {
-    return sourceUrl;
+    return {
+      originalReference: sourceUrl,
+      thumbnailReference: sourceUrl,
+      mimeType: mimeTypeForName(photo.name),
+      fileSizeBytes: bytes.byteLength,
+    };
   }
 }
 
-function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
+async function buildOptimizedNotionPhotoAssets(notionPageId, photoName, index, bytes) {
+  const version = createHash("sha1").update(Buffer.from(bytes)).digest("hex").slice(0, 12);
+  const safeBaseName = sanitizeStorageFileName(photoName).replace(/\.[a-z0-9]+$/i, "") || `photo-${index + 1}`;
+  const basePath = `notion/${notionPageId}/${index}/${version}-${safeBaseName}`;
+
+  const originalBuffer = await sharp(Buffer.from(bytes))
+    .rotate()
+    .resize({ width: notionPhotoOriginalMaxWidth, withoutEnlargement: true, fit: "inside" })
+    .webp({ quality: notionPhotoOriginalQuality, effort: 4 })
+    .toBuffer();
+
+  const thumbnailBuffer = await sharp(Buffer.from(bytes))
+    .rotate()
+    .resize({
+      width: notionPhotoThumbnailMaxWidth,
+      height: notionPhotoThumbnailMaxHeight,
+      withoutEnlargement: true,
+      fit: "inside",
+    })
+    .webp({ quality: notionPhotoThumbnailQuality, effort: 4 })
+    .toBuffer();
+
+  const originalPath = `${basePath}.webp`;
+  const thumbnailPath = `${basePath}.thumb.webp`;
+
+  const [originalReference, thumbnailReference] = await Promise.all([
+    uploadSupabaseStorageObject({
+      path: originalPath,
+      body: originalBuffer,
+      contentType: "image/webp",
+    }),
+    uploadSupabaseStorageObject({
+      path: thumbnailPath,
+      body: thumbnailBuffer,
+      contentType: "image/webp",
+    }),
+  ]);
+
+  return {
+    originalReference,
+    thumbnailReference,
+    mimeType: "image/webp",
+    fileSizeBytes: originalBuffer.byteLength,
+  };
+}
+
+function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedAsset = null) {
   return {
     userId,
     photoType: "PROFILE",
     originalFileName: photo.name,
     storedFileName: `notion:${notionPageId}:${index}`,
-    filePath: storedReference || photo.url,
-    fileUrl: storedReference,
-    mimeType: mimeTypeForName(photo.name),
-    fileSizeBytes: BigInt(0),
+    filePath: storedAsset?.thumbnailReference || photo.url,
+    fileUrl: storedAsset?.originalReference || photo.url,
+    mimeType: storedAsset?.mimeType || mimeTypeForName(photo.name),
+    fileSizeBytes: BigInt(storedAsset?.fileSizeBytes ?? 0),
     sortOrder: index,
     isMain: index === 0,
   };
 }
 
-function toSupabasePhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
+function toSupabasePhotoPayload(userId, notionPageId, photo, index, storedAsset = null) {
   return {
     user_id: userId,
     photo_type: "PROFILE",
     original_file_name: photo.name,
     stored_file_name: `notion:${notionPageId}:${index}`,
-    file_path: storedReference || photo.url,
-    file_url: storedReference,
-    mime_type: mimeTypeForName(photo.name),
-    file_size_bytes: 0,
+    file_path: storedAsset?.thumbnailReference || photo.url,
+    file_url: storedAsset?.originalReference || photo.url,
+    mime_type: storedAsset?.mimeType || mimeTypeForName(photo.name),
+    file_size_bytes: storedAsset?.fileSizeBytes ?? 0,
     sort_order: index,
     is_main: index === 0,
   };

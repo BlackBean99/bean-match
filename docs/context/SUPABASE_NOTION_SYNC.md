@@ -120,6 +120,12 @@ The sync runner is shared with the CLI script `scripts/sync-notion-to-supabase.m
 
 The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Supabase Storage references in `file_path` and `file_url`, using the `beanmatch-image-storage` bucket by default.
 
+For Notion-synced profile photos, the sync now:
+- resizes the original image to a capped width before upload
+- converts both original and thumbnail assets to WebP
+- writes a separate thumbnail asset for list/card rendering
+- versions file names with a content hash so cache invalidation is deterministic
+
 When the photo pipeline changes, bump the sync schema version in `scripts/sync-notion-to-supabase.mjs` so the next startup sync reprocesses all pages once and refreshes Supabase Storage objects.
 
 If older rows still have a non-delivery `file_url`, run the backfill script:
