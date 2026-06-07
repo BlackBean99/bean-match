@@ -50,6 +50,8 @@ const initialMigrationState: MigrationState = {
   phase: "대기",
 };
 
+const workflowRepository = "BlackBean99/bean-match";
+
 let latestMigrationState: MigrationState = initialMigrationState;
 let currentMigrationPromise: Promise<MigrationState> | null = null;
 let latestWorkflowRunId: number | null = null;
@@ -194,10 +196,9 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
     };
   }
 
-  const repository = getGitHubRepository(env);
   const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
   const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
-  const dispatchUrl = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+  const dispatchUrl = `https://api.github.com/repos/${workflowRepository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
 
   latestWorkflowDispatchAt = new Date().toISOString();
   latestWorkflowRunId = null;
@@ -279,11 +280,10 @@ async function refreshWorkflowRunStatus(env: ReturnType<typeof getRuntimeEnv>): 
 }
 
 async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, token: string) {
-  const repository = getGitHubRepository(env);
   const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
   const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
   const runsUrl = new URL(
-    `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
+    `https://api.github.com/repos/${workflowRepository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
   );
   runsUrl.searchParams.set("event", "workflow_dispatch");
   runsUrl.searchParams.set("branch", workflowRef);
@@ -319,10 +319,6 @@ async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, t
 
 function getGitHubWorkflowToken(env: ReturnType<typeof getRuntimeEnv>) {
   return env.NOTION_SYNC_WORKFLOW_TOKEN || "";
-}
-
-function getGitHubRepository(env: ReturnType<typeof getRuntimeEnv>) {
-  return env.NOTION_SYNC_WORKFLOW_REPOSITORY || "BlackBean99/bean-match";
 }
 
 function summarizeSources(users: NotionSyncResult["users"]) {

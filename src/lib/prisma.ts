@@ -1,25 +1,44 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import { canUsePrismaRuntime } from "@/lib/runtime-env";
+import { canUsePrismaRuntime, getRuntimeEnv } from "@/lib/runtime-env";
 export { hasDatabaseUrl } from "@/lib/runtime-env";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  createPrismaClient();
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client as object, prop, receiver);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+}) as PrismaClient;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function getPrismaClient() {
+  if (globalForPrisma.prisma) {
+    return globalForPrisma.prisma;
+  }
+
+  const client = createPrismaClient();
+  globalForPrisma.prisma = client;
+  return client;
 }
 
-function createPrismaClient() {
+function createPrismaClient(): PrismaClient {
   if (!canUsePrismaRuntime()) {
     return createPrismaStub();
   }
 
+  const databaseUrl = getRuntimeEnv().DATABASE_URL;
+  if (!databaseUrl) {
+    return createPrismaStub();
+  }
+
+  const adapter = new PrismaPg({ connectionString: databaseUrl });
+
   return new PrismaClient({
+    adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }

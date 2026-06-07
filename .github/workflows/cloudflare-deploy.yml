@@ -35,7 +35,6 @@ jobs:
       OPS_AUTH_SECRET: ${{ secrets.OPS_AUTH_SECRET }}
       OPS_AUTH_ACCOUNTS_JSON: ${{ secrets.OPS_AUTH_ACCOUNTS_JSON }}
       NOTION_SYNC_WORKFLOW_TOKEN: ${{ secrets.NOTION_SYNC_WORKFLOW_TOKEN }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4

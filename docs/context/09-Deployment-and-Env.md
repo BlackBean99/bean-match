@@ -59,7 +59,7 @@
 - Cloudflare Pages에서 운영 버튼을 눌러 sync를 실행하면 Functions 로그에 `scope=notion-sync` JSON이 남습니다. 여기서 `notionTokenPresent`, `supabaseServiceRoleKeyPresent` 같은 불리언을 확인합니다.
 - Cloudflare 로그는 Pages deployment 상세 화면 또는 `wrangler pages deployment tail` 로 확인합니다.
 - free Cloudflare Workers 플랜은 단일 invocation 당 subrequest 50개 제한이 있으므로, production의 운영 버튼은 Worker 안에서 전체 Notion sync를 직접 실행하지 않고 GitHub Actions `workflow_dispatch` 로 넘깁니다.
-- 이를 위해 Worker runtime secret에 `NOTION_SYNC_WORKFLOW_TOKEN` 이 필요합니다. `NOTION_SYNC_WORKFLOW_REPOSITORY` 는 선택이며 기본값은 `BlackBean99/bean-match` 입니다.
+- 이를 위해 Worker runtime secret에 `NOTION_SYNC_WORKFLOW_TOKEN` 이 필요합니다. workflow dispatch 대상 저장소는 코드에서 `BlackBean99/bean-match` 로 고정합니다.
 - GitHub Actions secret 이름은 `GITHUB_` 로 시작할 수 없으므로, workflow dispatch 토큰은 `NOTION_SYNC_WORKFLOW_TOKEN` 이름으로 저장합니다.
 - `NOTION_SYNC_WORKFLOW_TOKEN` 이 fine-grained PAT 라면, 대상 저장소에 대해 `Actions: Read and write` 권한이 필요합니다.
 
