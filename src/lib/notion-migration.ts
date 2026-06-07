@@ -190,15 +190,15 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
   if (!token) {
     return {
       status: "error",
-      message: "동기화 실패: GITHUB_ACTIONS_WORKFLOW_TOKEN 이 설정되지 않았습니다.",
+      message: "동기화 실패: NOTION_SYNC_WORKFLOW_TOKEN 이 설정되지 않았습니다.",
       progress: 100,
       phase: "실패",
     };
   }
 
   const repository = getGitHubRepository(env);
-  const workflowFile = env.GITHUB_NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
-  const workflowRef = env.GITHUB_NOTION_SYNC_REF || "main";
+  const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
+  const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
   const dispatchUrl = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
 
   latestWorkflowDispatchAt = new Date().toISOString();
@@ -278,8 +278,8 @@ async function refreshWorkflowRunStatus(env: ReturnType<typeof getRuntimeEnv>): 
 
 async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, token: string) {
   const repository = getGitHubRepository(env);
-  const workflowFile = env.GITHUB_NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
-  const workflowRef = env.GITHUB_NOTION_SYNC_REF || "main";
+  const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
+  const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
   const runsUrl = new URL(
     `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
   );
@@ -316,11 +316,11 @@ async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, t
 }
 
 function getGitHubWorkflowToken(env: ReturnType<typeof getRuntimeEnv>) {
-  return env.GITHUB_ACTIONS_WORKFLOW_TOKEN || env.GITHUB_TOKEN || "";
+  return env.NOTION_SYNC_WORKFLOW_TOKEN || "";
 }
 
 function getGitHubRepository(env: ReturnType<typeof getRuntimeEnv>) {
-  return env.GITHUB_REPOSITORY || "BlackBean99/bean-match";
+  return env.NOTION_SYNC_WORKFLOW_REPOSITORY || "BlackBean99/bean-match";
 }
 
 function summarizeSources(users: NotionSyncResult["users"]) {
