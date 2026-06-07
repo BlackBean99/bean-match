@@ -45,7 +45,7 @@
 - Cloudflare runtime에서는 Prisma용 `DATABASE_URL` 경로를 사용하지 않고, `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` REST 경로를 사용합니다.
 - 로컬 개발은 `.env.local`, Pages 배포는 Pages Variables/Secrets를 사용합니다.
 - 배포 URL 생성용 `AUTH_URL` 이 없으면 `CF_PAGES_URL` 또는 로컬 기본값으로 폴백합니다.
-- 사진 조회는 `/api/photos/{photoId}`를 통해 Cloudflare Images delivery URL로 리다이렉트합니다.
+- 사진 조회는 `/api/photos/{photoId}`를 통해 Supabase Storage 원본을 서버 프록시하고, 기존 Cloudflare Images 레코드는 fallback으로 리다이렉트합니다.
 - 운영 로그인은 `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON` 으로 관리합니다.
 - `OPS_AUTH_ACCOUNTS_JSON` 예시:
   ```json

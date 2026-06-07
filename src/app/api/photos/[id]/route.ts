@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPhotoServeTarget } from "@/lib/member-repository";
+import { fetchSupabaseStorageObject } from "@/lib/supabase-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,10 @@ async function servePhoto(params: Promise<{ id: string }>, headOnly: boolean) {
     return response;
   }
 
+  if (target.kind === "storage") {
+    return proxySupabaseStorageResponse(target.reference, headOnly);
+  }
+
   return proxyPhotoResponse(target.url, headOnly);
 }
 
@@ -48,6 +53,32 @@ async function proxyPhotoResponse(sourceUrl: string, headOnly: boolean) {
       upstream.headers.get("Content-Type") || upstream.headers.get("content-type") || "image/jpeg",
     );
     headers.set("Cache-Control", "public, max-age=120, s-maxage=900, stale-while-revalidate=3600");
+
+    const contentLength = upstream.headers.get("Content-Length") || upstream.headers.get("content-length");
+    if (contentLength) {
+      headers.set("Content-Length", contentLength);
+    }
+
+    return new NextResponse(headOnly ? null : upstream.body, {
+      status: 200,
+      headers,
+    });
+  } catch {
+    return photoFallbackResponse(headOnly);
+  }
+}
+
+async function proxySupabaseStorageResponse(reference: string, headOnly: boolean) {
+  try {
+    const upstream = await fetchSupabaseStorageObject(reference, headOnly ? "HEAD" : "GET");
+    if (!upstream.ok) return photoFallbackResponse(headOnly);
+
+    const headers = new Headers();
+    headers.set(
+      "Content-Type",
+      upstream.headers.get("Content-Type") || upstream.headers.get("content-type") || "image/jpeg",
+    );
+    headers.set("Cache-Control", "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
 
     const contentLength = upstream.headers.get("Content-Length") || upstream.headers.get("content-length");
     if (contentLength) {

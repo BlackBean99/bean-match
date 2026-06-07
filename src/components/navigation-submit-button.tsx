@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 type NavigationSubmitButtonProps = {
   label: string;
@@ -13,7 +14,14 @@ export function NavigationSubmitButton({
   pendingLabel,
   className,
 }: NavigationSubmitButtonProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamString = searchParams.toString();
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setPending(false);
+  }, [pathname, searchParamString]);
 
   return (
     <button

@@ -72,7 +72,7 @@ export function IntroCaseCreateForm({
             className={inputClassName}
           >
             <option value="">선택</option>
-            {invitors.map((user) => (
+            {users.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.gender} · {formatAge(user)}
               </option>
@@ -89,7 +89,7 @@ export function IntroCaseCreateForm({
             className={inputClassName}
           >
             <option value="">선택</option>
-            {users.map((user) => (
+            {invitors.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.gender} · {formatAge(user)}
               </option>

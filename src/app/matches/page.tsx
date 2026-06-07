@@ -15,7 +15,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const view = typeof resolvedSearchParams.view === "string" ? resolvedSearchParams.view : undefined;
   const filters = parseMemberFilters({ ...resolvedSearchParams, view: view ?? "recommend" });
-  const data = await getMemberDashboardData(filters, { includeRoles: false });
+  const data = await getMemberDashboardData(filters, { includeRoles: true });
   const canManage = session?.role === "ADMIN";
 
   return (
