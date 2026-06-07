@@ -38,8 +38,6 @@ jobs:
       OPS_AUTH_SECRET: ${{ secrets.OPS_AUTH_SECRET }}
       OPS_AUTH_ACCOUNTS_JSON: ${{ secrets.OPS_AUTH_ACCOUNTS_JSON }}
       NOTION_SYNC_WORKFLOW_TOKEN: ${{ secrets.NOTION_SYNC_WORKFLOW_TOKEN }}
-      NOTION_SYNC_WORKFLOW_REPOSITORY: ${{ secrets.NOTION_SYNC_WORKFLOW_REPOSITORY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -149,7 +147,6 @@ jobs:
               OPS_AUTH_SECRET: normalize("OPS_AUTH_SECRET", process.env.OPS_AUTH_SECRET),
               OPS_AUTH_ACCOUNTS_JSON: parseAccounts(process.env.OPS_AUTH_ACCOUNTS_JSON),
               NOTION_SYNC_WORKFLOW_TOKEN: process.env.NOTION_SYNC_WORKFLOW_TOKEN,
-              NOTION_SYNC_WORKFLOW_REPOSITORY: process.env.NOTION_SYNC_WORKFLOW_REPOSITORY,
             }).filter(([, value]) => value !== undefined && value !== "")
           );
 
