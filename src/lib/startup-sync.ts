@@ -1,4 +1,5 @@
 import { runNotionMigration } from "@/lib/notion-migration";
+import { isCloudflareRuntime } from "@/lib/runtime-env";
 
 const startupSyncState = globalThis as typeof globalThis & {
   __beanMatchStartupSync?: Promise<void> | null;
@@ -13,6 +14,16 @@ export function scheduleInitialNotionSync() {
     .then(async () => {
       const enabled = process.env.AUTO_SYNC_ON_START !== "false";
       if (!enabled) return;
+      if (isCloudflareRuntime()) {
+        console.info(
+          JSON.stringify({
+            scope: "startup-sync",
+            status: "skipped",
+            message: "Cloudflare runtime에서는 startup sync를 자동 실행하지 않습니다.",
+          }),
+        );
+        return;
+      }
 
       const result = await runNotionMigration();
       console.info(

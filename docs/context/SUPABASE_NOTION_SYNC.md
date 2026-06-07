@@ -114,7 +114,7 @@ Apply changes:
 npm run sync:notion -- --write
 ```
 
-Operators can also run the same write sync from the admin web UI with the header `동기화` button. In local Node environments, the button executes `scripts/sync-notion-to-supabase.mjs --write` directly. In Cloudflare production, the button dispatches `.github/workflows/notion-sync.yml` instead of running the full sync inside the Worker, because free Workers invocations are limited to 50 subrequests.
+Operators can also run the same write sync from the admin web UI with the header `동기화` button. In local Node environments, the button executes `scripts/sync-notion-to-supabase.mjs --write` directly. In Cloudflare production, the button dispatches `.github/workflows/notion-sync.yml` instead of running the full sync inside the Worker, because free Workers invocations are limited to 50 subrequests. Startup sync is skipped in Cloudflare production for the same reason.
 
 The sync runner is shared with the CLI script `scripts/sync-notion-to-supabase.mjs --write`, so local Node usage and the deployed app use the same sync logic and the same progress states.
 

@@ -44,6 +44,7 @@
 - 서버 코드에서는 `process.env`만 보지 말고 Pages runtime env를 우선 확인해야 합니다.
 - Cloudflare runtime에서는 Prisma용 `DATABASE_URL` 경로를 사용하지 않고, `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` REST 경로를 사용합니다.
 - 로컬 개발은 `.env.local`, Pages 배포는 Pages Variables/Secrets를 사용합니다.
+- Cloudflare production에서는 startup sync를 자동 실행하지 않습니다. free Workers subrequest 제한 때문에 운영 sync는 수동 버튼 -> GitHub Actions dispatch 경로만 사용합니다.
 - 배포 URL 생성용 `AUTH_URL` 이 없으면 `CF_PAGES_URL` 또는 로컬 기본값으로 폴백합니다.
 - 사진 조회는 `/api/photos/{photoId}`를 통해 Supabase Storage 원본을 서버 프록시하고, 기존 Cloudflare Images 레코드는 fallback으로 리다이렉트합니다.
 - 운영 로그인은 `OPS_AUTH_SECRET`, `OPS_AUTH_ACCOUNTS_JSON` 으로 관리합니다.
@@ -63,6 +64,7 @@
 - free Cloudflare Workers 플랜은 단일 invocation 당 subrequest 50개 제한이 있으므로, production의 운영 버튼은 Worker 안에서 전체 Notion sync를 직접 실행하지 않고 GitHub Actions `workflow_dispatch` 로 넘깁니다.
 - 이를 위해 Worker runtime secret에 `NOTION_SYNC_WORKFLOW_TOKEN` 이 필요합니다. `NOTION_SYNC_WORKFLOW_REPOSITORY` 는 선택이며 기본값은 `BlackBean99/bean-match` 입니다.
 - GitHub Actions secret 이름은 `GITHUB_` 로 시작할 수 없으므로, workflow dispatch 토큰은 `NOTION_SYNC_WORKFLOW_TOKEN` 이름으로 저장합니다.
+- `NOTION_SYNC_WORKFLOW_TOKEN` 이 fine-grained PAT 라면, 대상 저장소에 대해 `Actions: Read and write` 권한이 필요합니다.
 
 ### 3.6 GitHub Actions CD
 - `main` 브랜치에 push 되면 `.github/workflows/cloudflare-deploy.yml` 이 Cloudflare 배포를 실행합니다.
