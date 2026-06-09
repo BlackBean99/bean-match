@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import sharp from "sharp";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
@@ -117,7 +118,15 @@ const activeIntroStatusSet = new Set([
   "RESULT_PENDING",
 ]);
 
-const NOTION_SYNC_SCHEMA_VERSION = "photos-v3";
+const NOTION_SYNC_SCHEMA_VERSION = "photos-v4";
+const defaultFetchTimeoutMs = 30_000;
+const photoFetchTimeoutMs = 45_000;
+const storageUploadTimeoutMs = 45_000;
+const notionPhotoOriginalMaxWidth = 1600;
+const notionPhotoOriginalQuality = 78;
+const notionPhotoThumbnailMaxWidth = 640;
+const notionPhotoThumbnailMaxHeight = 800;
+const notionPhotoThumbnailQuality = 62;
 
 class NotionApiError extends Error {
   constructor(status, message) {
@@ -145,8 +154,8 @@ function parseSupabaseStorageReference(value) {
 }
 
 async function uploadSupabaseStorageObject({ path, body, contentType }) {
-  const response = await fetch(
-    `${process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}/${encodePath(path)}`,
+  const response = await fetchWithTimeout(
+    `${getSupabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}/${encodePath(path)}`,
     {
       method: "POST",
       headers: {
@@ -157,6 +166,7 @@ async function uploadSupabaseStorageObject({ path, body, contentType }) {
       },
       body,
     },
+    storageUploadTimeoutMs,
   );
 
   if (!response.ok) {
@@ -169,19 +179,31 @@ async function uploadSupabaseStorageObject({ path, body, contentType }) {
 
 async function deleteStoredPhotoAsset(filePath, fileUrl, storedFileName) {
   void storedFileName;
-  const storageReference = parseSupabaseStorageReference(filePath) || parseSupabaseStorageReference(fileUrl);
-  if (storageReference) {
-    const response = await fetch(
-      `${process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/${encodeURIComponent(storageReference.bucket)}/${encodePath(storageReference.path)}`,
-      {
-        method: "DELETE",
-        headers: {
-          apikey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
-          Authorization: `Bearer ${requiredEnv("SUPABASE_SERVICE_ROLE_KEY")}`,
-        },
-      },
+  const references = [
+    parseSupabaseStorageReference(filePath),
+    parseSupabaseStorageReference(fileUrl),
+  ].filter((reference, index, list) => {
+    if (!reference) return false;
+    return list.findIndex((candidate) => candidate?.bucket === reference.bucket && candidate?.path === reference.path) === index;
+  });
+
+  if (references.length > 0) {
+    const results = await Promise.all(
+      references.map((storageReference) =>
+        fetchWithTimeout(
+          `${getSupabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(storageReference.bucket)}/${encodePath(storageReference.path)}`,
+          {
+            method: "DELETE",
+            headers: {
+              apikey: requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+              Authorization: `Bearer ${requiredEnv("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+          },
+          storageUploadTimeoutMs,
+        ),
+      ),
     );
-    return response.ok || response.status === 404;
+    return results.every((response) => response.ok || response.status === 404);
   }
 
   return false;
@@ -1084,7 +1106,7 @@ async function notionFetchWithDatabaseFallback(dataSourceId, body) {
 }
 
 async function notionFetch(path, init = {}, version = NOTION_VERSION) {
-  const response = await fetch(`https://api.notion.com/v1${path}`, {
+  const response = await fetchWithTimeout(`https://api.notion.com/v1${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${NOTION_TOKEN}`,
@@ -1214,7 +1236,7 @@ function stableInputForChecksum(input, source) {
 }
 
 async function supabaseRest(path, init = {}) {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = getSupabaseProjectUrl();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
@@ -1224,7 +1246,7 @@ async function supabaseRest(path, init = {}) {
   let response;
   let text = "";
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    response = await fetch(`${url}/rest/v1${path}`, {
+    response = await fetchWithTimeout(`${url}/rest/v1${path}`, {
       ...init,
       headers: {
         apikey: key,
@@ -1251,6 +1273,35 @@ async function supabaseRest(path, init = {}) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fetchWithTimeout(input, init = {}, timeoutMs = defaultFetchTimeoutMs) {
+  const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
+  return fetch(input, {
+    ...init,
+    signal,
+  });
+}
+
+function getSupabaseProjectUrl() {
+  const raw = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  return normalizeSupabaseProjectUrl(raw);
+}
+
+function normalizeSupabaseProjectUrl(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.endsWith(".storage.supabase.co")) {
+      const projectRef = parsed.hostname.replace(/\.storage\.supabase\.co$/i, "");
+      return `${parsed.protocol}//${projectRef}.supabase.co`;
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
 }
 
 function toSupabaseUserPayload(user) {
@@ -1394,10 +1445,10 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   const sourceUrl = photo.url;
   if (!sourceUrl) return null;
 
-  const sourceResponse = await fetch(sourceUrl, {
+  const sourceResponse = await fetchWithTimeout(sourceUrl, {
     cache: "no-store",
     redirect: "follow",
-  });
+  }, photoFetchTimeoutMs);
   if (!sourceResponse.ok) {
     throw new Error(`Notion photo download failed (${sourceResponse.status}) for ${photo.name}`);
   }
@@ -1409,46 +1460,82 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   }
 
   const bytes = new Uint8Array(await sourceResponse.arrayBuffer());
-  const storedFileName = `notion:${notionPageId}:${index}`;
-  const storagePath = `notion/${notionPageId}/${index}-${sanitizeStorageFileName(photo.name)}`;
-
-  await deleteStoredPhotoAsset(
-    buildSupabaseStorageReference(storagePath),
-    null,
-    storedFileName,
-  );
-  return await uploadSupabaseStorageObject({
-    path: storagePath,
-    body: bytes,
-    contentType,
-  });
+  return buildOptimizedNotionPhotoAssets(notionPageId, photo.name, index, bytes, contentType);
 }
 
-function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
+async function buildOptimizedNotionPhotoAssets(notionPageId, photoName, index, bytes, contentType) {
+  void contentType;
+  const normalizedBuffer = Buffer.from(bytes);
+  const version = createHash("sha1").update(normalizedBuffer).digest("hex").slice(0, 12);
+  const safeBaseName = sanitizeStorageFileName(photoName).replace(/\.[a-z0-9]+$/i, "") || `photo-${index + 1}`;
+  const basePath = `notion/${notionPageId}/${index}/${version}-${safeBaseName}`;
+
+  const originalBuffer = await sharp(normalizedBuffer, { failOn: "none", animated: false })
+    .rotate()
+    .resize({ width: notionPhotoOriginalMaxWidth, withoutEnlargement: true, fit: "inside" })
+    .webp({ quality: notionPhotoOriginalQuality, effort: 4 })
+    .toBuffer();
+
+  const thumbnailBuffer = await sharp(normalizedBuffer, { failOn: "none", animated: false })
+    .rotate()
+    .resize({
+      width: notionPhotoThumbnailMaxWidth,
+      height: notionPhotoThumbnailMaxHeight,
+      withoutEnlargement: true,
+      fit: "inside",
+    })
+    .webp({ quality: notionPhotoThumbnailQuality, effort: 4 })
+    .toBuffer();
+
+  const originalPath = `${basePath}.webp`;
+  const thumbnailPath = `${basePath}.thumb.webp`;
+
+  const [originalReference, thumbnailReference] = await Promise.all([
+    uploadSupabaseStorageObject({
+      path: originalPath,
+      body: originalBuffer,
+      contentType: "image/webp",
+    }),
+    uploadSupabaseStorageObject({
+      path: thumbnailPath,
+      body: thumbnailBuffer,
+      contentType: "image/webp",
+    }),
+  ]);
+
+  return {
+    originalReference,
+    thumbnailReference,
+    mimeType: "image/webp",
+    fileSizeBytes: originalBuffer.byteLength,
+  };
+}
+
+function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedAsset = null) {
   return {
     userId,
     photoType: "PROFILE",
     originalFileName: photo.name,
     storedFileName: `notion:${notionPageId}:${index}`,
-    filePath: storedReference || photo.url,
-    fileUrl: storedReference,
-    mimeType: mimeTypeForName(photo.name),
-    fileSizeBytes: BigInt(0),
+    filePath: storedAsset?.thumbnailReference || photo.url,
+    fileUrl: storedAsset?.originalReference || photo.url,
+    mimeType: storedAsset?.mimeType || mimeTypeForName(photo.name),
+    fileSizeBytes: BigInt(storedAsset?.fileSizeBytes ?? 0),
     sortOrder: index,
     isMain: index === 0,
   };
 }
 
-function toSupabasePhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
+function toSupabasePhotoPayload(userId, notionPageId, photo, index, storedAsset = null) {
   return {
     user_id: userId,
     photo_type: "PROFILE",
     original_file_name: photo.name,
     stored_file_name: `notion:${notionPageId}:${index}`,
-    file_path: storedReference || photo.url,
-    file_url: storedReference,
-    mime_type: mimeTypeForName(photo.name),
-    file_size_bytes: 0,
+    file_path: storedAsset?.thumbnailReference || photo.url,
+    file_url: storedAsset?.originalReference || photo.url,
+    mime_type: storedAsset?.mimeType || mimeTypeForName(photo.name),
+    file_size_bytes: storedAsset?.fileSizeBytes ?? 0,
     sort_order: index,
     is_main: index === 0,
   };

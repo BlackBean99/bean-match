@@ -23,7 +23,11 @@ export function MigrationButton({ canManage = false }: { canManage?: boolean }) 
 
     const poll = async () => {
       try {
-        const response = await fetch("/api/migration/notion", {
+        const search = new URLSearchParams();
+        if (state.dispatchedAt) {
+          search.set("dispatchedAt", state.dispatchedAt);
+        }
+        const response = await fetch(`/api/migration/notion${search.size > 0 ? `?${search.toString()}` : ""}`, {
           method: "GET",
           headers: { Accept: "application/json" },
         });
@@ -63,7 +67,7 @@ export function MigrationButton({ canManage = false }: { canManage?: boolean }) 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [router, state.status]);
+  }, [router, state.dispatchedAt, state.status]);
 
   return (
     <div className="grid gap-2">
