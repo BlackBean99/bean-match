@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { addUserPhotoAction } from "@/app/actions";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { compressImageFile } from "@/lib/image-compression";
 
 type PastePhotoFormProps = {
   userId: number;
@@ -23,20 +24,21 @@ export function PastePhotoForm({ userId, defaultSortOrder }: PastePhotoFormProps
     };
   }, [previewUrl]);
 
-  const applyFile = (file: File) => {
+  const applyFile = async (file: File) => {
+    const compressedFile = await compressImageFile(file);
     const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
+    dataTransfer.items.add(compressedFile);
 
     if (fileInputRef.current) {
       fileInputRef.current.files = dataTransfer.files;
     }
     if (nameInputRef.current && !nameInputRef.current.value) {
-      nameInputRef.current.value = file.name || "clipboard-image";
+      nameInputRef.current.value = compressedFile.name || "clipboard-image";
     }
 
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
-    setFileName(file.name || "clipboard-image");
+    setPreviewUrl(URL.createObjectURL(compressedFile));
+    setFileName(compressedFile.name || "clipboard-image");
   };
 
   return (
@@ -51,7 +53,7 @@ export function PastePhotoForm({ userId, defaultSortOrder }: PastePhotoFormProps
               ?.getAsFile();
             if (imageFile) {
               event.preventDefault();
-              applyFile(imageFile);
+              void applyFile(imageFile);
             }
           }}
           tabIndex={0}
@@ -75,7 +77,7 @@ export function PastePhotoForm({ userId, defaultSortOrder }: PastePhotoFormProps
             className={inputClassName}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
-              if (file) applyFile(file);
+              if (file) void applyFile(file);
             }}
           />
         </Field>

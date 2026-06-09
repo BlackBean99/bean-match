@@ -1249,7 +1249,7 @@ export function toDashboardPhotoLike(photo: {
   const uploadedAt = photo.uploadedAt instanceof Date ? photo.uploadedAt : new Date(photo.uploadedAt);
   return {
     id: Number(photo.id),
-    url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
+    url: photoThumbnailUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
     sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl, photo.id) ?? "",
     originalFileName: photo.originalFileName,
     isMain: photo.isMain,
