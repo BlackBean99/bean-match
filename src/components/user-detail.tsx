@@ -10,6 +10,7 @@ import {
   updateUserPhotoAction,
 } from "@/app/actions";
 import { OfferLinkQuickActions } from "@/components/offer-link-quick-actions";
+import { InviteKakaoQuickActions } from "@/components/invite-kakao-quick-actions";
 import { OnboardingAccessTokenManager } from "@/components/onboarding-access-token-manager";
 import { ReadOnlyTokenManager } from "@/components/readonly-token-manager";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
@@ -20,9 +21,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatBirthYearLabel } from "@/lib/birth-year-label";
 import type { OnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import type { ReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
+import type { InviteTokenManagerData } from "@/lib/invite-token-repository";
 
 type UserDetailProps = {
   canManage?: boolean;
+  inviteTokenManager: InviteTokenManagerData;
   onboardingAccessTokenManager: OnboardingAccessTokenManagerData;
   readOnlyTokenManager: ReadOnlyBrowseTokenManagerData;
   user: DashboardUserDetail;
@@ -30,6 +33,7 @@ type UserDetailProps = {
 
 export function UserDetail({
   canManage = false,
+  inviteTokenManager,
   onboardingAccessTokenManager,
   user,
   readOnlyTokenManager,
@@ -121,6 +125,12 @@ export function UserDetail({
 
       {canManage ? (
         <>
+          {user.roles.includes("PARTICIPANT") ? (
+            <section className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm">
+              <InviteKakaoQuickActions userId={user.id} token={inviteTokenManager.token} />
+            </section>
+          ) : null}
+
           <OnboardingAccessTokenManager
             databaseConnected={onboardingAccessTokenManager.databaseConnected}
             loadError={onboardingAccessTokenManager.loadError}
