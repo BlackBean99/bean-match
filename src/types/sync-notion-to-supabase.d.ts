@@ -7,7 +7,7 @@ declare module "../../scripts/sync-notion-to-supabase.mjs" {
 
   export type SyncResult = {
     write: boolean;
-    users: { action?: string; source?: string }[];
+    users: { action?: string; source?: string; reason?: string }[];
   };
 
   export function runNotionSync(options?: {
