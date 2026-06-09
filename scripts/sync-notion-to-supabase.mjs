@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
-const prisma = canUsePrismaRuntime() ? new PrismaClient() : null;
+const prisma = createPrismaClient();
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2022-06-28";
 const NOTION_TOKEN = requiredEnv("NOTION_TOKEN");
 const MAIN_DATA_SOURCE_ID =
@@ -125,35 +126,8 @@ class NotionApiError extends Error {
   }
 }
 
-const CLOUDFLARE_IMAGES_ACCOUNT_ID =
-  process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
-const CLOUDFLARE_API_TOKEN =
-  process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
-const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "beanmatch-image-storage";
 const SUPABASE_STORAGE_PREFIX = "supabase-storage:";
-
-function isCloudflareImagesConfigured() {
-  return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_API_TOKEN);
-}
-
-async function deleteCloudflareImage(imageId) {
-  if (!isCloudflareImagesConfigured()) return false;
-
-  const response = await fetch(
-    `${cloudflareApiBaseUrl}/accounts/${CLOUDFLARE_IMAGES_ACCOUNT_ID}/images/v1/${encodeURIComponent(imageId)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-      },
-      cache: "no-store",
-    },
-  );
-
-  if (response.status === 404) return false;
-  return response.ok;
-}
 
 function buildSupabaseStorageReference(path, bucket = SUPABASE_STORAGE_BUCKET) {
   return `${SUPABASE_STORAGE_PREFIX}${bucket}/${path}`;
@@ -186,13 +160,15 @@ async function uploadSupabaseStorageObject({ path, body, contentType }) {
   );
 
   if (!response.ok) {
-    throw new Error(`Supabase Storage upload failed (${response.status})`);
+    const text = await response.text();
+    throw new Error(`Supabase Storage upload failed (${response.status}): ${text}`);
   }
 
   return buildSupabaseStorageReference(path);
 }
 
 async function deleteStoredPhotoAsset(filePath, fileUrl, storedFileName) {
+  void storedFileName;
   const storageReference = parseSupabaseStorageReference(filePath) || parseSupabaseStorageReference(fileUrl);
   if (storageReference) {
     const response = await fetch(
@@ -206,10 +182,6 @@ async function deleteStoredPhotoAsset(filePath, fileUrl, storedFileName) {
       },
     );
     return response.ok || response.status === 404;
-  }
-
-  if (storedFileName) {
-    return deleteCloudflareImage(storedFileName);
   }
 
   return false;
@@ -360,7 +332,7 @@ export async function runNotionSync({ write = false, onProgress } = {}) {
               results.push({
                 pageId: page.id,
                 source: source.name,
-                action: "skipped",
+                action: "error",
                 reason: error instanceof Error ? error.message : "Photo refresh failed",
               });
               processedPages += 1;
@@ -396,7 +368,7 @@ export async function runNotionSync({ write = false, onProgress } = {}) {
           results.push({
             pageId: page.id,
             source: source.name,
-            action: "skipped",
+            action: "error",
             reason: error instanceof Error ? error.message : "Write failed",
           });
           processedPages += 1;
@@ -1422,28 +1394,34 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   const sourceUrl = photo.url;
   if (!sourceUrl) return null;
 
-  const sourceResponse = await fetch(sourceUrl, { cache: "no-store" });
-  if (!sourceResponse.ok) return sourceUrl;
+  const sourceResponse = await fetch(sourceUrl, {
+    cache: "no-store",
+    redirect: "follow",
+  });
+  if (!sourceResponse.ok) {
+    throw new Error(`Notion photo download failed (${sourceResponse.status}) for ${photo.name}`);
+  }
 
-  const contentType = sourceResponse.headers.get("content-type") || mimeTypeForName(photo.name);
-  const bytes = await sourceResponse.arrayBuffer();
+  const contentTypeHeader = sourceResponse.headers.get("content-type") || mimeTypeForName(photo.name);
+  const contentType = contentTypeHeader.split(";")[0].trim() || mimeTypeForName(photo.name);
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`Unsupported Notion photo content type: ${contentType}`);
+  }
+
+  const bytes = new Uint8Array(await sourceResponse.arrayBuffer());
   const storedFileName = `notion:${notionPageId}:${index}`;
   const storagePath = `notion/${notionPageId}/${index}-${sanitizeStorageFileName(photo.name)}`;
 
-  try {
-    await deleteStoredPhotoAsset(
-      buildSupabaseStorageReference(storagePath),
-      null,
-      storedFileName,
-    );
-    return await uploadSupabaseStorageObject({
-      path: storagePath,
-      body: bytes,
-      contentType,
-    });
-  } catch {
-    return sourceUrl;
-  }
+  await deleteStoredPhotoAsset(
+    buildSupabaseStorageReference(storagePath),
+    null,
+    storedFileName,
+  );
+  return await uploadSupabaseStorageObject({
+    path: storagePath,
+    body: bytes,
+    contentType,
+  });
 }
 
 function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
@@ -1499,6 +1477,16 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
+}
+
+function createPrismaClient() {
+  if (!canUsePrismaRuntime()) return null;
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+
+  const adapter = new PrismaPg({ connectionString });
+  return new PrismaClient({ adapter });
 }
 
 function canUsePrismaRuntime() {

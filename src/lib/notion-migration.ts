@@ -17,7 +17,7 @@ type SyncProgressUpdate = {
 
 type NotionSyncResult = {
   write: boolean;
-  users: { action?: string; source?: string }[];
+  users: { action?: string; source?: string; reason?: string }[];
 };
 
 type GitHubWorkflowRun = {
@@ -49,6 +49,8 @@ const initialMigrationState: MigrationState = {
   progress: 0,
   phase: "대기",
 };
+
+const workflowRepository = "BlackBean99/bean-match";
 
 let latestMigrationState: MigrationState = initialMigrationState;
 let currentMigrationPromise: Promise<MigrationState> | null = null;
@@ -106,8 +108,6 @@ function logMigrationEnvironment(env: ReturnType<typeof getRuntimeEnv>) {
     JSON.stringify({
       scope: "notion-sync",
       runtime: isCloudflareRuntime() ? "cloudflare" : "node",
-      cloudflareTokenPresent: Boolean(env.CLOUDFLARE_API_TOKEN),
-      cloudflareImagesTokenPresent: Boolean(env.CLOUDFLARE_IMAGES_TOKEN),
       notionTokenPresent: Boolean(env.NOTION_TOKEN),
       supabaseUrlPresent: Boolean(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL),
       supabaseServiceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY || env.DATABASE_URL),
@@ -159,7 +159,21 @@ async function startNotionSyncJob(env: ReturnType<typeof getRuntimeEnv>): Promis
     const created = result.users.filter((user) => user.action === "created").length;
     const updated = result.users.filter((user) => user.action === "updated").length;
     const skipped = result.users.filter((user) => user.action === "skipped").length;
+    const failed = result.users.filter((user) => user.action === "error").length;
     const sourceSummary = summarizeSources(result.users);
+
+    if (failed > 0) {
+      latestMigrationState = {
+        status: "error",
+        message: `동기화 부분 실패: 실패 ${failed}건, 생성 ${created}건, 업데이트 ${updated}건, 건너뜀 ${skipped}건${
+          sourceSummary ? ` (${sourceSummary})` : ""
+        }`,
+        progress: 100,
+        phase: "실패",
+      };
+
+      return latestMigrationState;
+    }
 
     latestMigrationState = {
       status: "success",
@@ -196,10 +210,9 @@ async function dispatchNotionSyncWorkflow(env: ReturnType<typeof getRuntimeEnv>)
     };
   }
 
-  const repository = getGitHubRepository(env);
   const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
   const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
-  const dispatchUrl = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+  const dispatchUrl = `https://api.github.com/repos/${workflowRepository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
 
   latestWorkflowDispatchAt = new Date().toISOString();
   latestWorkflowRunId = null;
@@ -281,11 +294,10 @@ async function refreshWorkflowRunStatus(env: ReturnType<typeof getRuntimeEnv>): 
 }
 
 async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, token: string) {
-  const repository = getGitHubRepository(env);
   const workflowFile = env.NOTION_SYNC_WORKFLOW_FILE || "notion-sync.yml";
   const workflowRef = env.NOTION_SYNC_WORKFLOW_REF || "main";
   const runsUrl = new URL(
-    `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
+    `https://api.github.com/repos/${workflowRepository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs`,
   );
   runsUrl.searchParams.set("event", "workflow_dispatch");
   runsUrl.searchParams.set("branch", workflowRef);
@@ -321,10 +333,6 @@ async function fetchLatestNotionSyncRun(env: ReturnType<typeof getRuntimeEnv>, t
 
 function getGitHubWorkflowToken(env: ReturnType<typeof getRuntimeEnv>) {
   return env.NOTION_SYNC_WORKFLOW_TOKEN || "";
-}
-
-function getGitHubRepository(env: ReturnType<typeof getRuntimeEnv>) {
-  return env.NOTION_SYNC_WORKFLOW_REPOSITORY || "BlackBean99/bean-match";
 }
 
 function summarizeSources(users: NotionSyncResult["users"]) {

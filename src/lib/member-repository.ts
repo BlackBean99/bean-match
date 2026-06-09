@@ -14,11 +14,6 @@ import {
   getSupabaseUrl,
 } from "@/lib/runtime-env";
 import {
-  deleteCloudflareImage,
-  ensureCloudflareCachedImage,
-  isCloudflareDeliveryUrl,
-} from "@/lib/cloudflare-images";
-import {
   buildSupabaseStorageReference,
   deleteSupabaseStorageObject,
   isSupabaseStorageReference,
@@ -130,12 +125,10 @@ type PhotoInput = {
   fileSizeBytes?: number;
   sortOrder: number;
   isMain: boolean;
-  cloudflareImageId?: string | null;
 };
 
 type UploadedPhotoInput = Required<Pick<PhotoInput, "url" | "storedFileName" | "filePath" | "mimeType" | "fileSizeBytes">> & {
   originalFileName: string;
-  cloudflareImageId: string | null;
 };
 
 const introCaseInclude = {
@@ -525,7 +518,6 @@ export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<U
     filePath: storageReference,
     mimeType: file.type,
     fileSizeBytes: file.size,
-    cloudflareImageId: null,
   };
 }
 
@@ -615,23 +607,6 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabasePhotoPayload(numericUserId, photoInput)),
     });
-    if (!input.cloudflareImageId && !isSupabaseStorageReference(input.url) && !isSupabaseStorageReference(input.filePath)) {
-      await refreshPhotoCloudflareDelivery(
-        {
-          id: photo.id,
-          storedFileName: photo.stored_file_name,
-          filePath: photo.file_path,
-          fileUrl: photo.file_url,
-        },
-        input.url,
-        async (freshUrl) => {
-          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ file_url: freshUrl }),
-          });
-        },
-      );
-    }
     if (!(await getPhotoRedirectUrl(BigInt(photo.id)))) {
       await supabaseRest(`/user_photos?id=eq.${photo.id}`, { method: "DELETE" });
       throw new Error("Photo upload failed.");
@@ -652,23 +627,6 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
     const photo = await tx.userPhoto.create({
       data: toPrismaPhotoPayload(userId, photoInput),
     });
-    if (!input.cloudflareImageId && !isSupabaseStorageReference(input.url) && !isSupabaseStorageReference(input.filePath)) {
-      await refreshPhotoCloudflareDelivery(
-        {
-          id: Number(photo.id),
-          storedFileName: photo.storedFileName,
-          filePath: photo.filePath,
-          fileUrl: photo.fileUrl,
-        },
-        input.url,
-        async (freshUrl) => {
-          await tx.userPhoto.update({
-            where: { id: photo.id },
-            data: { fileUrl: freshUrl },
-          });
-        },
-      );
-    }
     if (shouldBeMain) {
       await tx.user.update({ where: { id: userId }, data: { mainPhotoId: photo.id } });
     }
@@ -690,24 +648,6 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(toSupabasePhotoPayload(existing.user_id, updateInput)),
     });
-    if (!input.cloudflareImageId && !isSupabaseStorageReference(input.url) && !isSupabaseStorageReference(input.filePath)) {
-      await refreshPhotoCloudflareDelivery(
-        {
-          id: photo.id,
-          storedFileName: photo.stored_file_name,
-          filePath: photo.file_path,
-          fileUrl: photo.file_url,
-        },
-        input.url,
-        async (freshUrl) => {
-          await supabaseRest(`/user_photos?id=eq.${photo.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ file_url: freshUrl }),
-          });
-        },
-        resolveStoredSourceUrl(existing.file_path, existing.file_url),
-      );
-    }
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Photo upload failed.");
     }
@@ -727,24 +667,6 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
       where: { id: photoId },
       data: toPrismaPhotoPayload(existing.userId, updateInput),
     });
-    if (!input.cloudflareImageId && !isSupabaseStorageReference(input.url) && !isSupabaseStorageReference(input.filePath)) {
-      await refreshPhotoCloudflareDelivery(
-        {
-          id: Number(photo.id),
-          storedFileName: photo.storedFileName,
-          filePath: photo.filePath,
-          fileUrl: photo.fileUrl,
-        },
-        input.url,
-        async (freshUrl) => {
-          await tx.userPhoto.update({
-            where: { id: photo.id },
-            data: { fileUrl: freshUrl },
-          });
-        },
-        resolveStoredSourceUrl(existing.filePath, existing.fileUrl),
-      );
-    }
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Photo upload failed.");
     }
@@ -1455,15 +1377,12 @@ function photoDeliveryOrProxyUrl(
   filePath: string | null | undefined,
   photoId: bigint | number | null | undefined,
 ) {
-  if (isSupabaseStorageReference(fileUrl) || isSupabaseStorageReference(filePath)) {
-    return photoDisplayUrl(photoId);
-  }
-
-  if (fileUrl && isCloudflareDeliveryUrl(fileUrl)) return fileUrl;
-  if (filePath && isCloudflareDeliveryUrl(filePath)) return filePath;
-
   const proxiedUrl = photoDisplayUrl(photoId);
   if (proxiedUrl) return proxiedUrl;
+
+  if (isSupabaseStorageReference(fileUrl) || isSupabaseStorageReference(filePath)) {
+    return proxiedUrl;
+  }
 
   if (fileUrl && isUsableImageUrl(fileUrl)) return fileUrl;
   if (filePath && isUsableImageUrl(filePath)) return filePath;
@@ -1493,8 +1412,9 @@ type PhotoRedirectRecord = {
 
 async function getPhotoServeTargetForRecord(
   photo: PhotoRedirectRecord,
-  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
+  _unusedPersistFreshUrl: (freshUrl: string) => Promise<unknown>,
 ): Promise<PhotoServeTarget | null> {
+  void _unusedPersistFreshUrl;
   const storageReference = parseSupabaseStorageReference(photo.fileUrl) ?? parseSupabaseStorageReference(photo.filePath);
   if (storageReference) {
     return {
@@ -1503,76 +1423,17 @@ async function getPhotoServeTargetForRecord(
     };
   }
 
-  if (isCloudflareDeliveryUrl(photo.fileUrl)) {
-    const deliveryUrl = photo.fileUrl;
-    if (deliveryUrl) {
-      return { kind: "redirect", url: deliveryUrl };
-    }
-  }
-  if (isCloudflareDeliveryUrl(photo.filePath)) {
-    return { kind: "redirect", url: photo.filePath };
-  }
-
   const sourceUrl = isUsableImageUrl(photo.fileUrl)
     ? photo.fileUrl
     : isUsableImageUrl(photo.filePath)
       ? photo.filePath
       : null;
   if (sourceUrl) {
-    const freshUrl = await ensureCloudflareCachedImage({
-      customId: photo.storedFileName,
-      sourceUrl,
-      metadata: {
-        photoId: photo.id.toString(),
-      },
-    });
-    if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
-    if (freshUrl) {
-      return { kind: "redirect", url: freshUrl };
-    }
+    return { kind: "proxy", url: sourceUrl };
   }
 
   const notionSourceUrl = await resolveNotionPhotoSourceUrl(photo.storedFileName);
-  if (!notionSourceUrl) {
-    return sourceUrl ? { kind: "proxy", url: sourceUrl } : null;
-  }
-
-  const freshUrl = await ensureCloudflareCachedImage({
-    customId: photo.storedFileName,
-    sourceUrl: notionSourceUrl,
-    metadata: {
-      photoId: photo.id.toString(),
-    },
-  });
-  if (freshUrl && freshUrl !== photo.fileUrl) await persistFreshUrl(freshUrl);
-  if (freshUrl) {
-    return { kind: "redirect", url: freshUrl };
-  }
-
-  return { kind: "proxy", url: notionSourceUrl };
-}
-
-async function refreshPhotoCloudflareDelivery(
-  photo: PhotoRedirectRecord,
-  sourceUrl: string,
-  persistFreshUrl: (freshUrl: string) => Promise<unknown>,
-  previousSourceUrl?: string | null,
-) {
-  if (!sourceUrl) return photo.fileUrl ?? null;
-
-  if (previousSourceUrl && previousSourceUrl !== sourceUrl) {
-    await deleteCloudflareImage(photo.storedFileName);
-  }
-
-  const deliveryUrl = await ensureCloudflareCachedImage({
-    customId: photo.storedFileName,
-    sourceUrl,
-    metadata: {
-      photoId: photo.id.toString(),
-    },
-  });
-  if (deliveryUrl && deliveryUrl !== photo.fileUrl) await persistFreshUrl(deliveryUrl);
-  return deliveryUrl ?? null;
+  return notionSourceUrl ? { kind: "proxy", url: notionSourceUrl } : null;
 }
 
 function isUsableImageUrl(url: string | null | undefined) {
@@ -1580,30 +1441,22 @@ function isUsableImageUrl(url: string | null | undefined) {
 
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && !isCloudflareDeliveryUrl(url);
+    return parsed.protocol === "https:";
   } catch {
     return false;
   }
 }
 
-function resolveStoredSourceUrl(filePath: string | null | undefined, fileUrl: string | null | undefined) {
-  if (isSupabaseStorageReference(fileUrl)) return fileUrl;
-  if (isSupabaseStorageReference(filePath)) return filePath;
-  return isUsableImageUrl(fileUrl) ? fileUrl : isUsableImageUrl(filePath) ? filePath : null;
-}
-
 async function deletePhotoObject(
   filePath: string | null | undefined,
   fileUrl: string | null | undefined,
-  storedFileName: string,
+  _unusedStoredFileName: string,
 ) {
+  void _unusedStoredFileName;
   const storageReference = parseSupabaseStorageReference(filePath) ?? parseSupabaseStorageReference(fileUrl);
   if (storageReference) {
     await deleteSupabaseStorageObject(storageReference);
-    return;
   }
-
-  await deleteCloudflareImage(storedFileName);
 }
 
 function buildSupabaseStoragePath(scope: string, fileName: string) {

@@ -120,15 +120,11 @@ The sync runner is shared with the CLI script `scripts/sync-notion-to-supabase.m
 
 The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Supabase Storage references in `file_path` and `file_url`, using the `beanmatch-image-storage` bucket by default.
 
+Notion photo sync is treated as part of the write transaction. If a Notion image cannot be downloaded or uploaded to Supabase Storage, that page is reported as a sync error instead of silently falling back to a temporary Notion URL.
+
 When the photo pipeline changes, bump the sync schema version in `scripts/sync-notion-to-supabase.mjs` so the next startup sync reprocesses all pages once and refreshes Supabase Storage objects.
 
-If older rows still have a non-delivery `file_url`, run the backfill script:
-
-```sh
-npm run backfill:cloudflare-images -- --write
-```
-
-The legacy backfill script still targets Cloudflare Images for older rows. New Notion sync writes should go to Supabase Storage first.
+If older rows still have source URLs instead of Supabase Storage references, re-run the write sync after updating the photo pipeline so the rows are rewritten into Supabase Storage.
 
 Use `--limit=<n>` for a small batch run before the full pass if you want to verify a subset first.
 
