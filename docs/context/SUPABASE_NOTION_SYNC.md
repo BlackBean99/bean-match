@@ -118,7 +118,7 @@ Operators can also run the same write sync from the admin web UI with the header
 
 The sync runner is shared with the CLI script `scripts/sync-notion-to-supabase.mjs --write`, so local Node usage and the deployed app use the same sync logic and the same progress states.
 
-The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Supabase Storage references in `file_path` and `file_url`, using the `beanmatch-image-storage` bucket by default.
+The script stores a checksum per Notion page in `notion_sync_records`. Re-running the sync skips unchanged pages and updates rows when Notion content changes. Photo rows are written with Supabase Storage references in `file_path` and `file_url`, using the `beanmatch-image-storage` bucket by default. Notion images are normalized into WebP, resized before upload, and written as two objects per photo: `file_url` for the original-sized asset and `file_path` for the thumbnail asset.
 
 Notion photo sync is treated as part of the write transaction. If a Notion image cannot be downloaded or uploaded to Supabase Storage, that page is reported as a sync error instead of silently falling back to a temporary Notion URL.
 

@@ -21,9 +21,10 @@ export async function POST() {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   await requireAdminOpsSession();
-  const result = await getNotionMigrationStatus();
+  const dispatchedAt = new URL(request.url).searchParams.get("dispatchedAt") ?? undefined;
+  const result = await getNotionMigrationStatus(dispatchedAt);
   return NextResponse.json(result, {
     status: 200,
     headers: {

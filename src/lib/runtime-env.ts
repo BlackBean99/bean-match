@@ -34,7 +34,7 @@ export async function getAppBaseUrlAsync() {
 
 export function getSupabaseUrl() {
   const env = getRuntimeEnv();
-  return env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "";
+  return normalizeSupabaseProjectUrl(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "");
 }
 
 export function getSupabaseServerKey() {
@@ -64,5 +64,21 @@ async function getCloudflareEnvAsync(): Promise<Partial<CloudflareEnv> | null> {
     return (await getCloudflareContext({ async: true })).env;
   } catch {
     return getCloudflareEnv();
+  }
+}
+
+function normalizeSupabaseProjectUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.endsWith(".storage.supabase.co")) {
+      const projectRef = parsed.hostname.replace(/\.storage\.supabase\.co$/i, "");
+      return `${parsed.protocol}//${projectRef}.supabase.co`;
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return trimmed.replace(/\/+$/, "");
   }
 }

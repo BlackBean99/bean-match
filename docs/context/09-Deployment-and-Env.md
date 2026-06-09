@@ -22,6 +22,7 @@
 - `SUPABASE_URL` (선택, 서버용)
 - `SUPABASE_SERVICE_ROLE_KEY` (비밀)
 - `SUPABASE_STORAGE_BUCKET` (선택, 기본값 `beanmatch-image-storage`)
+- `SUPABASE_URL` 는 `https://<project-ref>.supabase.co` 형식의 프로젝트 base URL 이어야 한다. `https://<project-ref>.storage.supabase.co/storage/v1/s3` 같은 bucket/S3 endpoint는 넣지 않는다.
 
 ### 3.2 Notion Sync (`npm run sync:notion`)
 - `NOTION_TOKEN` (비밀)

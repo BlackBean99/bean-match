@@ -77,7 +77,9 @@
 - DB에는 이미지 바이너리를 저장하지 않는다.
 - 운영 환경에서는 서버 디스크에 원본을 저장하지 않는다.
 - 직접 업로드/클립보드 붙여넣기 이미지는 Supabase Storage `beanmatch-image-storage` 버킷에 저장한다.
-- Notion에서 가져온 파일도 Supabase Storage `beanmatch-image-storage` 버킷에 저장하고, `file_path` / `file_url`에는 `supabase-storage:{bucket}/{path}` 참조를 기록한다.
+- Notion에서 가져온 파일도 Supabase Storage `beanmatch-image-storage` 버킷에 저장한다.
+- Notion sync는 원본 이미지를 그대로 저장하지 않고, 회전 보정 후 WebP로 변환한 원본본(large)과 썸네일(thumb)을 함께 저장한다.
+- `file_url`에는 원본 WebP 참조를, `file_path`에는 썸네일 WebP 참조를 기록한다.
 - UI는 `/api/photos/{photoId}` 프록시 URL을 기본으로 사용한다. 오래된 source URL만 남아 있으면 서버가 source 이미지를 프록시 응답해 사용자 화면이 fallback SVG로 멈추지 않도록 한다. Notion presigned URL은 최종 렌더링 URL로 직접 노출하지 않는다.
 - DB에는 메타데이터를 저장한다.
 
@@ -87,8 +89,8 @@
 저장 메타데이터:
 - `original_file_name`
 - `stored_file_name`
-- `file_path`: source URL 또는 `supabase-storage:{bucket}/{path}` 참조
-- `file_url`: `supabase-storage:{bucket}/{path}` 참조 또는 임시 source URL
+- `file_path`: 썸네일용 `supabase-storage:{bucket}/{path}` 참조
+- `file_url`: 원본용 `supabase-storage:{bucket}/{path}` 참조
 - `mime_type`
 - `file_size_bytes`
 - `width_px`
