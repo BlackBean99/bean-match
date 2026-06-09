@@ -21,6 +21,7 @@
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (공개 가능, 단 권한 범위 확인 필요)
 - `SUPABASE_URL` (선택, 서버용)
 - `SUPABASE_SERVICE_ROLE_KEY` (비밀)
+- `SUPABASE_STORAGE_BUCKET` (선택, 기본값 `beanmatch-image-storage`)
 
 ### 3.2 Notion Sync (`npm run sync:notion`)
 - `NOTION_TOKEN` (비밀)

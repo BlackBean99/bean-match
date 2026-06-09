@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
-const prisma = canUsePrismaRuntime() ? new PrismaClient() : null;
+const prisma = createPrismaClient();
 const NOTION_VERSION = process.env.NOTION_API_VERSION || "2022-06-28";
 const NOTION_TOKEN = requiredEnv("NOTION_TOKEN");
 const MAIN_DATA_SOURCE_ID =
@@ -159,7 +160,8 @@ async function uploadSupabaseStorageObject({ path, body, contentType }) {
   );
 
   if (!response.ok) {
-    throw new Error(`Supabase Storage upload failed (${response.status})`);
+    const text = await response.text();
+    throw new Error(`Supabase Storage upload failed (${response.status}): ${text}`);
   }
 
   return buildSupabaseStorageReference(path);
@@ -330,7 +332,7 @@ export async function runNotionSync({ write = false, onProgress } = {}) {
               results.push({
                 pageId: page.id,
                 source: source.name,
-                action: "skipped",
+                action: "error",
                 reason: error instanceof Error ? error.message : "Photo refresh failed",
               });
               processedPages += 1;
@@ -366,7 +368,7 @@ export async function runNotionSync({ write = false, onProgress } = {}) {
           results.push({
             pageId: page.id,
             source: source.name,
-            action: "skipped",
+            action: "error",
             reason: error instanceof Error ? error.message : "Write failed",
           });
           processedPages += 1;
@@ -1392,28 +1394,34 @@ async function cacheNotionPhotoDeliveryUrl(notionPageId, photo, index) {
   const sourceUrl = photo.url;
   if (!sourceUrl) return null;
 
-  const sourceResponse = await fetch(sourceUrl, { cache: "no-store" });
-  if (!sourceResponse.ok) return sourceUrl;
+  const sourceResponse = await fetch(sourceUrl, {
+    cache: "no-store",
+    redirect: "follow",
+  });
+  if (!sourceResponse.ok) {
+    throw new Error(`Notion photo download failed (${sourceResponse.status}) for ${photo.name}`);
+  }
 
-  const contentType = sourceResponse.headers.get("content-type") || mimeTypeForName(photo.name);
-  const bytes = await sourceResponse.arrayBuffer();
+  const contentTypeHeader = sourceResponse.headers.get("content-type") || mimeTypeForName(photo.name);
+  const contentType = contentTypeHeader.split(";")[0].trim() || mimeTypeForName(photo.name);
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`Unsupported Notion photo content type: ${contentType}`);
+  }
+
+  const bytes = new Uint8Array(await sourceResponse.arrayBuffer());
   const storedFileName = `notion:${notionPageId}:${index}`;
   const storagePath = `notion/${notionPageId}/${index}-${sanitizeStorageFileName(photo.name)}`;
 
-  try {
-    await deleteStoredPhotoAsset(
-      buildSupabaseStorageReference(storagePath),
-      null,
-      storedFileName,
-    );
-    return await uploadSupabaseStorageObject({
-      path: storagePath,
-      body: bytes,
-      contentType,
-    });
-  } catch {
-    return sourceUrl;
-  }
+  await deleteStoredPhotoAsset(
+    buildSupabaseStorageReference(storagePath),
+    null,
+    storedFileName,
+  );
+  return await uploadSupabaseStorageObject({
+    path: storagePath,
+    body: bytes,
+    contentType,
+  });
 }
 
 function toPrismaPhotoPayload(userId, notionPageId, photo, index, storedReference = null) {
@@ -1469,6 +1477,16 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
+}
+
+function createPrismaClient() {
+  if (!canUsePrismaRuntime()) return null;
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+
+  const adapter = new PrismaPg({ connectionString });
+  return new PrismaClient({ adapter });
 }
 
 function canUsePrismaRuntime() {

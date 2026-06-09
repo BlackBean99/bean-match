@@ -17,7 +17,7 @@ type SyncProgressUpdate = {
 
 type NotionSyncResult = {
   write: boolean;
-  users: { action?: string; source?: string }[];
+  users: { action?: string; source?: string; reason?: string }[];
 };
 
 type GitHubWorkflowRun = {
@@ -159,7 +159,21 @@ async function startNotionSyncJob(env: ReturnType<typeof getRuntimeEnv>): Promis
     const created = result.users.filter((user) => user.action === "created").length;
     const updated = result.users.filter((user) => user.action === "updated").length;
     const skipped = result.users.filter((user) => user.action === "skipped").length;
+    const failed = result.users.filter((user) => user.action === "error").length;
     const sourceSummary = summarizeSources(result.users);
+
+    if (failed > 0) {
+      latestMigrationState = {
+        status: "error",
+        message: `동기화 부분 실패: 실패 ${failed}건, 생성 ${created}건, 업데이트 ${updated}건, 건너뜀 ${skipped}건${
+          sourceSummary ? ` (${sourceSummary})` : ""
+        }`,
+        progress: 100,
+        phase: "실패",
+      };
+
+      return latestMigrationState;
+    }
 
     latestMigrationState = {
       status: "success",
