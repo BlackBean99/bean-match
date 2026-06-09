@@ -981,12 +981,37 @@ async function resolveParticipantFromProperty(prop) {
 async function collectNotionPages(dataSourceId) {
   const pages = [];
   let startCursor;
+  const seenCursors = new Set();
 
   do {
+    if (startCursor) {
+      if (seenCursors.has(startCursor)) {
+        throw new Error(
+          `Notion pagination repeated cursor ${startCursor} for data source ${dataSourceId}. Aborting to avoid an infinite sync loop.`,
+        );
+      }
+      seenCursors.add(startCursor);
+    }
+
     const body = startCursor ? { start_cursor: startCursor } : {};
     const response = await notionFetchWithDatabaseFallback(dataSourceId, body);
+
+    if (!Array.isArray(response.results)) {
+      throw new Error(`Notion query for data source ${dataSourceId} returned an invalid results payload.`);
+    }
+
     pages.push(...response.results);
-    startCursor = response.has_more ? response.next_cursor : undefined;
+    if (!response.has_more) {
+      break;
+    }
+
+    if (!response.next_cursor) {
+      throw new Error(
+        `Notion query for data source ${dataSourceId} reported has_more=true without a next_cursor. Aborting to avoid an infinite sync loop.`,
+      );
+    }
+
+    startCursor = response.next_cursor;
   } while (startCursor);
 
   return pages;
