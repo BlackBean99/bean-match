@@ -14,6 +14,7 @@ import { OnboardingAccessTokenManager } from "@/components/onboarding-access-tok
 import { ReadOnlyTokenManager } from "@/components/readonly-token-manager";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { CompressedPhotoInput } from "@/components/compressed-photo-input";
 import { PastePhotoForm } from "@/components/paste-photo-form";
 import { StatusBadge } from "@/components/status-badge";
 import { formatBirthYearLabel } from "@/lib/birth-year-label";
@@ -191,7 +192,7 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
                     <input name="url" type="url" defaultValue={photo.sourceUrl} className={inputClassName} />
                   </Field>
                   <Field label="새 파일">
-                    <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className={inputClassName} />
+                    <CompressedPhotoInput name="photoFile" className={inputClassName} />
                   </Field>
                   <Field label="파일명">
                     <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
