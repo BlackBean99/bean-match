@@ -239,7 +239,7 @@ erDiagram
     ROUNDS ||--o{ ROUND_PASSES : contains
 ```
 
-`USER_PHOTOS.file_path`는 source URL 또는 Cloudflare Images 식별자 메모이고, `USER_PHOTOS.file_url`은 Cloudflare Images delivery URL로 사용한다.
+`USER_PHOTOS.file_path`와 `USER_PHOTOS.file_url`은 Supabase Storage 참조(`supabase-storage:{bucket}/{path}`) 또는 임시 source URL 메모로 사용한다. 최종 사용자 노출은 `/api/photos/{photoId}` 서버 프록시를 통해 수행한다.
 
 ---
 

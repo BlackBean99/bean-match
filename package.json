@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit",
     "verify:server-bundle": "node scripts/fix-next-server-chunks.mjs && node scripts/verify-next-server-bundle.mjs",
     "sync:notion": "node scripts/sync-notion-to-supabase.mjs",
-    "backfill:cloudflare-images": "node scripts/backfill-cloudflare-images.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

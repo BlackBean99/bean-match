@@ -125,35 +125,8 @@ class NotionApiError extends Error {
   }
 }
 
-const CLOUDFLARE_IMAGES_ACCOUNT_ID =
-  process.env.CLOUDFLARE_IMAGES_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || "";
-const CLOUDFLARE_API_TOKEN =
-  process.env.CLOUDFLARE_IMAGES_TOKEN || process.env.CLOUDFLARE_API_TOKEN || process.env.CloudFlare_Token || "";
-const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "beanmatch-image-storage";
 const SUPABASE_STORAGE_PREFIX = "supabase-storage:";
-
-function isCloudflareImagesConfigured() {
-  return Boolean(CLOUDFLARE_IMAGES_ACCOUNT_ID && CLOUDFLARE_API_TOKEN);
-}
-
-async function deleteCloudflareImage(imageId) {
-  if (!isCloudflareImagesConfigured()) return false;
-
-  const response = await fetch(
-    `${cloudflareApiBaseUrl}/accounts/${CLOUDFLARE_IMAGES_ACCOUNT_ID}/images/v1/${encodeURIComponent(imageId)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-      },
-      cache: "no-store",
-    },
-  );
-
-  if (response.status === 404) return false;
-  return response.ok;
-}
 
 function buildSupabaseStorageReference(path, bucket = SUPABASE_STORAGE_BUCKET) {
   return `${SUPABASE_STORAGE_PREFIX}${bucket}/${path}`;
@@ -193,6 +166,7 @@ async function uploadSupabaseStorageObject({ path, body, contentType }) {
 }
 
 async function deleteStoredPhotoAsset(filePath, fileUrl, storedFileName) {
+  void storedFileName;
   const storageReference = parseSupabaseStorageReference(filePath) || parseSupabaseStorageReference(fileUrl);
   if (storageReference) {
     const response = await fetch(
@@ -206,10 +180,6 @@ async function deleteStoredPhotoAsset(filePath, fileUrl, storedFileName) {
       },
     );
     return response.ok || response.status === 404;
-  }
-
-  if (storedFileName) {
-    return deleteCloudflareImage(storedFileName);
   }
 
   return false;

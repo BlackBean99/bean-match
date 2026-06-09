@@ -106,8 +106,6 @@ function logMigrationEnvironment(env: ReturnType<typeof getRuntimeEnv>) {
     JSON.stringify({
       scope: "notion-sync",
       runtime: isCloudflareRuntime() ? "cloudflare" : "node",
-      cloudflareTokenPresent: Boolean(env.CLOUDFLARE_API_TOKEN),
-      cloudflareImagesTokenPresent: Boolean(env.CLOUDFLARE_IMAGES_TOKEN),
       notionTokenPresent: Boolean(env.NOTION_TOKEN),
       supabaseUrlPresent: Boolean(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL),
       supabaseServiceRoleKeyPresent: Boolean(env.SUPABASE_SERVICE_ROLE_KEY || env.DATABASE_URL),

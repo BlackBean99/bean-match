@@ -51,34 +51,6 @@ export function canUsePrismaRuntime() {
   return Boolean(env.DATABASE_URL) && !isCloudflareRuntime();
 }
 
-export function getCloudflareImagesToken() {
-  const env = getRuntimeEnv();
-  return env.CLOUDFLARE_IMAGES_TOKEN || env.CLOUDFLARE_API_TOKEN || env.CloudFlare_Token || "";
-}
-
-export async function getCloudflareImagesTokenAsync() {
-  const env = await getRuntimeEnvAsync();
-  return env.CLOUDFLARE_IMAGES_TOKEN || env.CLOUDFLARE_API_TOKEN || env.CloudFlare_Token || "";
-}
-
-export function getCloudflareImagesVariant() {
-  return getRuntimeEnv().CLOUDFLARE_IMAGES_VARIANT || "public";
-}
-
-export async function getCloudflareImagesVariantAsync() {
-  return (await getRuntimeEnvAsync()).CLOUDFLARE_IMAGES_VARIANT || "public";
-}
-
-export function getCloudflareImagesAccountId() {
-  const env = getRuntimeEnv();
-  return env.CLOUDFLARE_IMAGES_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID || "";
-}
-
-export async function getCloudflareImagesAccountIdAsync() {
-  const env = await getRuntimeEnvAsync();
-  return env.CLOUDFLARE_IMAGES_ACCOUNT_ID || env.CLOUDFLARE_ACCOUNT_ID || "";
-}
-
 function getCloudflareEnv(): Partial<CloudflareEnv> | null {
   try {
     return getCloudflareContext().env;
