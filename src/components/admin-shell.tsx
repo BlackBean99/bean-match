@@ -16,7 +16,7 @@ type AdminShellProps = {
 };
 
 const navItems: Array<{
-  key: "users" | "matches" | "rounds" | "onboarding";
+  key: "users" | "matches" | "rounds";
   href: string;
   label: string;
   badge?: string;
@@ -24,7 +24,6 @@ const navItems: Array<{
   { key: "matches", href: "/matches", label: "매칭 풀 관리", badge: "핵심" },
   { key: "rounds", href: "/rounds", label: "자동 노출 운영", badge: "신규" },
   { key: "users", href: "/users", label: "회원 관리" },
-  { key: "onboarding", href: "/onboarding", label: "참여 링크" },
 ];
 
 export function AdminShell({ title, description, active, canManage = false, viewerName, viewerRole, children }: AdminShellProps) {
