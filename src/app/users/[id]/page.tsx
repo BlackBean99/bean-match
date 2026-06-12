@@ -3,6 +3,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { UserDetail } from "@/components/user-detail";
 import { requireOpsSession } from "@/lib/admin-access-server";
 import { getUserDetail } from "@/lib/member-repository";
+import { getInviteTokenManagerData } from "@/lib/invite-token-repository";
 import { getOnboardingAccessTokenManagerData } from "@/lib/onboarding-access-repository";
 import { getReadOnlyBrowseTokenManagerData } from "@/lib/readonly-browse-repository";
 import Link from "next/link";
@@ -20,8 +21,9 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   const canManage = session.role === "ADMIN";
 
   try {
-    const [user, onboardingAccessTokenManager, readOnlyTokenManager] = await Promise.all([
+    const [user, inviteTokenManager, onboardingAccessTokenManager, readOnlyTokenManager] = await Promise.all([
       getUserDetail(userId),
+      getInviteTokenManagerData(userId),
       getOnboardingAccessTokenManagerData(userId),
       getReadOnlyBrowseTokenManagerData(userId),
     ]);
@@ -39,6 +41,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
       >
         <UserDetail
           user={user}
+          inviteTokenManager={inviteTokenManager}
           onboardingAccessTokenManager={onboardingAccessTokenManager}
           readOnlyTokenManager={readOnlyTokenManager}
           canManage={canManage}
