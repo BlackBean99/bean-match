@@ -40,7 +40,7 @@
 - `POST /api/intro-cases/{id}/result` : 결과 확인 등록
 
 ### 2.6 Auto Exposure / Interest
-- `GET /invite/{invitorId}` : 모집인 초대 링크. 자동 노출 참여 진입 폼에 `invitorId`를 전달한다.
+- `GET /invite/{inviteToken}` : 참가자 개인 초대 링크. 서버가 토큰 해시를 검증해 참가자를 식별하고, 본인 확인 후 `/pool/{userId}` 로 이동시킨다.
 - `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 자동 노출 참여 진입 URL
 - `GET /pool/{userId}` : 참가자 개인 풀 URL. 신규 가입자는 브라우징 관심을 제출하고, 기존 회원은 새 멤버 알림을 확인한다.
 - `GET /offer/pool/{userId}` : 관리자 발급 토큰으로만 접근 가능한 외부 오퍼 후보 열람 URL
@@ -117,8 +117,8 @@
 - 운영자만 전체 사용자 조회 가능
 - 사용자는 본인 프로필만 수정 가능
 - `/offer/pool/{userId}` 는 관리자 발급 토큰이 유효할 때만 접근 가능해야 한다.
-- `/offer/*`, `/invite/{invitorId}`, `/onboarding/access/{token}`, `/api/photos/*` 를 제외한 운영 경로는 운영 로그인 세션으로 보호해야 한다.
-- 오퍼 토큰은 사용자별로 발급하고, 서버에는 원문 대신 해시만 저장한다.
+- `/offer/*`, `/invite/{inviteToken}`, `/onboarding/access/{token}`, `/api/photos/*` 를 제외한 운영 경로는 운영 로그인 세션으로 보호해야 한다.
+- 오퍼 토큰과 참가자 초대 토큰은 사용자별로 발급하고, 서버에는 원문 대신 해시만 저장한다.
 - 연락처는 `CONNECTED` 전까지 비공개 정책을 권장
 
 ### 5.2 업로드 보안

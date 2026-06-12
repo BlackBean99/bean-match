@@ -13,6 +13,7 @@ import {
   getSupabaseServerKey,
   getSupabaseUrl,
 } from "@/lib/runtime-env";
+import { createInviteAccessToken } from "@/lib/invite-token-repository";
 import {
   buildSupabaseStorageReference,
   deleteSupabaseStorageObject,
@@ -359,6 +360,10 @@ export async function createMember(input: MemberInput) {
     await upsertSupabaseRoles(user.id, normalizedRoles);
     if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
       await ensureSupabaseEntryQueueRow(user.id, input.status, input.openLevel, "member:create");
+      await createInviteAccessToken(BigInt(user.id), {
+        label: `${input.name} 개인 초대 링크`,
+        expiresAt: null,
+      });
     }
     return user;
   }
@@ -367,7 +372,7 @@ export async function createMember(input: MemberInput) {
 
   const normalizedRoles = normalizeRoles(input.roles);
 
-  return prisma.$transaction(async (tx) => {
+  const user = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         name: input.name,
@@ -404,6 +409,15 @@ export async function createMember(input: MemberInput) {
 
     return user;
   });
+
+  if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+    await createInviteAccessToken(user.id, {
+      label: `${input.name} 개인 초대 링크`,
+      expiresAt: null,
+    });
+  }
+
+  return user;
 }
 
 export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | null> {
