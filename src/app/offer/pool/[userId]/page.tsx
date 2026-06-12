@@ -9,13 +9,16 @@ export const dynamic = "force-dynamic";
 
 type OfferPoolPageProps = {
   params: Promise<{ userId: string }>;
+  searchParams?: Promise<{ token?: string | string[] }>;
 };
 
-export default async function OfferPoolPage({ params }: OfferPoolPageProps) {
+export default async function OfferPoolPage({ params, searchParams }: OfferPoolPageProps) {
   const { userId } = await params;
+  const { token } = (await searchParams) ?? {};
   const cookieStore = await cookies();
-  const token = cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
-  const data = await getReadOnlyBrowsePageData(BigInt(userId), token);
+  const cookieToken = cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
+  const accessToken = Array.isArray(token) ? token[0] : token ?? cookieToken;
+  const data = await getReadOnlyBrowsePageData(BigInt(userId), accessToken);
 
   return <ReadOnlyBrowsePage data={data} />;
 }

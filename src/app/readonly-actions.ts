@@ -93,7 +93,7 @@ export async function createQuickOfferClipboardAction(userId: number) {
   await requireOpsSession();
   const expiresAt = oneWeekFromNow();
   const createdToken = await createReadOnlyBrowseToken(BigInt(userId), {
-    label: `회원 관리 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
+    label: `호감표시 링크 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
@@ -108,7 +108,6 @@ export async function createQuickOfferClipboardAction(userId: number) {
   return {
     accessPath: createdToken.accessPath,
     expiresAtIso: expiresAt.toISOString(),
-    rawToken: createdToken.rawToken,
   };
 }
 
@@ -151,7 +150,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
 ): Promise<SubmitReadOnlyBrowseInterestsActionState> {
   const userId = parseNamedId(formData, "userId");
   const cookieStore = await cookies();
-  const rawToken = cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
+  const rawToken = readString(formData, "accessToken") ?? cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
   const validation = await validateReadOnlyBrowseToken(userId, rawToken);
 
   if (!validation.ok) {
@@ -197,15 +196,17 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
 export async function clearReadOnlyBrowseAccessAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: getReadOnlyBrowseCookieName(userId),
-    value: "",
-    expires: new Date(0),
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  if (cookieStore.get(getReadOnlyBrowseCookieName(userId))) {
+    cookieStore.set({
+      name: getReadOnlyBrowseCookieName(userId),
+      value: "",
+      expires: new Date(0),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
 
   redirect(getReadOnlyBrowseAccessPath(userId));
 }

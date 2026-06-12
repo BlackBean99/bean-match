@@ -14,7 +14,7 @@
 - 자동 노출 참여 진입: `/onboarding/access/{token}`
 - 운영자 토큰 발급 화면: `/users/{userId}` 상세의 온보딩 접근 토큰 관리자와 참가자 초대/카톡 문구 관리자
 - 개인 풀: `/pool/{userId}`
-- 프로필 오퍼 토큰 페이지: `/offer/pool/{userId}`
+- 프로필 오퍼 링크: `/offer/pool/{userId}?token={token}`
 
 자동 노출 참여 진입 URL에서 가능한 일:
 - 운영자가 발급한 토큰으로 참가자 식별
@@ -55,7 +55,7 @@
 - 모집인은 운영 로그인 후 회원 목록/상세를 열람할 수 있다.
 
 모집인이 할 수 있는 일:
-- 회원 목록/상세에서 오퍼 링크, 참가자 초대 링크, 카카오톡 문구를 복사
+- 회원 목록/상세에서 호감표시 링크 복사
 - 신규 사용자에게 운영자가 발급한 토큰 링크를 전달
 
 모집인이 할 수 없는 일:
@@ -87,14 +87,14 @@
 - 필요 시 기존 라운드 테스트 URL로 레거시 화면 점검
 
 ## 공유 원칙
-- 공개 공유 URL은 `/onboarding/access/{token}`, `/offer/pool/{userId}` 이다.
-- `/onboarding` 과 `/invite/{inviteToken}` 은 직접 입장용이 아니라 토큰 링크 안내용 화면이다.
-- `/invite/{inviteToken}` 는 참가자 본인 확인과 개인 풀 진입을 위한 안내 화면이다.
+- 공개 공유 URL은 `/onboarding/access/{token}`, `/offer/pool/{userId}?token={token}` 이다.
+- `/onboarding` 과 `/invite/{invitorId}` 는 직접 입장용이 아니라 토큰 링크 안내용 화면이다.
+- `/invite/{invitorId}` 는 모집인 출처를 확인하는 안내 화면이다.
 - 관리자 URL은 등록된 운영 로그인 계정이 있는 관리자에게만 공유한다.
-- `/users/{userId}` 상세의 온보딩 접근 링크 복사 버튼은 현재 토큰이 없으면 새 토큰을 자동 발급해 링크를 복사한다.
+- `/users` 목록의 호감표시 링크 복사 버튼은 토큰이 포함된 직접 진입 링크를 복사한다.
 - 연락처는 `CONNECTED` 전까지 어떤 URL에서도 노출하지 않는다.
 - `PROGRESSING` 사용자는 자동 노출 후보와 신규 소개 생성에서 제외한다.
-- `/offer/pool/{userId}` 는 관리자 발급 프로필 열람 토큰을 통과해야만 진입할 수 있다.
+- `/offer/pool/{userId}?token={token}` 는 관리자 발급 프로필 열람 토큰을 통과해야만 진입할 수 있다.
 - 개인 입장 공유는 `userId` 쿼리 문자열이 아니라 발급 토큰으로만 전달한다.
 
 ## 외부 사용자 신규 이성 리스트 확인 가이드

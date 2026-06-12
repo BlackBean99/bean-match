@@ -13,6 +13,7 @@ import type { ParticipantInterestSelection } from "@/lib/domain";
 import type { ReadOnlyBrowseCandidate } from "@/lib/readonly-browse-repository";
 
 type ReadOnlyBrowseInterestFormProps = {
+  accessToken: string | null;
   browseCandidates: ReadOnlyBrowseCandidate[];
   browseLimit: number;
   browseSelections: ParticipantInterestSelection[];
@@ -28,6 +29,7 @@ const initialState: SubmitReadOnlyBrowseInterestsActionState = {
 };
 
 export function ReadOnlyBrowseInterestForm({
+  accessToken,
   browseCandidates,
   browseLimit,
   browseSelections,
@@ -90,6 +92,7 @@ export function ReadOnlyBrowseInterestForm({
       <form action={formAction} className="grid gap-4">
         <FormPendingFieldset className="grid gap-4">
           <input type="hidden" name="userId" value={userId} />
+          {accessToken ? <input type="hidden" name="accessToken" value={accessToken} /> : null}
           {browseCandidates.length === 0 ? (
             <p className="rounded-[28px] border border-[#ece7e4] bg-white p-6 text-sm leading-6 text-zinc-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
               {browseSubmitted
