@@ -12,10 +12,9 @@ type OfferLinkQuickActionsProps = {
 type IssuedOfferToken = {
   accessPath: string;
   expiresAtIso: string;
-  rawToken: string;
 };
 
-type ActionStatus = "idle" | "pending" | "copied_link" | "copied_token" | "error";
+type ActionStatus = "idle" | "pending" | "copied" | "error";
 
 export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
   const [issuedToken, setIssuedToken] = useState<IssuedOfferToken | null>(null);
@@ -35,7 +34,6 @@ export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
     const nextIssuedToken = {
       accessPath: created.accessPath,
       expiresAtIso: created.expiresAtIso,
-      rawToken: created.rawToken,
     };
     setIssuedToken(nextIssuedToken);
     return nextIssuedToken;
@@ -47,20 +45,7 @@ export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
         setStatus("pending");
         const token = await ensureIssuedToken();
         await navigator.clipboard.writeText(resolveCopyUrl(token.accessPath));
-        scheduleStatus("copied_link");
-      } catch {
-        scheduleStatus("error");
-      }
-    });
-  }
-
-  function handleCopyToken() {
-    startTransition(async () => {
-      try {
-        setStatus("pending");
-        const token = await ensureIssuedToken();
-        await navigator.clipboard.writeText(token.rawToken);
-        scheduleStatus("copied_token");
+        scheduleStatus("copied");
       } catch {
         scheduleStatus("error");
       }
@@ -77,21 +62,7 @@ export function OfferLinkQuickActions({ userId }: OfferLinkQuickActionsProps) {
         disabled={disabled}
         className={`${adminSecondaryButtonClassName} px-2.5 py-1.5 text-[11px] disabled:cursor-not-allowed disabled:text-zinc-400`}
       >
-        {status === "pending" ? "발급 중..." : status === "copied_link" ? "링크 복사됨" : status === "error" ? "복사 실패" : "링크 복사"}
-      </button>
-      <button
-        type="button"
-        onClick={handleCopyToken}
-        disabled={disabled}
-        className={`${adminSecondaryButtonClassName} px-2.5 py-1.5 text-[11px] disabled:cursor-not-allowed disabled:text-zinc-400`}
-      >
-        {status === "pending"
-          ? "발급 중..."
-          : status === "copied_token"
-            ? "토큰 복사됨"
-            : status === "error"
-              ? "복사 실패"
-              : "토큰 복사"}
+        {status === "pending" ? "발급 중..." : status === "copied" ? "링크 복사됨" : status === "error" ? "복사 실패" : "호감표시 링크 복사"}
       </button>
     </div>
   );

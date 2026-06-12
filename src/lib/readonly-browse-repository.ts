@@ -84,6 +84,7 @@ export type ReadOnlyBrowseCandidate = DashboardUser & {
 
 export type ReadOnlyBrowsePageData = {
   accessPath: string;
+  accessToken: string | null;
   accessIssue: AccessIssue | null;
   actor: DashboardUser | null;
   authorized: boolean;
@@ -127,6 +128,10 @@ export function getReadOnlyBrowseAccessPath(userId: bigint | number | string) {
 
 export function buildReadOnlyBrowseAccessUrl(userId: bigint | number | string) {
   return `${getAppBaseUrl()}${getReadOnlyBrowseAccessPath(userId)}`;
+}
+
+export function buildReadOnlyBrowseAccessUrlWithToken(userId: bigint | number | string, rawToken: string) {
+  return `${buildReadOnlyBrowseAccessUrl(userId)}?token=${encodeURIComponent(rawToken)}`;
 }
 
 export function getReadOnlyBrowseCookieName(userId: bigint | number | string) {
@@ -221,7 +226,7 @@ export async function createReadOnlyBrowseToken(
 
   const summary = toReadOnlyBrowseTokenSummary(toTokenRecord(token));
   return {
-    accessPath: getReadOnlyBrowseAccessPath(userId),
+    accessPath: buildReadOnlyBrowseAccessUrlWithToken(userId, rawToken),
     rawToken,
     token: summary,
   };
@@ -255,6 +260,7 @@ export async function getReadOnlyBrowsePageData(
   if (!hasReadOnlyBrowseStorageConfig()) {
     return {
       accessPath,
+      accessToken: null,
       accessIssue: "database_unavailable",
       actor: null,
       authorized: false,
@@ -273,6 +279,7 @@ export async function getReadOnlyBrowsePageData(
   if (!validation.ok) {
     return {
       accessPath,
+      accessToken: null,
       accessIssue: validation.reason,
       actor: null,
       authorized: false,
@@ -293,6 +300,7 @@ export async function getReadOnlyBrowsePageData(
   if (!memberData.databaseConnected) {
     return {
       accessPath,
+      accessToken: rawToken?.trim() ?? null,
       accessIssue: null,
       actor,
       authorized: true,
@@ -310,6 +318,7 @@ export async function getReadOnlyBrowsePageData(
   if (!actor) {
     return {
       accessPath,
+      accessToken: rawToken?.trim() ?? null,
       accessIssue: null,
       actor: null,
       authorized: true,
@@ -353,6 +362,7 @@ export async function getReadOnlyBrowsePageData(
 
   return {
     accessPath,
+    accessToken: rawToken?.trim() ?? null,
     accessIssue: null,
     actor,
     authorized: true,
