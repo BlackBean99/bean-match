@@ -7,16 +7,15 @@ import {
   type CreateOnboardingAccessTokenActionState,
 } from "@/app/onboarding-access-actions";
 import { CopyLinkButton } from "@/components/copy-link-button";
-import { CopyTextButton } from "@/components/copy-text-button";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import {
   AdminSection,
   adminInputClassName,
   adminPrimaryButtonClassName,
-  adminSecondaryButtonClassName,
   adminTablePanelClassName,
 } from "@/components/admin-ui";
+import { OnboardingAccessLinkQuickActions } from "@/components/onboarding-access-link-quick-actions";
 import type { OnboardingAccessTokenSummary } from "@/lib/onboarding-access-repository";
 import { ResolvedUrlText } from "@/components/resolved-url-text";
 
@@ -60,13 +59,15 @@ export function OnboardingAccessTokenManager({
           </div>
           <div className="rounded-[24px] border border-[#ffd5df] bg-[#fff7fa] p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#e63a68]">Access pattern</p>
-            <p className="mt-2 break-all text-sm font-semibold text-zinc-700">/onboarding/access/{`{token}`}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            {state.createdToken?.accessUrl ? (
+              <ResolvedUrlText url={state.createdToken.accessUrl} className="mt-2 break-all text-sm font-semibold text-zinc-700" />
+            ) : (
+              <p className="mt-2 break-all text-sm font-semibold text-zinc-700">/onboarding/access/{`{token}`}</p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <OnboardingAccessLinkQuickActions accessUrl={state.createdToken?.accessUrl ?? null} userId={userId} />
               <span className="inline-flex items-center rounded-2xl border border-[#ffd5df] bg-white px-3 py-2 text-xs font-semibold text-zinc-500">
-                Token required
-              </span>
-              <span className="inline-flex items-center rounded-2xl border border-[#ffd5df] bg-white px-3 py-2 text-xs font-semibold text-zinc-500">
-                UserId hidden
+                토큰이 없으면 자동 발급
               </span>
             </div>
           </div>
@@ -134,14 +135,7 @@ export function OnboardingAccessTokenManager({
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Token</p>
                 <p className="mt-2 break-all font-mono text-sm text-zinc-800">{state.createdToken.rawToken}</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <CopyLinkButton url={state.createdToken.accessUrl} className={adminPrimaryButtonClassName} />
-                <CopyTextButton
-                  text={state.createdToken.rawToken}
-                  idleLabel="토큰 복사"
-                  className={adminSecondaryButtonClassName}
-                />
-              </div>
+              <CopyLinkButton url={state.createdToken.accessUrl} className={adminPrimaryButtonClassName} />
             </div>
           </div>
         ) : null}

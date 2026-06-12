@@ -65,6 +65,27 @@ export async function createOnboardingAccessTokenWithStateAction(
   }
 }
 
+export async function createQuickOnboardingAccessClipboardAction(userId: number) {
+  await requireAdminOpsSession();
+  const createdToken = await createOnboardingAccessToken(BigInt(userId), {
+    label: `온보딩 접근 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date())}`,
+    expiresAt: null,
+  });
+
+  revalidatePath(`/users/${userId}`);
+
+  return {
+    accessUrl: createdToken.accessUrl,
+    rawToken: createdToken.rawToken,
+  };
+}
+
 export async function revokeOnboardingAccessTokenAction(formData: FormData) {
   await requireAdminOpsSession();
   const tokenId = parseNamedId(formData, "tokenId");
