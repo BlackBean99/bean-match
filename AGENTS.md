@@ -28,6 +28,7 @@ Build and operate the intro platform according to the repository docs.
 - Treat privacy, security, and consent changes as high-risk.
 - Keep PRs small and scoped.
 - Update docs if domain, API, schema, or operations change.
+- Default every development request to a short-lived branch and PR, even for small fixes.
 - All development changes must land through a PR; do not treat direct mainline edits as complete work.
 - When the owner has explicitly asked for a change, proceed with routine git push and environment/config edits without additional yes/no prompts unless a higher-level approval gate applies.
 - Treat each new deployment boundary as a new PR unit instead of appending unrelated deployment fixes to an already-open PR.

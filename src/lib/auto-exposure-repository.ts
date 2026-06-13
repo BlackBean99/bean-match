@@ -98,6 +98,8 @@ type AutomationState = {
 type BrowseInterestInput = {
   userId: bigint;
   targetUserIds: bigint[];
+  replaceExisting?: boolean;
+  allowedTargetIds?: bigint[];
 };
 
 type JoinAutoExposureInput = {
@@ -237,15 +239,18 @@ export async function joinAutoExposureWithExistingUser(input: JoinAutoExposureIn
 export async function submitBrowseInterests(input: BrowseInterestInput) {
   const userId = Number(input.userId);
   const targetIds = [...new Set(input.targetUserIds.map((value) => Number(value)))];
+  const shouldReplaceExisting = input.replaceExisting === true;
   const data = await getParticipantExposureData(input.userId);
   if (!data.actor) throw new Error("사용자 정보를 찾을 수 없습니다.");
-  if (!data.canBrowse) throw new Error("지금은 신규 탐색 관심 표시를 제출할 수 없습니다.");
+  if (!shouldReplaceExisting && !data.canBrowse) throw new Error("지금은 신규 탐색 관심 표시를 제출할 수 없습니다.");
   if (targetIds.length === 0) throw new Error("관심 표시할 대상을 1명 이상 선택해 주세요.");
   if (targetIds.length > MAX_NEW_USER_MARKS) {
     throw new Error(`신규 가입자는 최대 ${MAX_NEW_USER_MARKS}명까지만 관심 표시할 수 있습니다.`);
   }
 
-  const candidateIds = new Set(data.browseCandidates.map((candidate) => candidate.id));
+  const candidateIds = new Set(
+    (input.allowedTargetIds ?? data.browseCandidates.map((candidate) => BigInt(candidate.id))).map((value) => Number(value)),
+  );
   for (const targetId of targetIds) {
     if (!candidateIds.has(targetId)) {
       throw new Error("자동 노출 대상이 아닌 사용자가 포함되어 있습니다.");
@@ -254,6 +259,30 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
 
   if (hasDatabaseUrl()) {
     await prisma.$transaction(async (tx) => {
+      const existingBrowseTargets = shouldReplaceExisting
+        ? await tx.interest.findMany({
+            where: {
+              fromUserId: input.userId,
+              source: "NEW_MEMBER_BROWSE",
+              status: "ACTIVE",
+            },
+            select: { toUserId: true },
+          })
+        : [];
+      const existingBrowseTargetIds = new Set(existingBrowseTargets.map((interest) => Number(interest.toUserId)));
+
+      if (shouldReplaceExisting && existingBrowseTargetIds.size > 0) {
+        await tx.interest.updateMany({
+          where: {
+            fromUserId: input.userId,
+            source: "NEW_MEMBER_BROWSE",
+            status: "ACTIVE",
+            toUserId: { notIn: targetIds.map((targetId) => BigInt(targetId)) },
+          },
+          data: { status: "WITHDRAWN" },
+        });
+      }
+
       for (const targetId of targetIds) {
         await tx.interest.upsert({
           where: {
@@ -275,10 +304,37 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
             expiresAt: interestExpiryDate(),
           },
         });
-        await ensureMutualIntroCandidateWithPrisma(tx, input.userId, BigInt(targetId));
+        await syncMutualIntroCandidateWithPrisma(tx, input.userId, BigInt(targetId));
+      }
+
+      if (shouldReplaceExisting) {
+        for (const targetId of existingBrowseTargetIds) {
+          if (targetIds.includes(targetId)) continue;
+          await syncMutualIntroCandidateWithPrisma(tx, input.userId, BigInt(targetId));
+        }
       }
     });
     return;
+  }
+
+  const existingBrowseTargetIds = shouldReplaceExisting
+    ? new Set(
+        (
+          await supabaseRest<Pick<InterestRow, "to_user_id">[]>(
+            `/interests?select=to_user_id&from_user_id=eq.${userId}&source=eq.NEW_MEMBER_BROWSE&status=eq.ACTIVE&order=to_user_id.asc`,
+          )
+        ).map((interest) => interest.to_user_id),
+      )
+    : new Set<number>();
+
+  if (shouldReplaceExisting && existingBrowseTargetIds.size > 0) {
+    await supabaseRest(
+      `/interests?from_user_id=eq.${userId}&source=eq.NEW_MEMBER_BROWSE&status=eq.ACTIVE&to_user_id=not.in.(${targetIds.join(",")})`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status: "WITHDRAWN" }),
+      },
+    );
   }
 
   for (const targetId of targetIds) {
@@ -287,7 +343,14 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
       toUserId: targetId,
       source: "NEW_MEMBER_BROWSE",
     });
-    await ensureMutualIntroCandidateWithSupabase(userId, targetId);
+    await syncMutualIntroCandidateWithSupabase(userId, targetId);
+  }
+
+  if (shouldReplaceExisting) {
+    for (const targetId of existingBrowseTargetIds) {
+      if (targetIds.includes(targetId)) continue;
+      await syncMutualIntroCandidateWithSupabase(userId, targetId);
+    }
   }
 }
 
@@ -325,7 +388,7 @@ export async function createBroadcastInterest(userId: bigint, targetUserId: bigi
         where: { id: BigInt(notification.id) },
         data: { readAt: new Date() },
       });
-      await ensureMutualIntroCandidateWithPrisma(tx, userId, targetUserId);
+      await syncMutualIntroCandidateWithPrisma(tx, userId, targetUserId);
     });
     return;
   }
@@ -339,7 +402,7 @@ export async function createBroadcastInterest(userId: bigint, targetUserId: bigi
     method: "PATCH",
     body: JSON.stringify({ read_at: new Date().toISOString() }),
   });
-  await ensureMutualIntroCandidateWithSupabase(Number(userId), Number(targetUserId));
+  await syncMutualIntroCandidateWithSupabase(Number(userId), Number(targetUserId));
 }
 
 export async function updateAutoExposureSettings(
@@ -1035,7 +1098,7 @@ async function upsertReadyEntryQueueWithSupabase(userId: number, memo: string) {
   });
 }
 
-async function ensureMutualIntroCandidateWithPrisma(tx: Prisma.TransactionClient, fromUserId: bigint, toUserId: bigint) {
+async function syncMutualIntroCandidateWithPrisma(tx: Prisma.TransactionClient, fromUserId: bigint, toUserId: bigint) {
   const reverse = await tx.interest.findFirst({
     where: {
       fromUserId: toUserId,
@@ -1068,28 +1131,44 @@ async function ensureMutualIntroCandidateWithPrisma(tx: Prisma.TransactionClient
     if (userIds.size === 2 && userIds.has(userAId.toString()) && userIds.has(userBId.toString())) return;
   }
 
-  await tx.introCandidate.upsert({
+  if (reverse) {
+    await tx.introCandidate.upsert({
+      where: { userAId_userBId: { userAId, userBId } },
+      create: {
+        userAId,
+        userBId,
+        reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
+        source: "MUTUAL_INTEREST",
+        status: "PENDING_ADMIN_REVIEW",
+      },
+      update: {
+        reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
+        source: "MUTUAL_INTEREST",
+        status: "PENDING_ADMIN_REVIEW",
+      },
+    });
+    return;
+  }
+
+  const candidate = await tx.introCandidate.findUnique({
     where: { userAId_userBId: { userAId, userBId } },
-    create: {
-      userAId,
-      userBId,
-      reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
-      source: "MUTUAL_INTEREST",
-      status: "PENDING_ADMIN_REVIEW",
-    },
-    update: {
-      reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
-      source: "MUTUAL_INTEREST",
-      status: "PENDING_ADMIN_REVIEW",
-    },
+    select: { id: true, source: true, status: true },
   });
+  if (candidate && candidate.source === "MUTUAL_INTEREST" && candidate.status === "PENDING_ADMIN_REVIEW") {
+    await tx.introCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        status: "REJECTED",
+        rejectedAt: new Date(),
+      },
+    });
+  }
 }
 
-async function ensureMutualIntroCandidateWithSupabase(fromUserId: number, toUserId: number) {
+async function syncMutualIntroCandidateWithSupabase(fromUserId: number, toUserId: number) {
   const reverse = await supabaseRest<Pick<InterestRow, "id">[]>(
     `/interests?select=id&from_user_id=eq.${toUserId}&to_user_id=eq.${fromUserId}&status=eq.ACTIVE&limit=1`,
   );
-  if (reverse.length === 0) return;
 
   const [userAId, userBId] = normalizePair(BigInt(fromUserId), BigInt(toUserId)).map((value) => Number(value));
   const existingParticipants = await supabaseRest<{ intro_case_id: number; user_id: number }[]>(
@@ -1106,13 +1185,29 @@ async function ensureMutualIntroCandidateWithSupabase(fromUserId: number, toUser
     if (userIds.size === 2 && userIds.has(userAId) && userIds.has(userBId)) return;
   }
 
-  await upsertIntroCandidateWithSupabase({
-    userAId,
-    userBId,
-    reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
-    source: "MUTUAL_INTEREST",
-    status: "PENDING_ADMIN_REVIEW",
-  });
+  if (reverse.length > 0) {
+    await upsertIntroCandidateWithSupabase({
+      userAId,
+      userBId,
+      reason: "상호 관심이 확인되어 운영 검토 후보로 생성되었습니다.",
+      source: "MUTUAL_INTEREST",
+      status: "PENDING_ADMIN_REVIEW",
+    });
+    return;
+  }
+
+  const existingCandidate = await supabaseRest<Pick<IntroCandidateRow, "id" | "source" | "status">[]>(
+    `/intro_candidates?select=id,source,status&user_a_id=eq.${userAId}&user_b_id=eq.${userBId}&limit=1`,
+  ).then((rows) => rows[0] ?? null);
+  if (existingCandidate && existingCandidate.source === "MUTUAL_INTEREST" && existingCandidate.status === "PENDING_ADMIN_REVIEW") {
+    await supabaseRest(`/intro_candidates?id=eq.${existingCandidate.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "REJECTED",
+        rejected_at: new Date().toISOString(),
+      }),
+    });
+  }
 }
 
 async function upsertInterestWithSupabase(input: { fromUserId: number; toUserId: number; source: InterestSource }) {

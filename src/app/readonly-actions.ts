@@ -8,6 +8,7 @@ import {
   createReadOnlyBrowseToken,
   getReadOnlyBrowseAccessPath,
   getReadOnlyBrowseCookieName,
+  getReadOnlyBrowsePageData,
   revokeReadOnlyBrowseToken,
   validateReadOnlyBrowseToken,
 } from "@/lib/readonly-browse-repository";
@@ -36,6 +37,7 @@ export type UnlockReadOnlyBrowseActionState = {
 export type SubmitReadOnlyBrowseInterestsActionState = {
   error: string | null;
   success: string | null;
+  submittedAt: string | null;
 };
 
 export async function createReadOnlyBrowseTokenWithStateAction(
@@ -160,6 +162,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
           ? "지금은 링크 정보를 확인할 수 없습니다."
           : "입장 코드가 유효하지 않아 다시 확인이 필요합니다.",
       success: null,
+      submittedAt: null,
     };
   }
 
@@ -170,11 +173,22 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
     .map((value) => BigInt(value));
 
   try {
-    await submitBrowseInterests({ userId, targetUserIds });
+    const pageData = await getReadOnlyBrowsePageData(userId, rawToken);
+    if (!pageData.authorized || !pageData.canSubmitInterests) {
+      throw new Error(pageData.loadError ?? "현재는 관심 제출이 열려 있지 않습니다.");
+    }
+
+    await submitBrowseInterests({
+      userId,
+      targetUserIds,
+      replaceExisting: true,
+      allowedTargetIds: pageData.candidates.map((candidate) => BigInt(candidate.id)),
+    });
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "관심 저장 중 오류가 발생했습니다.",
       success: null,
+      submittedAt: null,
     };
   }
 
@@ -190,6 +204,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
   return {
     error: null,
     success: "관심 선택이 저장되었습니다.",
+    submittedAt: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   };
 }
 
