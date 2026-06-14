@@ -157,11 +157,13 @@ export type MemberDashboardData = {
 type MemberDashboardQueryOptions = {
   includeIntroCases?: boolean;
   includeRoles?: boolean;
+  includeMainPhotos?: boolean;
 };
 
 const defaultMemberDashboardQueryOptions: Required<MemberDashboardQueryOptions> = {
   includeIntroCases: true,
   includeRoles: true,
+  includeMainPhotos: true,
 };
 
 export async function getMemberDashboardData(
@@ -194,7 +196,7 @@ async function getMemberDashboardDataFromPrisma(
     const [users, introCases] = await Promise.all([
       prisma.user.findMany({
         include: {
-          mainPhoto: true,
+          ...(options.includeMainPhotos ? { mainPhoto: true } : {}),
           ...(options.includeRoles ? { roles: true } : {}),
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -210,7 +212,7 @@ async function getMemberDashboardDataFromPrisma(
     ]);
     const dashboardUsers = users.map((user) => {
       const userAge = ageFromProfile(user.birthDate, user.ageText);
-      const mainPhoto = user.mainPhoto && !user.mainPhoto.deletedAt ? user.mainPhoto : null;
+      const mainPhoto = options.includeMainPhotos && "mainPhoto" in user && user.mainPhoto && !user.mainPhoto.deletedAt ? user.mainPhoto : null;
       return {
         id: Number(user.id),
         name: user.name,
@@ -231,8 +233,8 @@ async function getMemberDashboardDataFromPrisma(
         newMemberNotificationsEnabled: user.newMemberNotificationsEnabled,
         exposurePaused: user.exposurePaused,
         roles: "roles" in user && Array.isArray(user.roles) ? user.roles.map((role) => role.role) : [],
-        hasMainPhoto: Boolean(mainPhoto),
-        mainPhotoUrl: photoThumbnailUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
+        hasMainPhoto: options.includeMainPhotos ? Boolean(mainPhoto) : Boolean(user.mainPhotoId),
+        mainPhotoUrl: options.includeMainPhotos ? photoThumbnailUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id) : undefined,
         lastChangedAt: formatDateTime(user.updatedAt),
       };
     });
@@ -265,10 +267,10 @@ async function getMemberDashboardDataFromSupabaseRest(
     );
     const userIds = users.map((user) => user.id);
     const [mainPhotos, roles, introCases] = await Promise.all([
-      userIds.length > 0
+      options.includeMainPhotos && userIds.length > 0
         ? supabaseRest<SupabasePhotoRow[]>(
-          `/user_photos?select=id,user_id,file_path,file_url&user_id=in.(${userIds.join(",")})&is_main=is.true&deleted_at=is.null`,
-        )
+            `/user_photos?select=id,user_id,file_path,file_url&user_id=in.(${userIds.join(",")})&is_main=is.true&deleted_at=is.null`,
+          )
         : Promise.resolve([]),
       options.includeRoles && userIds.length > 0
         ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
@@ -319,11 +321,13 @@ async function getMemberDashboardDataFromSupabaseRest(
         exposurePaused: user.exposure_paused,
         roles: rolesByUserId.get(user.id) ?? [],
         hasMainPhoto: Boolean(user.main_photo_id),
-        mainPhotoUrl: photoThumbnailUrl(
-          mainPhotoByUserId.get(user.id)?.file_url,
-          mainPhotoByUserId.get(user.id)?.file_path,
-          mainPhotoByUserId.get(user.id)?.id,
-        ),
+        mainPhotoUrl: options.includeMainPhotos
+          ? photoThumbnailUrl(
+              mainPhotoByUserId.get(user.id)?.file_url,
+              mainPhotoByUserId.get(user.id)?.file_path,
+              mainPhotoByUserId.get(user.id)?.id,
+            )
+          : undefined,
         lastChangedAt: formatDateTime(new Date(user.updated_at)),
       };
     });
