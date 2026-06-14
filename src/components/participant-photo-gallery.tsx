@@ -199,8 +199,6 @@ export function ParticipantPhotoGallery({
     );
   }
 
-  const helperCopy = hasMultiplePhotos ? "좌우로 넘겨 사진을 확인해보세요" : "사진을 확인해보세요";
-
   return (
     <>
       {variant === "compact" ? (
@@ -275,41 +273,32 @@ export function ParticipantPhotoGallery({
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-3 pb-3 pt-12 text-white">
                     <div className="flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">사진 탐색</p>
-                        <p className="mt-1 text-sm font-semibold">
+                        <p className="text-sm font-semibold">
                           {selectedIndex + 1} / {galleryPhotos.length}
                         </p>
                       </div>
-                      <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
-                        좌우 스와이프
-                      </span>
                     </div>
                   </div>
-                  <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/12 px-2.5 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-sm transition duration-300 group-hover:bg-white/18">
-                    다음 사진 보기
-                  </span>
                 </>
               ) : (
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-3 pb-3 pt-12 text-white">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">사진 1장</p>
-                  <p className="mt-1 text-sm font-semibold">탭해서 크게 보기</p>
+                  <p className="text-sm font-semibold">1 / 1</p>
                 </div>
               )}
+              <button
+                type="button"
+                aria-label="사진 크게 보기"
+                onClick={(event) => {
+                  blockCardSelection(event);
+                  openViewer();
+                }}
+                className="absolute bottom-3 right-3 z-10 inline-flex h-9 items-center justify-center rounded-full border border-white/20 bg-white/12 px-3 text-[11px] font-semibold text-white/90 shadow-[0_10px_24px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-white/18"
+              >
+                사진 크게 보기
+              </button>
             </div>
           </div>
 
-          <div className="grid min-h-[3.5rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-1">
-            <p className="max-w-[20ch] text-[12px] leading-5 text-zinc-500 [overflow-wrap:normal] [white-space:normal] [word-break:keep-all]">
-              {helperCopy}
-            </p>
-            <button
-              type="button"
-              onClick={openViewer}
-              className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#f1d1bd] bg-[#fff8f2] px-3 text-xs font-semibold text-[#b86a2d] transition hover:border-[#e9b88e] hover:bg-[#fff3e8]"
-            >
-              사진 크게 보기
-            </button>
-          </div>
         </div>
       ) : (
         <div className="grid gap-2">
@@ -425,9 +414,6 @@ export function ParticipantPhotoGallery({
           <div className="flex items-center justify-between gap-3 px-4 pb-3 sm:px-6">
             <p className="rounded-full bg-white/8 px-3 py-1.5 text-[12px] font-semibold text-white/90">
               {galleryPhotos.length > 1 ? `${selectedIndex + 1} / ${galleryPhotos.length}` : "1 / 1"}
-            </p>
-            <p className="text-[12px] font-medium text-white/55">
-              {hasMultiplePhotos ? "좌우로 넘겨 다른 사진을 볼 수 있어요" : "사진을 크게 보고 닫을 수 있어요"}
             </p>
           </div>
 
