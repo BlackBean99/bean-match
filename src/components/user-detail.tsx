@@ -6,6 +6,7 @@ import type { DashboardUserDetail, DashboardUserPhoto } from "@/lib/domain";
 import {
   deleteMemberAction,
   deleteUserPhotoAction,
+  moveUserPhotoOrderAction,
   setMainUserPhotoAction,
   updateUserPhotoAction,
 } from "@/app/actions";
@@ -103,13 +104,22 @@ export function UserDetail({
             </span>
           </div>
 
-          {canManage ? <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length} /> : null}
+          {canManage ? <PastePhotoForm userId={user.id} defaultSortOrder={user.photos.length + 1} /> : null}
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {user.photos.length === 0 ? (
               <p className="rounded-[24px] border border-[#ece7e4] p-4 text-sm text-zinc-500">등록된 사진이 없습니다.</p>
             ) : (
-              user.photos.map((photo) => <PhotoCard key={photo.id} readOnly={!canManage} userId={user.id} photo={photo} />)
+              user.photos.map((photo, index) => (
+                <PhotoCard
+                  key={photo.id}
+                  index={index}
+                  photoCount={user.photos.length}
+                  readOnly={!canManage}
+                  userId={user.id}
+                  photo={photo}
+                />
+              ))
             )}
           </div>
         </section>
@@ -160,7 +170,23 @@ export function UserDetail({
   );
 }
 
-function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: DashboardUserPhoto; readOnly: boolean }) {
+function PhotoCard({
+  userId,
+  photo,
+  photoCount,
+  index,
+  readOnly,
+}: {
+  userId: number;
+  photo: DashboardUserPhoto;
+  photoCount: number;
+  index: number;
+  readOnly: boolean;
+}) {
+  const displayOrder = photo.sortOrder + 1;
+  const canMoveUp = !readOnly && !photo.isMain && index > 1;
+  const canMoveDown = !readOnly && !photo.isMain && index < photoCount - 1;
+
   return (
     <article className="overflow-hidden rounded-[24px] border border-[#ece7e4] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
       <div className="bg-[#f6f3ef] p-3">
@@ -181,10 +207,12 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
             <p className="truncate text-sm font-bold text-zinc-950" title={photo.originalFileName}>
               {photo.originalFileName}
             </p>
-            <p className="mt-1 text-xs text-zinc-500">순서 {photo.sortOrder} · {photo.uploadedAt}</p>
+            <p className="mt-1 text-xs text-zinc-500">
+              순서 {displayOrder} · {photo.uploadedAt}
+            </p>
           </div>
           {photo.isMain ? (
-            <span className="shrink-0 rounded-full bg-[#FF3131] px-2.5 py-1 text-xs font-bold text-white">대표</span>
+            <span className="shrink-0 rounded-full bg-[#FF3131] px-2.5 py-1 text-xs font-bold text-white">대표 · 1번</span>
           ) : null}
         </div>
 
@@ -192,6 +220,50 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
           <p className="text-xs text-zinc-500">열람 전용 프로필이라 사진 수정 기능이 비활성화되어 있습니다.</p>
         ) : (
           <>
+            <div className="flex flex-wrap gap-2">
+              {!photo.isMain ? (
+                <form action={setMainUserPhotoAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="userId" value={userId} />
+                    <input type="hidden" name="photoId" value={photo.id} />
+                    <FormSubmitButton
+                      label="대표로"
+                      pendingLabel="변경 중..."
+                      className="rounded-full border border-[#ffd8c2] bg-[#fff7f0] px-3 py-1.5 text-xs font-bold text-[#b86a2d] hover:border-[#f1b07c] hover:bg-[#fff1e6]"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
+              {canMoveUp ? (
+                <form action={moveUserPhotoOrderAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="userId" value={userId} />
+                    <input type="hidden" name="photoId" value={photo.id} />
+                    <input type="hidden" name="direction" value="up" />
+                    <FormSubmitButton
+                      label="앞으로"
+                      pendingLabel="이동 중..."
+                      className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-600 hover:border-[#f1b07c] hover:text-[#b86a2d]"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
+              {canMoveDown ? (
+                <form action={moveUserPhotoOrderAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="userId" value={userId} />
+                    <input type="hidden" name="photoId" value={photo.id} />
+                    <input type="hidden" name="direction" value="down" />
+                    <FormSubmitButton
+                      label="뒤로"
+                      pendingLabel="이동 중..."
+                      className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-600 hover:border-[#f1b07c] hover:text-[#b86a2d]"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
+            </div>
+
             <details>
               <summary className="cursor-pointer text-xs font-bold text-[#c96a2b]">사진 수정</summary>
               <form action={updateUserPhotoAction} className="mt-3 grid gap-3">
@@ -207,13 +279,9 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
                   <Field label="파일명">
                     <input name="originalFileName" defaultValue={photo.originalFileName} className={inputClassName} />
                   </Field>
-                  <Field label="순서">
-                    <input name="sortOrder" type="number" defaultValue={photo.sortOrder} className={inputClassName} />
+                  <Field label="순서(1부터)">
+                    <input name="sortOrder" type="number" defaultValue={photo.sortOrder + 1} className={inputClassName} />
                   </Field>
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                    <input type="checkbox" name="isMain" defaultChecked={photo.isMain} />
-                    대표 사진
-                  </label>
                   <FormSubmitButton
                     label="저장"
                     pendingLabel="저장 중..."
@@ -224,19 +292,6 @@ function PhotoCard({ userId, photo, readOnly }: { userId: number; photo: Dashboa
             </details>
 
             <div className="flex gap-3">
-              {!photo.isMain ? (
-                <form action={setMainUserPhotoAction}>
-                  <FormPendingFieldset className="contents">
-                    <input type="hidden" name="userId" value={userId} />
-                    <input type="hidden" name="photoId" value={photo.id} />
-                    <FormSubmitButton
-                      label="대표 지정"
-                      pendingLabel="변경 중..."
-                      className="text-xs font-bold text-zinc-600 hover:text-[#E00E0E] disabled:text-zinc-300"
-                    />
-                  </FormPendingFieldset>
-                </form>
-              ) : null}
               <form action={deleteUserPhotoAction}>
                 <FormPendingFieldset className="contents">
                   <input type="hidden" name="userId" value={userId} />
