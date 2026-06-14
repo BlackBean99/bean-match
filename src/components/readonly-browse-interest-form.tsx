@@ -13,6 +13,7 @@ import type { ParticipantInterestSelection } from "@/lib/domain";
 import type { ReadOnlyBrowseCandidate } from "@/lib/readonly-browse-repository";
 
 type ReadOnlyBrowseInterestFormProps = {
+  accessToken: string | null;
   browseCandidates: ReadOnlyBrowseCandidate[];
   browseLimit: number;
   browseSelections: ParticipantInterestSelection[];
@@ -25,9 +26,11 @@ type ReadOnlyBrowseInterestFormProps = {
 const initialState: SubmitReadOnlyBrowseInterestsActionState = {
   error: null,
   success: null,
+  submittedAt: null,
 };
 
 export function ReadOnlyBrowseInterestForm({
+  accessToken,
   browseCandidates,
   browseLimit,
   browseSelections,
@@ -40,15 +43,22 @@ export function ReadOnlyBrowseInterestForm({
   const submittedSelectionIds = useMemo(() => browseSelections.map((selection) => selection.toUserId), [browseSelections]);
   const submittedSelectionKey = submittedSelectionIds.join(",");
   const [selectedIds, setSelectedIds] = useState<number[]>(submittedSelectionIds);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
   useEffect(() => {
     setSelectedIds(submittedSelectionIds);
   }, [submittedSelectionIds, submittedSelectionKey]);
 
+  useEffect(() => {
+    if (!actionState.submittedAt) return;
+    setIsSuccessModalOpen(true);
+  }, [actionState.submittedAt]);
+
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const canInteract = databaseConnected && canSubmitInterests && !browseSubmitted;
+  const canInteract = databaseConnected && canSubmitInterests;
   const maxReached = selectedIds.length >= browseLimit;
   const summaryNames = browseSelections.map((selection) => selection.toUserName).join(", ");
+  const submittedSummary = summaryNames || "선택한 관심이 없습니다.";
 
   return (
     <section className="grid gap-4">
@@ -61,7 +71,7 @@ export function ReadOnlyBrowseInterestForm({
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center rounded-full bg-[#fff6ef] px-3 py-1.5 text-xs font-semibold text-[#c96a2b]">
-            {browseSubmitted ? "제출 완료" : `${selectedIds.length} / ${browseLimit} 선택`}
+            {browseSubmitted ? "제출 완료 · 수정 가능" : `${selectedIds.length} / ${browseLimit} 선택`}
           </span>
           <span className="inline-flex items-center rounded-full bg-[#f4f4f5] px-3 py-1.5 text-xs font-semibold text-zinc-600">
             {browseCandidates.length}명 열람 가능
@@ -81,15 +91,11 @@ export function ReadOnlyBrowseInterestForm({
           {actionState.error}
         </p>
       ) : null}
-      {actionState.success && !summaryNames ? (
-        <p className="rounded-[24px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-          {actionState.success}
-        </p>
-      ) : null}
 
       <form action={formAction} className="grid gap-4">
         <FormPendingFieldset className="grid gap-4">
           <input type="hidden" name="userId" value={userId} />
+          {accessToken ? <input type="hidden" name="accessToken" value={accessToken} /> : null}
           {browseCandidates.length === 0 ? (
             <p className="rounded-[28px] border border-[#ece7e4] bg-white p-6 text-sm leading-6 text-zinc-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
               {browseSubmitted
@@ -177,7 +183,7 @@ export function ReadOnlyBrowseInterestForm({
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-5 text-zinc-500">
-              선택은 최대 {browseLimit}명까지 저장됩니다. 제출이 끝나면 바로 다시 수정할 수 없습니다.
+              선택은 최대 {browseLimit}명까지 저장됩니다. 제출 후에도 다시 수정하고 재제출할 수 있습니다.
             </p>
             <FormSubmitButton
               label="선택 제출"
@@ -188,6 +194,49 @@ export function ReadOnlyBrowseInterestForm({
           </div>
         </FormPendingFieldset>
       </form>
+
+      {isSuccessModalOpen && actionState.success ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="offer-submit-modal-title"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/55 px-3 py-3 backdrop-blur-sm sm:items-center"
+          onClick={() => setIsSuccessModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-[28px] border border-white/10 bg-white p-5 shadow-[0_30px_120px_rgba(15,23,42,0.28)] sm:p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#E00E0E]">Blackbean Match</p>
+            <h3 id="offer-submit-modal-title" className="mt-3 text-2xl font-black tracking-[-0.04em] text-zinc-950">
+              제출이 저장되었습니다
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-600">
+              선택한 관심이 반영되었습니다. 닫은 뒤에는 체크를 바꿔 다시 제출할 수 있습니다.
+            </p>
+            <div className="mt-4 rounded-[22px] border border-[#f5e2d3] bg-[#fffaf5] px-4 py-3 text-sm text-zinc-700">
+              <p className="font-semibold text-[#b86a2d]">현재 선택</p>
+              <p className="mt-1">{submittedSummary}</p>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setIsSuccessModalOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 hover:border-[#f3d8c1] hover:text-[#b86a2d]"
+              >
+                계속 수정
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSuccessModalOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#da7a37,#ee9b55)] px-4 text-sm font-semibold text-white shadow-[0_18px_35px_rgba(217,122,50,0.24)]"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

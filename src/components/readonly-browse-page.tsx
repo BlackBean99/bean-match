@@ -84,6 +84,7 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
             browseSubmitted={data.browseSubmitted}
             canSubmitInterests={data.canSubmitInterests}
             databaseConnected={data.databaseConnected}
+            accessToken={data.accessToken}
             userId={actor.id}
           />
         </section>

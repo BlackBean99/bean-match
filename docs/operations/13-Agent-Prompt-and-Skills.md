@@ -61,7 +61,7 @@ Use for product logic:
 Use role-specific URLs:
 
 - Participant onboarding: `/onboarding`
-- Invitor-originated onboarding: `/invite/{invitorId}` or `/onboarding?invitorId={invitorId}`
+- Invitor-originated onboarding: `/invite/{inviteToken}` or `/onboarding?invitorId={invitorId}`
 - Participant round selection: `/rounds/{roundId}/participants/{userId}`
 - Admin operations: `/users`, `/users/{userId}`, `/rounds`, `/matches`
 

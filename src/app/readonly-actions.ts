@@ -8,6 +8,7 @@ import {
   createReadOnlyBrowseToken,
   getReadOnlyBrowseAccessPath,
   getReadOnlyBrowseCookieName,
+  getReadOnlyBrowsePageData,
   revokeReadOnlyBrowseToken,
   validateReadOnlyBrowseToken,
 } from "@/lib/readonly-browse-repository";
@@ -36,6 +37,7 @@ export type UnlockReadOnlyBrowseActionState = {
 export type SubmitReadOnlyBrowseInterestsActionState = {
   error: string | null;
   success: string | null;
+  submittedAt: string | null;
 };
 
 export async function createReadOnlyBrowseTokenWithStateAction(
@@ -93,7 +95,7 @@ export async function createQuickOfferClipboardAction(userId: number) {
   await requireOpsSession();
   const expiresAt = oneWeekFromNow();
   const createdToken = await createReadOnlyBrowseToken(BigInt(userId), {
-    label: `회원 관리 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
+    label: `호감표시 링크 빠른 복사 ${new Intl.DateTimeFormat("ko-KR", {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
@@ -108,7 +110,6 @@ export async function createQuickOfferClipboardAction(userId: number) {
   return {
     accessPath: createdToken.accessPath,
     expiresAtIso: expiresAt.toISOString(),
-    rawToken: createdToken.rawToken,
   };
 }
 
@@ -151,7 +152,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
 ): Promise<SubmitReadOnlyBrowseInterestsActionState> {
   const userId = parseNamedId(formData, "userId");
   const cookieStore = await cookies();
-  const rawToken = cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
+  const rawToken = readString(formData, "accessToken") ?? cookieStore.get(getReadOnlyBrowseCookieName(userId))?.value ?? null;
   const validation = await validateReadOnlyBrowseToken(userId, rawToken);
 
   if (!validation.ok) {
@@ -161,6 +162,7 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
           ? "지금은 링크 정보를 확인할 수 없습니다."
           : "입장 코드가 유효하지 않아 다시 확인이 필요합니다.",
       success: null,
+      submittedAt: null,
     };
   }
 
@@ -171,11 +173,22 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
     .map((value) => BigInt(value));
 
   try {
-    await submitBrowseInterests({ userId, targetUserIds });
+    const pageData = await getReadOnlyBrowsePageData(userId, rawToken);
+    if (!pageData.authorized || !pageData.canSubmitInterests) {
+      throw new Error(pageData.loadError ?? "현재는 관심 제출이 열려 있지 않습니다.");
+    }
+
+    await submitBrowseInterests({
+      userId,
+      targetUserIds,
+      replaceExisting: true,
+      allowedTargetIds: pageData.candidates.map((candidate) => BigInt(candidate.id)),
+    });
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "관심 저장 중 오류가 발생했습니다.",
       success: null,
+      submittedAt: null,
     };
   }
 
@@ -191,21 +204,24 @@ export async function submitReadOnlyBrowseInterestsWithStateAction(
   return {
     error: null,
     success: "관심 선택이 저장되었습니다.",
+    submittedAt: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   };
 }
 
 export async function clearReadOnlyBrowseAccessAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: getReadOnlyBrowseCookieName(userId),
-    value: "",
-    expires: new Date(0),
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  if (cookieStore.get(getReadOnlyBrowseCookieName(userId))) {
+    cookieStore.set({
+      name: getReadOnlyBrowseCookieName(userId),
+      value: "",
+      expires: new Date(0),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
 
   redirect(getReadOnlyBrowseAccessPath(userId));
 }
