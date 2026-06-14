@@ -7,7 +7,7 @@
 아래 프롬프트를 작업 시작점으로 사용한다.
 
 ```md
-You are working on Blackbean Match, a round-based, open-selection, operator-controlled private matching platform.
+You are working on Blackbean Match, an invite-driven, round-based, operator-controlled private matching platform.
 
 Before changing code, read:
 1. README.md
@@ -26,10 +26,14 @@ Non-negotiable rules:
 - Only READY + FULL_OPEN users can submit round selections.
 - A participant can select at most 2 candidates in one round.
 - INVITOR users only drive onboarding via invite links and do not control matching or communication.
+- InviteCode, offer-access token TTL, revocation, reward-grant, and consent changes are high-risk and must preserve idempotency.
+- New members enter through `/invite/{inviteCode}` and manage their profile, invite status, and rewards in `/me`.
+- Offer access is token-gated through `/offer/pool/{userId}?token={token}` and the token lifecycle must be explicit.
 - Default every development request to a new short-lived branch and a new PR.
 - Do not append new work to an already-open PR unless the user explicitly asks to reuse that PR.
 - Keep all work scoped to short-lived branches and PRs into main.
 - Validate with lint, typecheck, build, `npm run start`, and schema checks when relevant.
+- Prefer small UX changes that improve onboarding conversion, invite sharing, profile completion, and offer discovery without weakening privacy.
 ```
 
 ## RPI Skill
@@ -56,13 +60,21 @@ Use for product logic:
 - Open levels: `PRIVATE`, `SEMI_OPEN`, `FULL_OPEN`
 - Round states: `DRAFT`, `OPEN`, `CLOSED`, `MATCHING`, `COMPLETED`
 - Intro active states include `OFFERED`, `A_INTERESTED`, `B_OFFERED`, `WAITING_RESPONSE`, `MATCHED`, `CONNECTED`, `MEETING_DONE`, `RESULT_PENDING`
+- Invite states: `active`, `expired`, `revoked`, `max_used`, `completed`
+- Offer access token states: `active`, `expired`, `revoked`, `used`, `reissued`
+- Invite lifecycle events should be tracked from `visited` through `signed_up`, `profile_completed`, `approved`, `active_pool_member`, and reward changes
+- `My Page` is the primary place for profile editing, photo management, invite sharing, and offer permission visibility
+- Treat profile exposure, reward gating, and token TTL as product policy, not ad hoc UI behavior
 
 ## URL Sharing Skill
 Use role-specific URLs:
 
 - Participant onboarding: `/onboarding`
 - Invitor-originated onboarding: `/invite/{inviteToken}` or `/onboarding?invitorId={invitorId}`
+- InviteCode onboarding: `/invite/{inviteCode}`
+- Member home: `/me`
 - Participant round selection: `/rounds/{roundId}/participants/{userId}`
+- Offer pool access: `/offer/pool/{userId}?token={token}`
 - Admin operations: `/users`, `/users/{userId}`, `/rounds`, `/matches`
 
 Never share admin URLs with participants or invitors.
