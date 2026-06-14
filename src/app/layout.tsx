@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { sharedOgImage, sharedOgImagePath } from "@/lib/shared-og-metadata";
 import "./globals.css";
-
-const sharedOgImagePath = "/og-image.png";
 
 async function getRequestMetadataBase() {
   const headerStore = await headers();
@@ -34,14 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Blackbean Match",
       title: "Blackbean Match Admin",
       description: "Intro platform operations dashboard",
-      images: [
-        {
-          url: sharedOgImagePath,
-          width: 1200,
-          height: 630,
-          alt: "Blackbean Match 공유 미리보기 이미지",
-        },
-      ],
+      images: [sharedOgImage],
     },
     twitter: {
       card: "summary_large_image",
