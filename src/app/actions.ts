@@ -13,6 +13,7 @@ import {
   deleteIntroCase,
   deleteMember,
   deleteUserPhoto,
+  moveUserPhotoOrder,
   setMainUserPhoto,
   updateUserPhoto,
   uploadUserPhotoFile,
@@ -26,6 +27,7 @@ const statusValues = new Set(Object.values(UserStatus));
 const roleValues = new Set(Object.values(UserRole));
 const introStatusValues = new Set(Object.values(IntroCaseStatus));
 const openLevelValues = new Set<OpenLevel>(["PRIVATE", "SEMI_OPEN", "FULL_OPEN"]);
+const photoOrderDirectionValues = new Set<"up" | "down">(["up", "down"]);
 
 export type IntroCaseActionState = {
   error: string | null;
@@ -159,6 +161,7 @@ export async function addUserPhotoAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   await addUserPhoto(userId, await parsePhotoForm(userId, formData));
   revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/offer/pool/${userId.toString()}`);
   revalidatePath("/users");
 }
 
@@ -168,6 +171,7 @@ export async function updateUserPhotoAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   await updateUserPhoto(photoId, await parsePhotoForm(userId, formData));
   revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/offer/pool/${userId.toString()}`);
   revalidatePath("/users");
 }
 
@@ -177,6 +181,18 @@ export async function setMainUserPhotoAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   await setMainUserPhoto(photoId);
   revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/offer/pool/${userId.toString()}`);
+  revalidatePath("/users");
+}
+
+export async function moveUserPhotoOrderAction(formData: FormData) {
+  await requireAdminOpsSession();
+  const photoId = parseNamedId(formData, "photoId");
+  const userId = parseNamedId(formData, "userId");
+  const direction = readEnum(formData, "direction", photoOrderDirectionValues, "up");
+  await moveUserPhotoOrder(photoId, direction);
+  revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/offer/pool/${userId.toString()}`);
   revalidatePath("/users");
 }
 
@@ -186,6 +202,7 @@ export async function deleteUserPhotoAction(formData: FormData) {
   const userId = parseNamedId(formData, "userId");
   await deleteUserPhoto(photoId);
   revalidatePath(`/users/${userId.toString()}`);
+  revalidatePath(`/offer/pool/${userId.toString()}`);
   revalidatePath("/users");
 }
 
@@ -244,7 +261,7 @@ async function parsePhotoForm(userId: bigint, formData: FormData) {
     filePath: uploadedPhoto?.filePath,
     mimeType: uploadedPhoto?.mimeType,
     fileSizeBytes: uploadedPhoto?.fileSizeBytes,
-    sortOrder: readNumber(formData, "sortOrder") ?? 0,
+    sortOrder: Math.max((readNumber(formData, "sortOrder") ?? 1) - 1, 0),
     isMain: formData.get("isMain") === "on",
   };
 }

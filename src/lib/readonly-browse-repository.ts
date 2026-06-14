@@ -6,7 +6,7 @@ import {
   type ParticipantInterestSelection,
   activeIntroStatuses,
 } from "@/lib/domain";
-import { getMemberDashboardData } from "@/lib/member-repository";
+import { getMemberDashboardData, sortUserPhotosForDisplay } from "@/lib/member-repository";
 import { hasDatabaseUrl, prisma } from "@/lib/prisma";
 import {
   getAppBaseUrl,
@@ -509,7 +509,7 @@ async function getPhotosByUserIds(userIds: bigint[]) {
             isMain: true,
             uploadedAt: true,
           },
-          orderBy: [{ userId: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+          orderBy: [{ userId: "asc" }, { isMain: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
         })
       ).map((photo) => ({
         id: Number(photo.id),
@@ -540,6 +540,10 @@ async function getPhotosByUserIds(userIds: bigint[]) {
       }),
     );
     photosByUserId.set(photoRow.userId, bucket);
+  }
+
+  for (const [userId, photos] of photosByUserId.entries()) {
+    photosByUserId.set(userId, sortUserPhotosForDisplay(photos));
   }
 
   return photosByUserId;
