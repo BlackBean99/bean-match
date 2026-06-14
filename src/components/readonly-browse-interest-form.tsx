@@ -115,8 +115,6 @@ export function ReadOnlyBrowseInterestForm({
                   candidate.companyName ? candidate.companyName : null,
                   candidate.heightCm > 0 ? `${candidate.heightCm}cm` : null,
                 ].filter((value): value is string => Boolean(value));
-                const idealTypeText = candidate.idealTypeDescription?.trim();
-
                 return (
                   <article
                     key={candidate.id}
@@ -190,11 +188,6 @@ export function ReadOnlyBrowseInterestForm({
                             {tag}
                           </span>
                         ))}
-                        {idealTypeText ? (
-                          <span className="inline-flex items-center rounded-full bg-[#fff1e6] px-3 py-1 text-xs font-medium text-[#b86a2d]">
-                            이상형 {idealTypeText}
-                          </span>
-                        ) : null}
                       </div>
 
                       {candidate.selfIntro ? (
