@@ -198,19 +198,21 @@ export function ReadOnlyBrowseInterestForm({
                       </div>
 
                       {candidate.selfIntro ? (
-                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-700">{candidate.selfIntro}</p>
+                        <p className="mt-4 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+                          {candidate.selfIntro}
+                        </p>
                       ) : (
                         <p className="mt-4 text-sm text-zinc-400">자기소개가 아직 준비되지 않았습니다.</p>
                       )}
 
                       <div className="mt-5 flex flex-col gap-3 border-t border-[#f0e7df] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs leading-5 text-zinc-500">
-                          사진은 좌우로 넘겨보고, 전체 프로필로 들어가면 더 많은 사진과 정보를 확인할 수 있습니다.
+                        <p className="max-w-[20ch] text-[12px] leading-5 text-zinc-500 [overflow-wrap:normal] [white-space:normal] [word-break:keep-all]">
+                          사진을 넘겨보고 프로필을 확인해보세요
                         </p>
                         <div className="flex items-center gap-2">
                           <label
                             htmlFor={candidateId}
-                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 hover:border-[#f3d8c1] hover:text-[#b86a2d]"
+                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-[#f3d8c1] hover:text-[#b86a2d]"
                           >
                             선택
                           </label>
