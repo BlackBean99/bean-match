@@ -199,9 +199,7 @@ export function ParticipantPhotoGallery({
     );
   }
 
-  const helperCopy = hasMultiplePhotos
-    ? "좌우로 넘기고 탭하면 크게 볼 수 있어요"
-    : "사진을 탭하면 크게 볼 수 있어요";
+  const helperCopy = hasMultiplePhotos ? "좌우로 넘겨 사진을 확인해보세요" : "사진을 확인해보세요";
 
   return (
     <>
@@ -309,7 +307,7 @@ export function ParticipantPhotoGallery({
               onClick={openViewer}
               className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-[#f1d1bd] bg-[#fff8f2] px-3 text-xs font-semibold text-[#b86a2d] transition hover:border-[#e9b88e] hover:bg-[#fff3e8]"
             >
-              프로필 자세히 보기
+              사진 크게 보기
             </button>
           </div>
         </div>
