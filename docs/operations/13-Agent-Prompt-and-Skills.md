@@ -26,6 +26,8 @@ Non-negotiable rules:
 - Only READY + FULL_OPEN users can submit round selections.
 - A participant can select at most 2 candidates in one round.
 - INVITOR users only drive onboarding via invite links and do not control matching or communication.
+- Default every development request to a new short-lived branch and a new PR.
+- Do not append new work to an already-open PR unless the user explicitly asks to reuse that PR.
 - Keep all work scoped to short-lived branches and PRs into main.
 - Validate with lint, typecheck, build, `npm run start`, and schema checks when relevant.
 ```
@@ -41,7 +43,7 @@ Use the RPI workflow for every non-trivial change.
 ## GitHub Skill
 Use for GitHub work:
 
-- Create short-lived branches from `main`.
+- Create a new short-lived branch from `main` for each development request.
 - Push to `origin/<branch>`.
 - Open PRs targeting `main`.
 - Use Squash Merge by default.
