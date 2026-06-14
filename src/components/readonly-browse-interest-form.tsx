@@ -191,7 +191,7 @@ export function ReadOnlyBrowseInterestForm({
                       </div>
 
                       {candidate.selfIntro ? (
-                        <p className="mt-4 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-zinc-700">
+                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-700 [overflow-wrap:normal] [word-break:keep-all]">
                           {candidate.selfIntro}
                         </p>
                       ) : (
@@ -199,9 +199,6 @@ export function ReadOnlyBrowseInterestForm({
                       )}
 
                       <div className="mt-5 flex flex-col gap-3 border-t border-[#f0e7df] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="max-w-[20ch] text-[12px] leading-5 text-zinc-500 [overflow-wrap:normal] [white-space:normal] [word-break:keep-all]">
-                          사진을 넘겨보고 프로필을 확인해보세요
-                        </p>
                         <div className="flex items-center gap-2">
                           <label
                             htmlFor={candidateId}
