@@ -294,7 +294,14 @@ export async function getReadOnlyBrowsePageData(
     };
   }
 
-  const memberData = await getMemberDashboardData();
+  const memberData = await getMemberDashboardData(
+    undefined,
+    {
+      includeIntroCases: true,
+      includeRoles: false,
+      includeMainPhotos: false,
+    },
+  );
   const actor = memberData.allUsers.find((user) => user.id === Number(userId)) ?? null;
 
   if (!memberData.databaseConnected) {
