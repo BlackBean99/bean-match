@@ -109,11 +109,18 @@ export function ReadOnlyBrowseInterestForm({
               {browseCandidates.map((candidate) => {
                 const checked = selectedIdSet.has(candidate.id);
                 const disableCheckbox = !canInteract || (!checked && maxReached);
+                const candidateId = `browse-candidate-${candidate.id}`;
+                const tagItems = [
+                  candidate.jobTitle && candidate.jobTitle !== "직업 미입력" ? candidate.jobTitle : null,
+                  candidate.companyName ? candidate.companyName : null,
+                  candidate.heightCm > 0 ? `${candidate.heightCm}cm` : null,
+                ].filter((value): value is string => Boolean(value));
+                const idealTypeText = candidate.idealTypeDescription?.trim();
 
                 return (
-                  <label
+                  <article
                     key={candidate.id}
-                    className={`grid gap-4 rounded-[28px] border p-4 shadow-[0_20px_60px_rgba(15,23,42,0.06)] transition sm:grid-cols-[148px_minmax(0,1fr)] sm:p-5 ${
+                    className={`grid gap-4 rounded-[28px] border p-4 shadow-[0_20px_60px_rgba(15,23,42,0.06)] transition sm:grid-cols-[170px_minmax(0,1fr)] sm:p-5 ${
                       checked
                         ? "border-[#f1b07c] bg-[#fffaf5]"
                         : "border-[#ece7e4] bg-white hover:border-[#f3d8c1]"
@@ -125,6 +132,7 @@ export function ReadOnlyBrowseInterestForm({
                           name={candidate.name}
                           photos={candidate.photos}
                           fallbackUrl={candidate.mainPhotoUrl}
+                          variant="compact"
                         />
                       </div>
                     </div>
@@ -151,6 +159,7 @@ export function ReadOnlyBrowseInterestForm({
                             </span>
                           ) : null}
                           <input
+                            id={candidateId}
                             type="checkbox"
                             name="targetUserId"
                             value={candidate.id}
@@ -166,7 +175,26 @@ export function ReadOnlyBrowseInterestForm({
                             }}
                             className="mt-1 h-5 w-5 shrink-0 accent-[#d97a32]"
                           />
+                          <label htmlFor={candidateId} className="sr-only">
+                            {candidate.name} 선택
+                          </label>
                         </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {tagItems.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center rounded-full bg-[#f8f3ed] px-3 py-1 text-xs font-medium text-[#8b5a35]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {idealTypeText ? (
+                          <span className="inline-flex items-center rounded-full bg-[#fff1e6] px-3 py-1 text-xs font-medium text-[#b86a2d]">
+                            이상형 {idealTypeText}
+                          </span>
+                        ) : null}
                       </div>
 
                       {candidate.selfIntro ? (
@@ -174,8 +202,22 @@ export function ReadOnlyBrowseInterestForm({
                       ) : (
                         <p className="mt-4 text-sm text-zinc-400">자기소개가 아직 준비되지 않았습니다.</p>
                       )}
+
+                      <div className="mt-5 flex flex-col gap-3 border-t border-[#f0e7df] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs leading-5 text-zinc-500">
+                          사진은 좌우로 넘겨보고, 전체 프로필로 들어가면 더 많은 사진과 정보를 확인할 수 있습니다.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor={candidateId}
+                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 hover:border-[#f3d8c1] hover:text-[#b86a2d]"
+                          >
+                            선택
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                  </label>
+                  </article>
                 );
               })}
             </div>
