@@ -91,7 +91,8 @@
 - 공개 공유 URL은 `/onboarding/access/{token}`, `/offer/pool/{userId}?token={token}` 이다.
 - `/onboarding` 과 `/invite/{invitorId}` 는 직접 입장용이 아니라 토큰 링크 안내용 화면이다.
 - `/invite/{invitorId}` 는 모집인 출처를 확인하는 안내 화면이다.
-- 카카오톡과 외부 링크 미리보기는 `/og-image.png` 고정 이미지를 사용한다.
+- 카카오톡과 외부 링크 미리보기는 모든 서브 URL에서 동일한 `/og-image.png` 고정 이미지를 사용한다.
+- 공유 미리보기의 절대 URL은 요청 호스트 기준으로 계산한다.
 - 관리자 URL은 등록된 운영 로그인 계정이 있는 관리자에게만 공유한다.
 - `/users` 목록의 호감표시 링크 복사 버튼은 토큰이 포함된 직접 진입 링크를 복사한다.
 - 연락처는 `CONNECTED` 전까지 어떤 URL에서도 노출하지 않는다.
