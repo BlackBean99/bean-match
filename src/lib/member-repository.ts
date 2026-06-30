@@ -200,13 +200,11 @@ async function getMemberDashboardDataFromPrisma(
           ...(options.includeRoles ? { roles: true } : {}),
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        take: 100,
       }),
       options.includeIntroCases
         ? prisma.introCase.findMany({
             include: introCaseInclude,
             orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-            take: 100,
           })
         : Promise.resolve([]),
     ]);
@@ -262,8 +260,9 @@ async function getMemberDashboardDataFromSupabaseRest(
   options: Required<MemberDashboardQueryOptions>,
 ): Promise<MemberDashboardData> {
   try {
-    const users = await supabaseRest<SupabaseUserRow[]>(
-      "/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
+    const users = await supabaseRestAll<SupabaseUserRow>(
+      (offset, limit) =>
+        `/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=${limit}&offset=${offset}`,
     );
     const userIds = users.map((user) => user.id);
     const [mainPhotos, roles, introCases] = await Promise.all([
@@ -276,8 +275,9 @@ async function getMemberDashboardDataFromSupabaseRest(
         ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
         : Promise.resolve([]),
       options.includeIntroCases
-        ? supabaseRest<SupabaseIntroCaseRow[]>(
-            "/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=100",
+        ? supabaseRestAll<SupabaseIntroCaseRow>(
+            (offset, limit) =>
+              `/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=${limit}&offset=${offset}`,
           )
         : Promise.resolve([]),
     ]);
@@ -1224,6 +1224,16 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
 
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+async function supabaseRestAll<T>(buildPath: (offset: number, limit: number) => string, pageSize = 200): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await supabaseRest<T[]>(buildPath(offset, pageSize));
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
 }
 
 function toSupabaseUserPayload(input: MemberInput, includePhone: boolean) {
