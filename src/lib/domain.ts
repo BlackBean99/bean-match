@@ -194,6 +194,7 @@ export type DashboardExposureData = {
   queue: DashboardExposureQueueItem[];
   interests: DashboardInterest[];
   introCandidates: DashboardIntroCandidate[];
+  introCases: DashboardIntroCase[];
   highDemandUsers: DashboardExposureSignalUser[];
   noInterestUsers: DashboardExposureSignalUser[];
   lowExposureUsers: DashboardExposureSignalUser[];

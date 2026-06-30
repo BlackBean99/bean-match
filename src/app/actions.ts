@@ -99,6 +99,7 @@ export async function createIntroCaseAction(formData: FormData) {
   await requireAdminOpsSession();
   await createIntroCase(parseIntroCaseForm(formData));
   revalidatePath("/");
+  revalidatePath("/matches");
 }
 
 export async function createIntroCaseWithStateAction(
@@ -147,6 +148,7 @@ export async function updateIntroCaseAction(formData: FormData) {
     memo: readString(formData, "memo"),
   });
   revalidatePath("/");
+  revalidatePath("/matches");
 }
 
 export async function deleteIntroCaseAction(formData: FormData) {
@@ -154,6 +156,9 @@ export async function deleteIntroCaseAction(formData: FormData) {
   const id = parseId(formData);
   await deleteIntroCase(id);
   revalidatePath("/");
+  revalidatePath("/matches");
+  revalidatePath("/users");
+  revalidatePath("/rounds");
 }
 
 export async function addUserPhotoAction(formData: FormData) {

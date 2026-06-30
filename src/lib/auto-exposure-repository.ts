@@ -122,6 +122,7 @@ export async function getExposureDashboardData(): Promise<DashboardExposureData>
   if (!hasAutomationDataConfig()) {
     return {
       users: memberData.allUsers,
+      introCases: memberData.introCases,
       queue: [],
       interests: [],
       introCandidates: [],
@@ -139,6 +140,7 @@ export async function getExposureDashboardData(): Promise<DashboardExposureData>
   } catch (error) {
     return {
       users: memberData.allUsers,
+      introCases: memberData.introCases,
       queue: [],
       interests: [],
       introCandidates: [],
@@ -243,7 +245,7 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
   const data = await getParticipantExposureData(input.userId);
   if (!data.actor) throw new Error("사용자 정보를 찾을 수 없습니다.");
   if (!shouldReplaceExisting && !data.canBrowse) throw new Error("지금은 신규 탐색 관심 표시를 제출할 수 없습니다.");
-  if (targetIds.length === 0) throw new Error("관심 표시할 대상을 1명 이상 선택해 주세요.");
+  if (targetIds.length === 0 && !shouldReplaceExisting) throw new Error("관심 표시할 대상을 1명 이상 선택해 주세요.");
   if (targetIds.length > MAX_NEW_USER_MARKS) {
     throw new Error(`신규 가입자는 최대 ${MAX_NEW_USER_MARKS}명까지만 관심 표시할 수 있습니다.`);
   }
@@ -277,10 +279,17 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
             fromUserId: input.userId,
             source: "NEW_MEMBER_BROWSE",
             status: "ACTIVE",
-            toUserId: { notIn: targetIds.map((targetId) => BigInt(targetId)) },
+            ...(targetIds.length > 0 ? { toUserId: { notIn: targetIds.map((targetId) => BigInt(targetId)) } } : {}),
           },
           data: { status: "WITHDRAWN" },
         });
+      }
+
+      if (shouldReplaceExisting && targetIds.length === 0) {
+        for (const targetId of existingBrowseTargetIds) {
+          await syncMutualIntroCandidateWithPrisma(tx, input.userId, BigInt(targetId));
+        }
+        return;
       }
 
       for (const targetId of targetIds) {
@@ -328,13 +337,21 @@ export async function submitBrowseInterests(input: BrowseInterestInput) {
     : new Set<number>();
 
   if (shouldReplaceExisting && existingBrowseTargetIds.size > 0) {
-    await supabaseRest(
-      `/interests?from_user_id=eq.${userId}&source=eq.NEW_MEMBER_BROWSE&status=eq.ACTIVE&to_user_id=not.in.(${targetIds.join(",")})`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ status: "WITHDRAWN" }),
-      },
-    );
+    const updatePath =
+      targetIds.length > 0
+        ? `/interests?from_user_id=eq.${userId}&source=eq.NEW_MEMBER_BROWSE&status=eq.ACTIVE&to_user_id=not.in.(${targetIds.join(",")})`
+        : `/interests?from_user_id=eq.${userId}&source=eq.NEW_MEMBER_BROWSE&status=eq.ACTIVE`;
+    await supabaseRest(updatePath, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "WITHDRAWN" }),
+    });
+  }
+
+  if (shouldReplaceExisting && targetIds.length === 0) {
+    for (const targetId of existingBrowseTargetIds) {
+      await syncMutualIntroCandidateWithSupabase(userId, targetId);
+    }
+    return;
   }
 
   for (const targetId of targetIds) {
@@ -660,6 +677,7 @@ function buildExposureDashboard(state: AutomationState): DashboardExposureData {
 
   return {
     users: state.users,
+    introCases: state.introCases,
     queue,
     interests: state.interests.map((interest) => toDashboardInterest(interest, state.users, activeInterestKeySet)),
     introCandidates: state.introCandidates.map((candidate) => toDashboardIntroCandidate(candidate, state.users)),

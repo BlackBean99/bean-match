@@ -1,9 +1,10 @@
 import { clearReadOnlyBrowseAccessAction } from "@/app/readonly-actions";
 import { FormPendingFieldset } from "@/components/form-pending-fieldset";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { ParticipantPhotoGallery } from "@/components/participant-photo-gallery";
 import { ReadOnlyBrowseGate } from "@/components/readonly-browse-gate";
 import { ReadOnlyBrowseInterestForm } from "@/components/readonly-browse-interest-form";
-import { userStatusLabels, type DashboardUser } from "@/lib/domain";
+import { interestSourceLabels, interestStatusLabels, userStatusLabels, type DashboardUser } from "@/lib/domain";
 import type { ReadOnlyBrowsePageData } from "@/lib/readonly-browse-repository";
 import { formatBirthYearLabel } from "@/lib/birth-year-label";
 
@@ -57,11 +58,12 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
             </form>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Metric label="기준 사용자" value={actor.name} />
             <Metric label="내 정보" value={`${actor.gender} · ${formatAge(actor)}`} />
             <Metric label="현재 상태" value={userStatusLabels[actor.status]} />
             <Metric label="후보 수" value={`${data.candidates.length}명`} />
+            <Metric label="받은 관심" value={`${data.receivedInterests.length}건`} />
           </div>
 
           {actor.status !== "READY" ? (
@@ -77,6 +79,66 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
         </header>
 
         <section className="grid gap-4">
+          <section className="rounded-[28px] border border-[#ece7e4] bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-[1.35rem] font-semibold tracking-[-0.03em] text-zinc-950">내가 받은 관심</h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-600">
+                  누가 나를 확인했는지 보고, 다시 선택을 수정할 때 참고할 수 있습니다.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-[#fff1e6] px-3 py-1.5 text-xs font-semibold text-[#c96a2b]">
+                {data.receivedInterests.length}건 수신
+              </span>
+            </div>
+
+            {data.receivedInterests.length === 0 ? (
+              <p className="mt-4 rounded-[24px] border border-dashed border-[#eddccc] bg-[#fffaf5] px-4 py-5 text-sm text-zinc-500">
+                아직 받은 관심이 없습니다.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {data.receivedInterests.map((interest) => (
+                  <article
+                    key={interest.id}
+                    className="rounded-[24px] border border-[#f0e5da] bg-[#fffaf5] p-4 shadow-[0_14px_32px_rgba(15,23,42,0.04)]"
+                  >
+                    <div className="grid gap-4 sm:grid-cols-[118px_minmax(0,1fr)]">
+                      <div className="rounded-[18px] border border-[#ead9c8] bg-white p-2">
+                        <ParticipantPhotoGallery
+                          name={interest.fromUserName}
+                          photos={interest.photos}
+                          fallbackUrl={interest.photos[0]?.url}
+                          variant="compact"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-base font-bold text-zinc-950">{interest.fromUserName}</p>
+                            <p className="mt-1 text-sm text-zinc-600">{interestSourceLabels[interest.source]}</p>
+                          </div>
+                          <span
+                            className={
+                              interest.isMutual
+                                ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                                : "rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#b86a2d]"
+                            }
+                          >
+                            {interest.isMutual ? "서로 관심" : "받음"}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-zinc-700">
+                          {interestStatusLabels[interest.status]} · {interest.createdAt}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <ReadOnlyBrowseInterestForm
             browseCandidates={data.candidates}
             browseLimit={data.browseLimit}
