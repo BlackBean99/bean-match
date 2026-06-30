@@ -115,8 +115,6 @@ export function ReadOnlyBrowseInterestForm({
                   candidate.companyName ? candidate.companyName : null,
                   candidate.heightCm > 0 ? `${candidate.heightCm}cm` : null,
                 ].filter((value): value is string => Boolean(value));
-                const idealTypeText = candidate.idealTypeDescription?.trim();
-
                 return (
                   <article
                     key={candidate.id}
@@ -195,27 +193,21 @@ export function ReadOnlyBrowseInterestForm({
                             {tag}
                           </span>
                         ))}
-                        {idealTypeText ? (
-                          <span className="inline-flex items-center rounded-full bg-[#fff1e6] px-3 py-1 text-xs font-medium text-[#b86a2d]">
-                            이상형 {idealTypeText}
-                          </span>
-                        ) : null}
                       </div>
 
                       {candidate.selfIntro ? (
-                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-700">{candidate.selfIntro}</p>
+                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-700 [overflow-wrap:normal] [word-break:keep-all]">
+                          {candidate.selfIntro}
+                        </p>
                       ) : (
                         <p className="mt-4 text-sm text-zinc-400">자기소개가 아직 준비되지 않았습니다.</p>
                       )}
 
                       <div className="mt-5 flex flex-col gap-3 border-t border-[#f0e7df] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs leading-5 text-zinc-500">
-                          사진은 좌우로 넘겨보고, 전체 프로필로 들어가면 더 많은 사진과 정보를 확인할 수 있습니다.
-                        </p>
                         <div className="flex items-center gap-2">
                           <label
                             htmlFor={candidateId}
-                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 hover:border-[#f3d8c1] hover:text-[#b86a2d]"
+                            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 transition hover:border-[#f3d8c1] hover:text-[#b86a2d]"
                           >
                             선택
                           </label>
@@ -229,13 +221,13 @@ export function ReadOnlyBrowseInterestForm({
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 text-zinc-500">
-              선택은 최대 {browseLimit}명까지 저장됩니다. 제출 후에도 다시 수정하고 재제출할 수 있습니다.
+          <p className="text-xs leading-5 text-zinc-500">
+              선택은 최대 {browseLimit}명까지 저장됩니다. 모두 해제한 뒤 저장하면 기존 선택을 비울 수 있고, 제출 후에도 다시 수정하고 재제출할 수 있습니다.
             </p>
             <FormSubmitButton
-              label="선택 제출"
+              label="선택 저장"
               pendingLabel="저장 중..."
-              disabled={!canInteract || browseCandidates.length === 0 || selectedIds.length === 0}
+              disabled={!canInteract || (browseCandidates.length === 0 && selectedIds.length === 0)}
               className="inline-flex h-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#da7a37,#ee9b55)] px-5 text-sm font-semibold text-white shadow-[0_18px_35px_rgba(217,122,50,0.24)] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
             />
           </div>

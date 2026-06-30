@@ -88,7 +88,7 @@ export function PastePhotoForm({ userId, defaultSortOrder }: PastePhotoFormProps
           <Field label="파일명">
             <input ref={nameInputRef} name="originalFileName" className={inputClassName} />
           </Field>
-          <Field label="순서">
+          <Field label="순서(1부터)">
             <input name="sortOrder" type="number" defaultValue={defaultSortOrder} className={inputClassName} />
           </Field>
         </div>

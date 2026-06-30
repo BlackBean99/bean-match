@@ -200,13 +200,11 @@ async function getMemberDashboardDataFromPrisma(
           ...(options.includeRoles ? { roles: true } : {}),
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        take: 100,
       }),
       options.includeIntroCases
         ? prisma.introCase.findMany({
             include: introCaseInclude,
             orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-            take: 100,
           })
         : Promise.resolve([]),
     ]);
@@ -262,8 +260,9 @@ async function getMemberDashboardDataFromSupabaseRest(
   options: Required<MemberDashboardQueryOptions>,
 ): Promise<MemberDashboardData> {
   try {
-    const users = await supabaseRest<SupabaseUserRow[]>(
-      "/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=100",
+    const users = await supabaseRestAll<SupabaseUserRow>(
+      (offset, limit) =>
+        `/users?select=id,name,gender,status,open_level,main_photo_id,exposure_consent,new_member_notifications_enabled,exposure_paused,birth_date,age_text,height_cm,job_title,company_name,self_intro,ideal_type_description,updated_at&order=updated_at.desc,id.desc&limit=${limit}&offset=${offset}`,
     );
     const userIds = users.map((user) => user.id);
     const [mainPhotos, roles, introCases] = await Promise.all([
@@ -276,8 +275,9 @@ async function getMemberDashboardDataFromSupabaseRest(
         ? supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=in.(${userIds.join(",")})`)
         : Promise.resolve([]),
       options.includeIntroCases
-        ? supabaseRest<SupabaseIntroCaseRow[]>(
-            "/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=100",
+        ? supabaseRestAll<SupabaseIntroCaseRow>(
+            (offset, limit) =>
+              `/intro_cases?select=id,status,invitor_user_id,updated_at,memo&order=updated_at.desc,id.desc&limit=${limit}&offset=${offset}`,
           )
         : Promise.resolve([]),
     ]);
@@ -432,16 +432,14 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
         roles: true,
         photos: {
           where: { deletedAt: null },
-          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
         },
       },
     });
     if (!user) return null;
     const userAge = ageFromProfile(user.birthDate, user.ageText);
-    const mainPhoto =
-      user.photos.find((photo) => photo.id === user.mainPhotoId) ??
-      user.photos.find((photo) => photo.isMain) ??
-      user.photos[0];
+    const sortedPhotos = sortUserPhotosForDisplay(user.photos, user.mainPhotoId);
+    const mainPhoto = sortedPhotos[0] ?? null;
 
     return {
       id: Number(user.id),
@@ -466,7 +464,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
       hasMainPhoto: Boolean(mainPhoto),
       mainPhotoUrl: photoThumbnailUrl(mainPhoto?.fileUrl, mainPhoto?.filePath, mainPhoto?.id),
       lastChangedAt: formatDateTime(user.updatedAt),
-      photos: user.photos.map((photo) => ({
+      photos: sortedPhotos.map((photo) => ({
         id: Number(photo.id),
         url: photoDeliveryOrProxyUrl(photo.fileUrl, photo.filePath, photo.id) ?? "",
         sourceUrl: photoSourceUrl(photo.filePath, photo.fileUrl, photo.id) ?? "",
@@ -484,10 +482,19 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
   if (!user) return null;
   const roles = await supabaseRest<SupabaseRoleRow[]>(`/user_roles?select=user_id,role&user_id=eq.${id.toString()}`);
   const photos = await supabaseRest<SupabasePhotoRow[]>(
-    `/user_photos?select=*&user_id=eq.${id.toString()}&deleted_at=is.null&order=sort_order.asc,id.asc`,
+    `/user_photos?select=*&user_id=eq.${id.toString()}&deleted_at=is.null&order=is_main.desc,sort_order.asc,id.asc`,
   );
   const userAge = ageFromProfile(user.birth_date ? new Date(`${user.birth_date}T00:00:00.000Z`) : null, user.age_text);
-  const mainPhoto = findMainSupabasePhoto(photos, user.main_photo_id);
+  const sortedPhotos = sortUserPhotosForDisplay(
+    photos.map((photo) => ({
+      id: photo.id,
+      isMain: photo.is_main,
+      sortOrder: photo.sort_order,
+      photo,
+    })),
+    user.main_photo_id,
+  );
+  const mainPhoto = sortedPhotos[0]?.photo ?? findMainSupabasePhoto(photos, user.main_photo_id);
 
   return {
     id: user.id,
@@ -512,7 +519,7 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     hasMainPhoto: Boolean(mainPhoto),
     mainPhotoUrl: photoThumbnailUrl(mainPhoto?.file_url, mainPhoto?.file_path, mainPhoto?.id),
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
-    photos: photos.map(toDashboardPhoto),
+    photos: sortedPhotos.map(({ photo }) => toDashboardPhoto(photo)),
   };
 }
 
@@ -606,7 +613,6 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
     const numericUserId = Number(userId);
     const shouldBeMain = input.isMain || !(await hasSupabaseUserPhotos(numericUserId));
     const photoInput = { ...input, isMain: shouldBeMain };
-    if (shouldBeMain) await clearSupabaseMainPhotos(numericUserId);
     const [photo] = await supabaseRest<SupabasePhotoRow[]>("/user_photos?select=*", {
       method: "POST",
       headers: { Prefer: "return=representation" },
@@ -616,7 +622,7 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
       await supabaseRest(`/user_photos?id=eq.${photo.id}`, { method: "DELETE" });
       throw new Error("Photo upload failed.");
     }
-    if (shouldBeMain) await updateSupabaseMainPhoto(numericUserId, photo.id);
+    await reconcileSupabaseUserPhotoOrdering(numericUserId, shouldBeMain ? photo.id : null);
     await promoteUserToFullOpenOnPhotoSupabase(numericUserId);
     return photo;
   }
@@ -626,15 +632,10 @@ export async function addUserPhoto(userId: bigint, input: PhotoInput) {
   return prisma.$transaction(async (tx) => {
     const shouldBeMain = input.isMain || (await tx.userPhoto.count({ where: { userId, deletedAt: null } })) === 0;
     const photoInput = { ...input, isMain: shouldBeMain };
-    if (shouldBeMain) {
-      await tx.userPhoto.updateMany({ where: { userId }, data: { isMain: false } });
-    }
     const photo = await tx.userPhoto.create({
       data: toPrismaPhotoPayload(userId, photoInput),
     });
-    if (shouldBeMain) {
-      await tx.user.update({ where: { id: userId }, data: { mainPhotoId: photo.id } });
-    }
+    await reconcilePrismaUserPhotoOrdering(tx, userId, shouldBeMain ? photo.id : null);
     await promoteUserToFullOpenOnPhotoPrisma(tx, userId);
     return photo;
   });
@@ -646,8 +647,8 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     const [existing] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`);
     if (!existing) throw new Error("Photo not found.");
-    if (input.isMain) await clearSupabaseMainPhotos(existing.user_id);
     const updateInput = { ...input, storedFileName: existing.stored_file_name };
+    const shouldBeMain = input.isMain || existing.is_main;
     const [photo] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
@@ -656,7 +657,7 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Photo upload failed.");
     }
-    if (input.isMain) await updateSupabaseMainPhoto(existing.user_id, photo.id);
+    await reconcileSupabaseUserPhotoOrdering(existing.user_id, shouldBeMain ? photo.id : null);
     return photo;
   }
 
@@ -664,10 +665,8 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.userPhoto.findUniqueOrThrow({ where: { id: photoId } });
-    if (input.isMain) {
-      await tx.userPhoto.updateMany({ where: { userId: existing.userId }, data: { isMain: false } });
-    }
     const updateInput = { ...input, storedFileName: existing.storedFileName };
+    const shouldBeMain = input.isMain || existing.isMain;
     const photo = await tx.userPhoto.update({
       where: { id: photoId },
       data: toPrismaPhotoPayload(existing.userId, updateInput),
@@ -675,9 +674,7 @@ export async function updateUserPhoto(photoId: bigint, input: PhotoInput) {
     if (!(await getPhotoRedirectUrl(photoId))) {
       throw new Error("Photo upload failed.");
     }
-    if (input.isMain) {
-      await tx.user.update({ where: { id: existing.userId }, data: { mainPhotoId: photo.id } });
-    }
+    await reconcilePrismaUserPhotoOrdering(tx, existing.userId, shouldBeMain ? photo.id : null);
     return photo;
   });
 }
@@ -686,12 +683,11 @@ export async function setMainUserPhoto(photoId: bigint) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     const [photo] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`);
     if (!photo) throw new Error("Photo not found.");
-    await clearSupabaseMainPhotos(photo.user_id);
     await supabaseRest(`/user_photos?id=eq.${photoId.toString()}`, {
       method: "PATCH",
       body: JSON.stringify({ is_main: true }),
     });
-    await updateSupabaseMainPhoto(photo.user_id, photo.id);
+    await reconcileSupabaseUserPhotoOrdering(photo.user_id, photo.id);
     return;
   }
 
@@ -699,9 +695,69 @@ export async function setMainUserPhoto(photoId: bigint) {
 
   return prisma.$transaction(async (tx) => {
     const photo = await tx.userPhoto.findUniqueOrThrow({ where: { id: photoId } });
-    await tx.userPhoto.updateMany({ where: { userId: photo.userId }, data: { isMain: false } });
     await tx.userPhoto.update({ where: { id: photoId }, data: { isMain: true } });
-    await tx.user.update({ where: { id: photo.userId }, data: { mainPhotoId: photo.id } });
+    await reconcilePrismaUserPhotoOrdering(tx, photo.userId, photo.id);
+  });
+}
+
+export async function moveUserPhotoOrder(photoId: bigint, direction: "up" | "down") {
+  if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
+    const [photo] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`);
+    if (!photo) throw new Error("Photo not found.");
+    if (photo.is_main) {
+      throw new Error("대표 사진은 순서 이동 대신 대표 지정으로 변경해 주세요.");
+    }
+
+    const photos = await supabaseRest<SupabasePhotoRow[]>(
+      `/user_photos?select=id,user_id,is_main,sort_order&user_id=eq.${photo.user_id}&deleted_at=is.null&order=is_main.desc,sort_order.asc,id.asc`,
+    );
+    const currentIndex = photos.findIndex((item) => item.id === photo.id);
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if ((direction === "up" && currentIndex <= 1) || (direction === "down" && currentIndex >= photos.length - 1)) {
+      return;
+    }
+
+    const current = photos[currentIndex];
+    const target = photos[targetIndex];
+    await supabaseRest(`/user_photos?id=eq.${current.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sort_order: target.sort_order }),
+    });
+    await supabaseRest(`/user_photos?id=eq.${target.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sort_order: current.sort_order }),
+    });
+    await reconcileSupabaseUserPhotoOrdering(photo.user_id);
+    return;
+  }
+
+  assertDatabaseUrl();
+
+  return prisma.$transaction(async (tx) => {
+    const photo = await tx.userPhoto.findUniqueOrThrow({
+      where: { id: photoId },
+      select: { id: true, userId: true, isMain: true },
+    });
+    if (photo.isMain) {
+      throw new Error("대표 사진은 순서 이동 대신 대표 지정으로 변경해 주세요.");
+    }
+
+    const photos = await tx.userPhoto.findMany({
+      where: { userId: photo.userId, deletedAt: null },
+      select: { id: true, isMain: true, sortOrder: true },
+      orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
+    });
+    const currentIndex = photos.findIndex((item) => item.id === photo.id);
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if ((direction === "up" && currentIndex <= 1) || (direction === "down" && currentIndex >= photos.length - 1)) {
+      return;
+    }
+
+    const current = photos[currentIndex];
+    const target = photos[targetIndex];
+    await tx.userPhoto.update({ where: { id: current.id }, data: { sortOrder: target.sortOrder } });
+    await tx.userPhoto.update({ where: { id: target.id }, data: { sortOrder: current.sortOrder } });
+    await reconcilePrismaUserPhotoOrdering(tx, photo.userId);
   });
 }
 
@@ -709,11 +765,9 @@ export async function deleteUserPhoto(photoId: bigint) {
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     const [photo] = await supabaseRest<SupabasePhotoRow[]>(`/user_photos?id=eq.${photoId.toString()}&select=*`);
     if (!photo) return;
-    if (photo.is_main) {
-      await updateSupabaseMainPhoto(photo.user_id, null);
-    }
     await deletePhotoObject(photo.file_path, photo.file_url, photo.stored_file_name);
     await supabaseRest(`/user_photos?id=eq.${photoId.toString()}`, { method: "DELETE" });
+    await reconcileSupabaseUserPhotoOrdering(photo.user_id);
     return;
   }
 
@@ -722,11 +776,9 @@ export async function deleteUserPhoto(photoId: bigint) {
   return prisma.$transaction(async (tx) => {
     const photo = await tx.userPhoto.findUnique({ where: { id: photoId } });
     if (!photo) return;
-    if (photo.isMain) {
-      await tx.user.update({ where: { id: photo.userId }, data: { mainPhotoId: null } });
-    }
     await deletePhotoObject(photo.filePath, photo.fileUrl, photo.storedFileName);
     await tx.userPhoto.delete({ where: { id: photoId } });
+    await reconcilePrismaUserPhotoOrdering(tx, photo.userId);
   });
 }
 
@@ -1174,6 +1226,16 @@ async function supabaseRest<T>(path: string, init: RequestInit = {}): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+async function supabaseRestAll<T>(buildPath: (offset: number, limit: number) => string, pageSize = 200): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await supabaseRest<T[]>(buildPath(offset, pageSize));
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
 function toSupabaseUserPayload(input: MemberInput, includePhone: boolean) {
   return {
     name: input.name,
@@ -1276,18 +1338,106 @@ export function toDashboardPhotoLike(photo: {
   };
 }
 
-async function clearSupabaseMainPhotos(userId: number) {
-  await supabaseRest(`/user_photos?user_id=eq.${userId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ is_main: false }),
+export function sortUserPhotosForDisplay<T extends {
+  id: bigint | number;
+  isMain: boolean;
+  sortOrder: number;
+}>(photos: T[], preferredMainPhotoId?: bigint | number | null) {
+  const ordered = [...photos].sort((left, right) => {
+    if (left.isMain !== right.isMain) return left.isMain ? -1 : 1;
+    if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+    return Number(left.id) - Number(right.id);
   });
+
+  if (preferredMainPhotoId == null) {
+    return ordered;
+  }
+
+  const preferredIndex = ordered.findIndex((photo) => photo.id === preferredMainPhotoId);
+  if (preferredIndex <= 0) {
+    return ordered;
+  }
+
+  const [preferredPhoto] = ordered.splice(preferredIndex, 1);
+  ordered.unshift(preferredPhoto);
+  return ordered;
 }
 
-async function updateSupabaseMainPhoto(userId: number, photoId: number | null) {
-  await supabaseRest(`/users?id=eq.${userId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ main_photo_id: photoId }),
+async function reconcilePrismaUserPhotoOrdering(
+  tx: Prisma.TransactionClient,
+  userId: bigint,
+  preferredMainPhotoId?: bigint | null,
+) {
+  const photos = await tx.userPhoto.findMany({
+    where: { userId, deletedAt: null },
+    select: { id: true, isMain: true, sortOrder: true },
+    orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
   });
+  await reconcilePhotoOrdering(
+    photos.map((photo) => ({
+      id: photo.id,
+      isMain: photo.isMain,
+      sortOrder: photo.sortOrder,
+    })),
+    preferredMainPhotoId,
+    async (photoId, data) => {
+      await tx.userPhoto.update({ where: { id: photoId }, data });
+    },
+    async (mainPhotoId) => {
+      await tx.user.update({ where: { id: userId }, data: { mainPhotoId } });
+    },
+  );
+}
+
+async function reconcileSupabaseUserPhotoOrdering(userId: number, preferredMainPhotoId?: number | null) {
+  const photos = await supabaseRest<SupabasePhotoRow[]>(
+    `/user_photos?select=id,user_id,is_main,sort_order&user_id=eq.${userId}&deleted_at=is.null&order=is_main.desc,sort_order.asc,id.asc`,
+  );
+  await reconcilePhotoOrdering(
+    photos.map((photo) => ({
+      id: photo.id,
+      isMain: photo.is_main,
+      sortOrder: photo.sort_order,
+    })),
+    preferredMainPhotoId,
+    async (photoId, data) => {
+      await supabaseRest(`/user_photos?id=eq.${photoId.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          is_main: data.isMain,
+          sort_order: data.sortOrder,
+        }),
+      });
+    },
+    async (mainPhotoId) => {
+      await supabaseRest(`/users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ main_photo_id: mainPhotoId }),
+      });
+    },
+  );
+}
+
+async function reconcilePhotoOrdering(
+  photos: Array<{ id: bigint | number; isMain: boolean; sortOrder: number }>,
+  preferredMainPhotoId: bigint | number | null | undefined,
+  updatePhoto: (photoId: bigint | number, data: { sortOrder: number; isMain: boolean }) => Promise<void>,
+  updateMainPhoto: (mainPhotoId: bigint | number | null) => Promise<void>,
+) {
+  if (photos.length === 0) {
+    await updateMainPhoto(null);
+    return;
+  }
+
+  const ordered = sortUserPhotosForDisplay(photos, preferredMainPhotoId);
+  const nextMainPhotoId = ordered[0]?.id ?? null;
+  for (const [index, photo] of ordered.entries()) {
+    await updatePhoto(photo.id, {
+      sortOrder: index,
+      isMain: index === 0,
+    });
+  }
+  await updateMainPhoto(nextMainPhotoId);
 }
 
 async function hasSupabaseUserPhotos(userId: number) {

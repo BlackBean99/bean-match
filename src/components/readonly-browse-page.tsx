@@ -58,11 +58,12 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
             </form>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Metric label="기준 사용자" value={actor.name} />
             <Metric label="내 정보" value={`${actor.gender} · ${formatAge(actor)}`} />
             <Metric label="현재 상태" value={userStatusLabels[actor.status]} />
             <Metric label="후보 수" value={`${data.candidates.length}명`} />
+            <Metric label="받은 관심" value={`${data.receivedInterests.length}건`} />
           </div>
 
           {actor.status !== "READY" ? (

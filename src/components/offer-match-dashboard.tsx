@@ -3,17 +3,25 @@ import {
   AdminSection,
   AdminStatCard,
   AdminTableSection,
+  adminInputClassName,
+  adminPrimaryButtonClassName,
+  adminSecondaryButtonClassName,
 } from "@/components/admin-ui";
 import type { ReactNode } from "react";
 import {
   introCandidateSourceLabels,
   introCandidateStatusLabels,
+  introStatusLabels,
   interestSourceLabels,
   interestStatusLabels,
+  openLevelLabels,
+  userStatusLabels,
   type DashboardExposureData,
   type DashboardIntroCandidate,
   type DashboardInterest,
+  type DashboardIntroCase,
 } from "@/lib/domain";
+import type { ReactNode } from "react";
 
 type OfferMatchDashboardProps = DashboardExposureData & {
   searchQuery?: string;
@@ -37,6 +45,8 @@ export function OfferMatchDashboard({
   users,
   interests,
   introCandidates,
+  introCases,
+  canManage = false,
   loadError,
   searchQuery = "",
 }: OfferMatchDashboardProps) {
@@ -58,6 +68,11 @@ export function OfferMatchDashboard({
   const pairRows = buildPairRows(filteredInterests, filteredCandidates);
   const activeInterests = filteredInterests.filter((interest) => interest.status === "ACTIVE");
   const activePairRows = pairRows.filter((row) => row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE");
+  const filteredPairRows = filterPairRows(pairRows, normalizedQuery);
+  const filteredCandidates = filterIntroCandidates(introCandidates, normalizedQuery);
+  const filteredInterests = filterInterests(interests, normalizedQuery);
+  const filteredIntroCases = filterIntroCases(introCases, normalizedQuery);
+  const filteredUsers = filterUsers(users, normalizedQuery, filteredPairRows, filteredIntroCases);
   const mutualPairRows = activePairRows.filter((row) => isMutualPair(row));
   const uniqueActors = new Set(activeInterests.map((interest) => interest.fromUserId)).size;
   const uniqueTargets = new Set(activeInterests.map((interest) => interest.toUserId)).size;
@@ -324,6 +339,116 @@ function OfferUserSummaryTable({
   );
 }
 
+function OfferIntroCaseTable({
+  introCases,
+  canManage,
+  query,
+}: {
+  introCases: DashboardIntroCase[];
+  canManage: boolean;
+  query: string;
+}) {
+  return (
+    <AdminTableSection>
+      <div className="border-b border-[#f1f5f9] px-5 py-4">
+        <h2 className="text-lg font-bold text-zinc-950">소개 기록</h2>
+        <p className="mt-1 text-sm text-zinc-500">운영자가 검색한 결과를 바로 삭제할 수 있습니다.</p>
+      </div>
+      <div className="grid gap-3 p-4 md:hidden">
+        {introCases.length === 0 ? (
+          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
+            소개 기록이 없습니다.
+          </p>
+        ) : (
+          introCases.map((introCase) => (
+            <article key={introCase.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-500">#{introCase.id}</p>
+                  <p className="mt-1 text-base font-bold text-zinc-950">{highlightText(formatIntroParticipants(introCase), query)}</p>
+                  <p className="mt-1 text-sm text-zinc-600">{highlightText(introCase.invitor, query)}</p>
+                </div>
+                <IntroStatusBadge status={introCase.status} />
+              </div>
+              <p className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                {highlightText(introCase.memo || "메모 없음", query)}
+              </p>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-500">{introCase.updatedAt}</p>
+                {canManage ? (
+                  <form action={deleteIntroCaseAction}>
+                    <FormPendingFieldset className="contents">
+                      <input type="hidden" name="id" value={introCase.id} />
+                      <FormSubmitButton
+                        label="삭제"
+                        pendingLabel="삭제 중..."
+                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                      />
+                    </FormPendingFieldset>
+                  </form>
+                ) : null}
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[980px] table-fixed text-left text-sm">
+          <thead className="bg-[#fafafc] text-xs font-bold text-zinc-500">
+            <tr>
+              <th className="w-16 px-3 py-3">ID</th>
+              <th className="w-44 px-3 py-3">참여자</th>
+              <th className="w-36 px-3 py-3">주선자</th>
+              <th className="w-32 px-3 py-3">상태</th>
+              <th className="px-3 py-3">메모</th>
+              <th className="w-24 px-3 py-3">갱신</th>
+              {canManage ? <th className="w-20 px-3 py-3">관리</th> : null}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {introCases.length === 0 ? (
+              <tr>
+                <td className="px-3 py-6 text-center text-zinc-500" colSpan={canManage ? 7 : 6}>
+                  소개 기록이 없습니다.
+                </td>
+              </tr>
+            ) : (
+              introCases.map((introCase) => (
+                <tr key={introCase.id} className="align-top hover:bg-[#fff7fa]">
+                  <td className="px-3 py-3 font-semibold text-zinc-700">#{introCase.id}</td>
+                  <td className="px-3 py-3 text-zinc-700">{highlightText(formatIntroParticipants(introCase), query)}</td>
+                  <td className="px-3 py-3 text-zinc-700">{highlightText(introCase.invitor, query)}</td>
+                  <td className="px-3 py-3">
+                    <IntroStatusBadge status={introCase.status} />
+                  </td>
+                  <td className="px-3 py-3 text-xs leading-5 text-zinc-500">
+                    <p className="line-clamp-2 break-words">{highlightText(introCase.memo || "-", query)}</p>
+                  </td>
+                  <td className="px-3 py-3 text-zinc-500">{introCase.updatedAt}</td>
+                  {canManage ? (
+                    <td className="px-3 py-3">
+                      <form action={deleteIntroCaseAction}>
+                        <FormPendingFieldset className="contents">
+                          <input type="hidden" name="id" value={introCase.id} />
+                          <FormSubmitButton
+                            label="삭제"
+                            pendingLabel="삭제 중..."
+                            className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
+                          />
+                        </FormPendingFieldset>
+                      </form>
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </AdminTableSection>
+  );
+}
+
 function buildPairRows(interests: DashboardInterest[], introCandidates: DashboardIntroCandidate[]) {
   const pairMap = new Map<string, OfferPairRow>();
 
@@ -455,4 +580,149 @@ function MetricChip({ label, value }: { label: string; value: string }) {
 
 function interestPairKey(userAId: number, userBId: number) {
   return userAId < userBId ? `${userAId}:${userBId}` : `${userBId}:${userAId}`;
+}
+
+function highlightText(text: string, query: string): ReactNode {
+  if (!query) return text;
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedText = text.toLowerCase();
+  if (!normalizedQuery || !normalizedText.includes(normalizedQuery)) return text;
+
+  const result: ReactNode[] = [];
+  let cursor = 0;
+  let key = 0;
+
+  while (cursor < text.length) {
+    const nextIndex = normalizedText.indexOf(normalizedQuery, cursor);
+    if (nextIndex < 0) {
+      result.push(text.slice(cursor));
+      break;
+    }
+    if (nextIndex > cursor) {
+      result.push(text.slice(cursor, nextIndex));
+    }
+    result.push(
+      <mark key={`match-${key++}`} className="rounded bg-[#fff1d6] px-0.5 text-inherit">
+        {text.slice(nextIndex, nextIndex + normalizedQuery.length)}
+      </mark>,
+    );
+    cursor = nextIndex + normalizedQuery.length;
+  }
+
+  return result.length > 0 ? <>{result}</> : text;
+}
+
+function filterPairRows(pairRows: OfferPairRow[], query: string) {
+  if (!query) return pairRows;
+  return pairRows.filter((row) =>
+    matchesQuery(query, [
+      row.pairKey,
+      row.userAId,
+      row.userBId,
+      row.userAName,
+      row.userBName,
+      row.forward?.status,
+      row.forward ? interestStatusLabels[row.forward.status] : null,
+      row.forward ? interestSourceLabels[row.forward.source] : null,
+      row.reverse?.status,
+      row.reverse ? interestStatusLabels[row.reverse.status] : null,
+      row.reverse ? interestSourceLabels[row.reverse.source] : null,
+      row.introCandidate?.reason,
+      row.introCandidate ? introCandidateStatusLabels[row.introCandidate.status] : null,
+    ]),
+  );
+}
+
+function filterIntroCandidates(introCandidates: DashboardIntroCandidate[], query: string) {
+  if (!query) return introCandidates;
+  return introCandidates.filter((candidate) =>
+    matchesQuery(query, [
+      candidate.id,
+      candidate.userAName,
+      candidate.userBName,
+      candidate.reason,
+      introCandidateSourceLabels[candidate.source],
+      introCandidateStatusLabels[candidate.status],
+    ]),
+  );
+}
+
+function filterInterests(interests: DashboardInterest[], query: string) {
+  if (!query) return interests;
+  return interests.filter((interest) =>
+    matchesQuery(query, [
+      interest.id,
+      interest.fromUserId,
+      interest.toUserId,
+      interest.fromUserName,
+      interest.toUserName,
+      interestSourceLabels[interest.source],
+      interestStatusLabels[interest.status],
+    ]),
+  );
+}
+
+function filterIntroCases(introCases: DashboardIntroCase[], query: string) {
+  if (!query) return introCases;
+  return introCases.filter((introCase) =>
+    matchesQuery(query, [
+      introCase.id,
+      introCase.participants.join(" "),
+      introCase.invitor,
+      introCase.status,
+      introStatusLabels[introCase.status],
+      introCase.memo,
+      introCase.updatedAt,
+    ]),
+  );
+}
+
+function filterUsers(
+  users: DashboardExposureData["users"],
+  query: string,
+  pairRows: OfferPairRow[],
+  introCases: DashboardIntroCase[],
+) {
+  if (!query) return users;
+  const pairUserIds = new Set(pairRows.flatMap((row) => [row.userAId, row.userBId]));
+  const introUserNames = new Set(
+    introCases.flatMap((introCase) => introCase.participants),
+  );
+  return users.filter(
+    (user) =>
+      matchesQuery(query, [
+        user.id,
+        user.name,
+        user.gender,
+        userStatusLabels[user.status],
+        openLevelLabels[user.openLevel],
+        user.jobTitle,
+      ]) ||
+      pairUserIds.has(user.id) ||
+      introUserNames.has(user.name),
+  );
+}
+
+function matchesQuery(query: string, values: Array<string | number | null | undefined>) {
+  return values.some((value) => normalizeSearchValue(value).includes(query));
+}
+
+function normalizeSearchValue(value: string | number | null | undefined) {
+  return String(value ?? "").toLowerCase();
+}
+
+function formatIntroParticipants(introCase: DashboardIntroCase) {
+  return introCase.participants.length > 0 ? introCase.participants.join(" ↔ ") : "참여자 정보 없음";
+}
+
+function IntroStatusBadge({ status }: { status: DashboardIntroCase["status"] }) {
+  const className =
+    status === "MATCHED" || status === "CONNECTED" || status === "SUCCESS"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "DECLINED" || status === "FAILED" || status === "CANCELLED"
+        ? "bg-zinc-100 text-zinc-600"
+        : "bg-[#fff1e6] text-[#c96a2b]";
+
+  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{introStatusLabels[status]}</span>;
 }

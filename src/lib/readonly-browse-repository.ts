@@ -6,7 +6,7 @@ import {
   type ParticipantInterestSelection,
   activeIntroStatuses,
 } from "@/lib/domain";
-import { getMemberDashboardData } from "@/lib/member-repository";
+import { getMemberDashboardData, sortUserPhotosForDisplay } from "@/lib/member-repository";
 import { hasDatabaseUrl, prisma } from "@/lib/prisma";
 import {
   getAppBaseUrl,
@@ -120,6 +120,17 @@ export type ReadOnlyBrowseTokenSummary = {
   isActive: boolean;
   lastUsedAt: string | null;
   revokedAt: string | null;
+};
+
+export type ReadOnlyBrowseReceivedInterest = {
+  id: number;
+  fromUserId: number;
+  fromUserName: string;
+  source: InterestSource;
+  status: InterestStatus;
+  createdAt: string;
+  isMutual: boolean;
+  photos: DashboardUserPhoto[];
 };
 
 export type ReadOnlyBrowseTokenManagerData = {
@@ -360,6 +371,10 @@ export async function getReadOnlyBrowsePageData(
   const outgoingBrowse = await loadReadOnlyBrowseInterests(userId).catch(() => []);
   const incomingBrowse = await loadReceivedReadOnlyBrowseInterests(userId).catch(() => []);
   const browseSelections = outgoingBrowse.map((interest) => toParticipantInterestSelection(interest, memberData.allUsers));
+  const receivedPhotosByUserId = await getPhotosByUserIds(incomingBrowse.map((interest) => BigInt(interest.from_user_id)));
+  const receivedInterests = incomingBrowse.map((interest) =>
+    toReadOnlyReceivedInterest(interest, memberData.allUsers, outgoingBrowse, receivedPhotosByUserId),
+  );
   const browseSubmitted = outgoingBrowse.length > 0;
 
   const activeIntroUserIds = new Set(
@@ -538,7 +553,7 @@ async function getPhotosByUserIds(userIds: bigint[]) {
             isMain: true,
             uploadedAt: true,
           },
-          orderBy: [{ userId: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+          orderBy: [{ userId: "asc" }, { isMain: "desc" }, { sortOrder: "asc" }, { id: "asc" }],
         })
       ).map((photo) => ({
         id: Number(photo.id),
@@ -569,6 +584,10 @@ async function getPhotosByUserIds(userIds: bigint[]) {
       }),
     );
     photosByUserId.set(photoRow.userId, bucket);
+  }
+
+  for (const [userId, photos] of photosByUserId.entries()) {
+    photosByUserId.set(userId, sortUserPhotosForDisplay(photos));
   }
 
   return photosByUserId;

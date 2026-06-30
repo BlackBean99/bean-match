@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type TouchEvent } from "react";
 import type { DashboardUserPhoto } from "@/lib/domain";
 
 type ParticipantPhotoGalleryProps = {
@@ -15,14 +15,17 @@ type GalleryPhoto = DashboardUserPhoto & {
   backupUrl?: string;
 };
 
-type ViewerTouchState = {
+type TouchState = {
   active: boolean;
   startX: number;
   currentX: number;
+  startY: number;
+  currentY: number;
   width: number;
 };
 
 const swipeThresholdRatio = 0.18;
+const swipeCloseThresholdRatio = 0.16;
 
 export function ParticipantPhotoGallery({
   name,
@@ -64,10 +67,12 @@ export function ParticipantPhotoGallery({
   const [loadedSources, setLoadedSources] = useState<Record<string, true>>({});
   const [fallbackSourceIndex, setFallbackSourceIndex] = useState<Record<number, number>>({});
   const [dragOffset, setDragOffset] = useState(0);
-  const touchStateRef = useRef<ViewerTouchState>({
+  const touchStateRef = useRef<TouchState>({
     active: false,
     startX: 0,
     currentX: 0,
+    startY: 0,
+    currentY: 0,
     width: 0,
   });
 
@@ -75,10 +80,6 @@ export function ParticipantPhotoGallery({
     if (selectedIndex < galleryPhotos.length) return;
     setSelectedIndex(0);
   }, [galleryPhotos.length, selectedIndex]);
-
-  const activePhoto = galleryPhotos[selectedIndex] ?? null;
-  const activePhotoSource = activePhoto ? resolvePhotoSource(activePhoto, fallbackSourceIndex[selectedIndex] ?? 0) : null;
-  const hasMultiplePhotos = galleryPhotos.length > 1;
 
   useEffect(() => {
     if (!isViewerOpen || galleryPhotos.length <= 1) return;
@@ -99,6 +100,11 @@ export function ParticipantPhotoGallery({
       image.src = source;
     }
   }, [fallbackSourceIndex, galleryPhotos, isViewerOpen, loadedSources, selectedIndex]);
+
+  const activePhoto = galleryPhotos[selectedIndex] ?? null;
+  const activePhotoSource = activePhoto ? resolvePhotoSource(activePhoto, fallbackSourceIndex[selectedIndex] ?? 0) : null;
+  const hasMultiplePhotos = galleryPhotos.length > 1;
+  const compactLoaded = activePhotoSource ? Boolean(loadedSources[activePhotoSource]) : false;
 
   function blockCardSelection(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
@@ -124,44 +130,65 @@ export function ParticipantPhotoGallery({
     setDragOffset(0);
   }
 
-  function openViewer(event?: MouseEvent<HTMLElement>) {
-    if (event) blockCardSelection(event);
+  function openViewer() {
     setIsViewerOpen(true);
   }
 
-  function onTouchStart(event: TouchEvent<HTMLDivElement>) {
-    if (galleryPhotos.length <= 1) return;
+  function closeViewer() {
+    setIsViewerOpen(false);
+  }
+
+  function onTouchStart(event: TouchEvent<HTMLElement>) {
+    if (galleryPhotos.length <= 1 && !isViewerOpen) return;
     const touch = event.touches[0];
     touchStateRef.current = {
       active: true,
       startX: touch.clientX,
       currentX: touch.clientX,
+      startY: touch.clientY,
+      currentY: touch.clientY,
       width: event.currentTarget.clientWidth,
     };
     setDragOffset(0);
   }
 
-  function onTouchMove(event: TouchEvent<HTMLDivElement>) {
+  function onTouchMove(event: TouchEvent<HTMLElement>) {
     if (!touchStateRef.current.active) return;
     const touch = event.touches[0];
     touchStateRef.current.currentX = touch.clientX;
+    touchStateRef.current.currentY = touch.clientY;
     setDragOffset(touch.clientX - touchStateRef.current.startX);
   }
 
   function onTouchEnd() {
     if (!touchStateRef.current.active) return;
 
-    const { startX, currentX, width } = touchStateRef.current;
-    const delta = currentX - startX;
+    const { startX, currentX, startY, currentY, width } = touchStateRef.current;
+    const deltaX = currentX - startX;
+    const deltaY = currentY - startY;
     const threshold = Math.max(width * swipeThresholdRatio, 36);
+    const closeThreshold = Math.max(width * swipeCloseThresholdRatio, 40);
     touchStateRef.current.active = false;
 
-    if (Math.abs(delta) >= threshold) {
-      moveSelection(delta > 0 ? -1 : 1);
+    if (isViewerOpen && deltaY > closeThreshold && Math.abs(deltaY) > Math.abs(deltaX)) {
+      closeViewer();
+      setDragOffset(0);
+      return;
+    }
+
+    if (Math.abs(deltaX) >= threshold) {
+      moveSelection(deltaX > 0 ? -1 : 1);
       return;
     }
 
     setDragOffset(0);
+  }
+
+  function onKeyOpen(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openViewer();
+    }
   }
 
   if (!activePhoto || !activePhotoSource) {
@@ -172,13 +199,18 @@ export function ParticipantPhotoGallery({
     );
   }
 
-  const compactLoaded = Boolean(loadedSources[activePhotoSource]);
-
-  if (variant === "compact") {
-    return (
-      <>
+  return (
+    <>
+      {variant === "compact" ? (
         <div className="grid gap-3">
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={`${name} 사진 확대 보기`}
+            onClick={openViewer}
+            onKeyDown={onKeyOpen}
+            className="group relative aspect-[4/5] w-full cursor-pointer overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)] outline-none transition duration-200 hover:shadow-[0_24px_55px_rgba(9,9,11,0.34)] focus-visible:ring-2 focus-visible:ring-[#ffb38a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f3ef]"
+          >
             <div
               className="relative h-full w-full overflow-hidden rounded-[24px]"
               onTouchStart={onTouchStart}
@@ -198,7 +230,7 @@ export function ParticipantPhotoGallery({
 
               {hasMultiplePhotos ? (
                 <>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 w-[38%] bg-gradient-to-l from-black/30 via-black/10 to-transparent" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 w-[42%] bg-gradient-to-l from-black/30 via-black/10 to-transparent" />
                   <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
                     {selectedIndex + 1} / {galleryPhotos.length}
                   </div>
@@ -241,130 +273,101 @@ export function ParticipantPhotoGallery({
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-3 pb-3 pt-12 text-white">
                     <div className="flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">사진 탐색</p>
-                        <p className="mt-1 text-sm font-semibold">{selectedIndex + 1} / {galleryPhotos.length}</p>
+                        <p className="text-sm font-semibold">
+                          {selectedIndex + 1} / {galleryPhotos.length}
+                        </p>
                       </div>
-                      <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
-                        좌우 스와이프
-                      </span>
                     </div>
                   </div>
-                  {selectedIndex + 1 < galleryPhotos.length ? (
-                    <div className="pointer-events-none absolute right-1 top-1/2 z-[1] flex -translate-y-1/2 translate-x-2 items-center gap-2">
-                      <div className="relative h-[72%] w-16 overflow-hidden rounded-[20px] border border-white/10 bg-zinc-900/80 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
-                        <PreviewPhotoStage
-                          src={
-                            resolvePhotoSource(
-                              galleryPhotos[(selectedIndex + 1) % galleryPhotos.length]!,
-                              fallbackSourceIndex[(selectedIndex + 1) % galleryPhotos.length] ?? 0,
-                            ) ?? activePhotoSource
-                          }
-                          alt={`${name} 다음 사진`}
-                          loaded
-                          sizes="64px"
-                          onLoad={() => undefined}
-                          onError={() => undefined}
-                        />
-                      </div>
-                    </div>
-                  ) : null}
                 </>
               ) : (
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-3 pb-3 pt-12 text-white">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">사진 1장</p>
-                  <p className="mt-1 text-sm font-semibold">탭해서 크게 보기</p>
+                  <p className="text-sm font-semibold">1 / 1</p>
                 </div>
               )}
+              <button
+                type="button"
+                aria-label="사진 크게 보기"
+                onClick={(event) => {
+                  blockCardSelection(event);
+                  openViewer();
+                }}
+                className="absolute bottom-3 right-3 z-10 inline-flex h-9 items-center justify-center rounded-full border border-white/20 bg-white/12 px-3 text-[11px] font-semibold text-white/90 shadow-[0_10px_24px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:bg-white/18"
+              >
+                사진 크게 보기
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <p className="min-w-0 text-xs leading-5 text-zinc-500">
-              사진은 좌우로 넘겨 보고, 더 자세한 정보는 전체 프로필에서 확인하세요.
-            </p>
-            <button
-              type="button"
-              onClick={() => openViewer()}
-              className="inline-flex shrink-0 items-center rounded-full border border-[#f1d1bd] bg-[#fff8f2] px-3 py-2 text-xs font-semibold text-[#b86a2d] transition hover:border-[#e9b88e] hover:bg-[#fff3e8]"
-            >
-              프로필 자세히 보기
-            </button>
-          </div>
         </div>
-
-        {isViewerOpen ? renderViewerModal() : null}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="grid gap-2">
-        <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
-          <button type="button" onClick={openViewer} className="group relative block h-full w-full overflow-hidden rounded-[24px]">
-            <PreviewPhotoStage
-              src={activePhotoSource}
-              alt={`${name} 사진 ${selectedIndex + 1}`}
-              loaded={compactLoaded}
-              sizes="(max-width: 640px) 48vw, 220px"
-              onLoad={() => setLoaded(activePhotoSource)}
-              onError={() => handleImageError(selectedIndex)}
-            />
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex gap-1 px-3 pt-3">
-              {galleryPhotos.map((photo, index) => (
-                <span
-                  key={`${photo.id}-${index}`}
-                  className={`h-1 flex-1 rounded-full transition ${
-                    index === selectedIndex ? "bg-white" : "bg-white/30"
-                  }`}
-                />
-              ))}
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-3 pb-3 pt-10 text-white">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Offer Photo</p>
-                  <p className="mt-1 text-sm font-semibold">
-                    {galleryPhotos.length > 1 ? `${selectedIndex + 1} / ${galleryPhotos.length}` : "탭해서 확대"}
-                  </p>
-                </div>
-                <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
-                  Swipe Ready
-                </span>
+      ) : (
+        <div className="grid gap-2">
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[24px] border border-white/10 bg-zinc-950 shadow-[0_18px_45px_rgba(9,9,11,0.28)]">
+            <button type="button" onClick={openViewer} className="group relative block h-full w-full overflow-hidden rounded-[24px]">
+              <PreviewPhotoStage
+                src={activePhotoSource}
+                alt={`${name} 사진 ${selectedIndex + 1}`}
+                loaded={compactLoaded}
+                sizes="(max-width: 640px) 48vw, 220px"
+                onLoad={() => setLoaded(activePhotoSource)}
+                onError={() => handleImageError(selectedIndex)}
+              />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex gap-1 px-3 pt-3">
+                {galleryPhotos.map((photo, index) => (
+                  <span
+                    key={`${photo.id}-${index}`}
+                    className={`h-1 flex-1 rounded-full transition ${
+                      index === selectedIndex ? "bg-white" : "bg-white/30"
+                    }`}
+                  />
+                ))}
               </div>
-            </div>
-          </button>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-3 pb-3 pt-10 text-white">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Offer Photo</p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {galleryPhotos.length > 1 ? `${selectedIndex + 1} / ${galleryPhotos.length}` : "탭해서 확대"}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md">
+                    Swipe Ready
+                  </span>
+                </div>
+              </div>
+            </button>
 
-          {hasMultiplePhotos ? (
-            <>
-              <button
-                type="button"
-                aria-label="이전 사진"
-                onClick={(event) => {
-                  blockCardSelection(event);
-                  moveSelection(-1);
-                }}
-                className="absolute left-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                aria-label="다음 사진"
-                onClick={(event) => {
-                  blockCardSelection(event);
-                  moveSelection(1);
-                }}
-                className="absolute right-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
-              >
-                ›
-              </button>
-            </>
-          ) : null}
+            {hasMultiplePhotos ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="이전 사진"
+                  onClick={(event) => {
+                    blockCardSelection(event);
+                    moveSelection(-1);
+                  }}
+                  className="absolute left-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label="다음 사진"
+                  onClick={(event) => {
+                    blockCardSelection(event);
+                    moveSelection(1);
+                  }}
+                  className="absolute right-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-base font-semibold text-white backdrop-blur-md transition hover:bg-black/60"
+                >
+                  ›
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
+      )}
 
-        {isViewerOpen ? renderViewerModal() : null}
-      </div>
+      {isViewerOpen ? renderViewerModal() : null}
     </>
   );
 
@@ -376,7 +379,7 @@ export function ParticipantPhotoGallery({
         aria-modal="true"
         onClick={(event) => {
           blockCardSelection(event);
-          setIsViewerOpen(false);
+          closeViewer();
         }}
       >
         <div className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.94),rgba(9,9,11,0.98))] shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
@@ -389,7 +392,7 @@ export function ParticipantPhotoGallery({
               type="button"
               onClick={(event) => {
                 blockCardSelection(event);
-                setIsViewerOpen(false);
+                closeViewer();
               }}
               className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white backdrop-blur-md"
             >
@@ -408,7 +411,16 @@ export function ParticipantPhotoGallery({
             ))}
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden px-2 pb-2 sm:px-4 sm:pb-4" onClick={(event) => blockCardSelection(event)}>
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 sm:px-6">
+            <p className="rounded-full bg-white/8 px-3 py-1.5 text-[12px] font-semibold text-white/90">
+              {galleryPhotos.length > 1 ? `${selectedIndex + 1} / ${galleryPhotos.length}` : "1 / 1"}
+            </p>
+          </div>
+
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden px-2 pb-2 sm:px-4 sm:pb-4"
+            onClick={(event) => blockCardSelection(event)}
+          >
             <div
               className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/10 bg-zinc-950/80"
               onTouchStart={onTouchStart}

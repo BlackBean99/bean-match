@@ -2,6 +2,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { OfferMatchDashboard } from "@/components/offer-match-dashboard";
 import { requireOpsSession } from "@/lib/admin-access-server";
 import { getExposureDashboardData } from "@/lib/auto-exposure-repository";
+import type { SearchParamMap } from "@/lib/filter-utils";
 
 export const dynamic = "force-dynamic";
 
