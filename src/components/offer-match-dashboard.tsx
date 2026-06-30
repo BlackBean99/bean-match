@@ -3,9 +3,6 @@ import {
   AdminSection,
   AdminStatCard,
   AdminTableSection,
-  adminInputClassName,
-  adminPrimaryButtonClassName,
-  adminSecondaryButtonClassName,
 } from "@/components/admin-ui";
 import type { ReactNode } from "react";
 import {
@@ -21,7 +18,6 @@ import {
   type DashboardInterest,
   type DashboardIntroCase,
 } from "@/lib/domain";
-import type { ReactNode } from "react";
 
 type OfferMatchDashboardProps = DashboardExposureData & {
   searchQuery?: string;
@@ -46,33 +42,18 @@ export function OfferMatchDashboard({
   interests,
   introCandidates,
   introCases,
-  canManage = false,
   loadError,
   searchQuery = "",
 }: OfferMatchDashboardProps) {
-  const normalizedQuery = searchQuery.trim().toLocaleLowerCase("ko-KR");
-  const hasQuery = normalizedQuery.length > 0;
-  const matchesText = (value: string) => !hasQuery || value.toLocaleLowerCase("ko-KR").includes(normalizedQuery);
-  const filteredInterests = interests.filter((interest) => {
-    if (!hasQuery) return true;
-    return matchesText(interest.fromUserName) || matchesText(interest.toUserName);
-  });
-  const filteredCandidates = introCandidates.filter((candidate) => {
-    if (!hasQuery) return true;
-    return matchesText(candidate.userAName) || matchesText(candidate.userBName) || matchesText(candidate.reason);
-  });
-  const filteredUsers = users.filter((user) => {
-    if (!hasQuery) return true;
-    return matchesText(user.name);
-  });
-  const pairRows = buildPairRows(filteredInterests, filteredCandidates);
-  const activeInterests = filteredInterests.filter((interest) => interest.status === "ACTIVE");
-  const activePairRows = pairRows.filter((row) => row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE");
-  const filteredPairRows = filterPairRows(pairRows, normalizedQuery);
-  const filteredCandidates = filterIntroCandidates(introCandidates, normalizedQuery);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredInterests = filterInterests(interests, normalizedQuery);
+  const filteredCandidates = filterIntroCandidates(introCandidates, normalizedQuery);
+  const pairRows = buildPairRows(filteredInterests, filteredCandidates);
+  const filteredPairRows = filterPairRows(pairRows, normalizedQuery);
   const filteredIntroCases = filterIntroCases(introCases, normalizedQuery);
   const filteredUsers = filterUsers(users, normalizedQuery, filteredPairRows, filteredIntroCases);
+  const activeInterests = filteredInterests.filter((interest) => interest.status === "ACTIVE");
+  const activePairRows = filteredPairRows.filter((row) => row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE");
   const mutualPairRows = activePairRows.filter((row) => isMutualPair(row));
   const uniqueActors = new Set(activeInterests.map((interest) => interest.fromUserId)).size;
   const uniqueTargets = new Set(activeInterests.map((interest) => interest.toUserId)).size;
@@ -339,116 +320,6 @@ function OfferUserSummaryTable({
   );
 }
 
-function OfferIntroCaseTable({
-  introCases,
-  canManage,
-  query,
-}: {
-  introCases: DashboardIntroCase[];
-  canManage: boolean;
-  query: string;
-}) {
-  return (
-    <AdminTableSection>
-      <div className="border-b border-[#f1f5f9] px-5 py-4">
-        <h2 className="text-lg font-bold text-zinc-950">소개 기록</h2>
-        <p className="mt-1 text-sm text-zinc-500">운영자가 검색한 결과를 바로 삭제할 수 있습니다.</p>
-      </div>
-      <div className="grid gap-3 p-4 md:hidden">
-        {introCases.length === 0 ? (
-          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-            소개 기록이 없습니다.
-          </p>
-        ) : (
-          introCases.map((introCase) => (
-            <article key={introCase.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-500">#{introCase.id}</p>
-                  <p className="mt-1 text-base font-bold text-zinc-950">{highlightText(formatIntroParticipants(introCase), query)}</p>
-                  <p className="mt-1 text-sm text-zinc-600">{highlightText(introCase.invitor, query)}</p>
-                </div>
-                <IntroStatusBadge status={introCase.status} />
-              </div>
-              <p className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                {highlightText(introCase.memo || "메모 없음", query)}
-              </p>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="text-xs text-zinc-500">{introCase.updatedAt}</p>
-                {canManage ? (
-                  <form action={deleteIntroCaseAction}>
-                    <FormPendingFieldset className="contents">
-                      <input type="hidden" name="id" value={introCase.id} />
-                      <FormSubmitButton
-                        label="삭제"
-                        pendingLabel="삭제 중..."
-                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                      />
-                    </FormPendingFieldset>
-                  </form>
-                ) : null}
-              </div>
-            </article>
-          ))
-        )}
-      </div>
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[980px] table-fixed text-left text-sm">
-          <thead className="bg-[#fafafc] text-xs font-bold text-zinc-500">
-            <tr>
-              <th className="w-16 px-3 py-3">ID</th>
-              <th className="w-44 px-3 py-3">참여자</th>
-              <th className="w-36 px-3 py-3">주선자</th>
-              <th className="w-32 px-3 py-3">상태</th>
-              <th className="px-3 py-3">메모</th>
-              <th className="w-24 px-3 py-3">갱신</th>
-              {canManage ? <th className="w-20 px-3 py-3">관리</th> : null}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {introCases.length === 0 ? (
-              <tr>
-                <td className="px-3 py-6 text-center text-zinc-500" colSpan={canManage ? 7 : 6}>
-                  소개 기록이 없습니다.
-                </td>
-              </tr>
-            ) : (
-              introCases.map((introCase) => (
-                <tr key={introCase.id} className="align-top hover:bg-[#fff7fa]">
-                  <td className="px-3 py-3 font-semibold text-zinc-700">#{introCase.id}</td>
-                  <td className="px-3 py-3 text-zinc-700">{highlightText(formatIntroParticipants(introCase), query)}</td>
-                  <td className="px-3 py-3 text-zinc-700">{highlightText(introCase.invitor, query)}</td>
-                  <td className="px-3 py-3">
-                    <IntroStatusBadge status={introCase.status} />
-                  </td>
-                  <td className="px-3 py-3 text-xs leading-5 text-zinc-500">
-                    <p className="line-clamp-2 break-words">{highlightText(introCase.memo || "-", query)}</p>
-                  </td>
-                  <td className="px-3 py-3 text-zinc-500">{introCase.updatedAt}</td>
-                  {canManage ? (
-                    <td className="px-3 py-3">
-                      <form action={deleteIntroCaseAction}>
-                        <FormPendingFieldset className="contents">
-                          <input type="hidden" name="id" value={introCase.id} />
-                          <FormSubmitButton
-                            label="삭제"
-                            pendingLabel="삭제 중..."
-                            className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                          />
-                        </FormPendingFieldset>
-                      </form>
-                    </td>
-                  ) : null}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </AdminTableSection>
-  );
-}
-
 function buildPairRows(interests: DashboardInterest[], introCandidates: DashboardIntroCandidate[]) {
   const pairMap = new Map<string, OfferPairRow>();
 
@@ -523,28 +394,6 @@ function CandidateBadge({ candidate }: { candidate: DashboardIntroCandidate }) {
           : "bg-[#fff1e6] text-[#c96a2b]";
 
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{introCandidateStatusLabels[candidate.status]}</span>;
-}
-
-function highlightText(text: string, query: string): ReactNode {
-  const normalizedQuery = query.trim();
-  if (!normalizedQuery) return text;
-
-  const lowerText = text.toLocaleLowerCase("ko-KR");
-  const lowerQuery = normalizedQuery.toLocaleLowerCase("ko-KR");
-  const index = lowerText.indexOf(lowerQuery);
-  if (index < 0) return text;
-
-  const before = text.slice(0, index);
-  const match = text.slice(index, index + normalizedQuery.length);
-  const after = text.slice(index + normalizedQuery.length);
-
-  return (
-    <>
-      {before}
-      <mark className="rounded bg-[#ffe2ea] px-0.5 text-[#b4234f]">{match}</mark>
-      {after}
-    </>
-  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -710,19 +559,4 @@ function matchesQuery(query: string, values: Array<string | number | null | unde
 
 function normalizeSearchValue(value: string | number | null | undefined) {
   return String(value ?? "").toLowerCase();
-}
-
-function formatIntroParticipants(introCase: DashboardIntroCase) {
-  return introCase.participants.length > 0 ? introCase.participants.join(" ↔ ") : "참여자 정보 없음";
-}
-
-function IntroStatusBadge({ status }: { status: DashboardIntroCase["status"] }) {
-  const className =
-    status === "MATCHED" || status === "CONNECTED" || status === "SUCCESS"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "DECLINED" || status === "FAILED" || status === "CANCELLED"
-        ? "bg-zinc-100 text-zinc-600"
-        : "bg-[#fff1e6] text-[#c96a2b]";
-
-  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{introStatusLabels[status]}</span>;
 }

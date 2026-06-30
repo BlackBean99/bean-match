@@ -122,17 +122,6 @@ export type ReadOnlyBrowseTokenSummary = {
   revokedAt: string | null;
 };
 
-export type ReadOnlyBrowseReceivedInterest = {
-  id: number;
-  fromUserId: number;
-  fromUserName: string;
-  source: InterestSource;
-  status: InterestStatus;
-  createdAt: string;
-  isMutual: boolean;
-  photos: DashboardUserPhoto[];
-};
-
 export type ReadOnlyBrowseTokenManagerData = {
   accessPath: string;
   databaseConnected: boolean;
@@ -371,10 +360,6 @@ export async function getReadOnlyBrowsePageData(
   const outgoingBrowse = await loadReadOnlyBrowseInterests(userId).catch(() => []);
   const incomingBrowse = await loadReceivedReadOnlyBrowseInterests(userId).catch(() => []);
   const browseSelections = outgoingBrowse.map((interest) => toParticipantInterestSelection(interest, memberData.allUsers));
-  const receivedPhotosByUserId = await getPhotosByUserIds(incomingBrowse.map((interest) => BigInt(interest.from_user_id)));
-  const receivedInterests = incomingBrowse.map((interest) =>
-    toReadOnlyReceivedInterest(interest, memberData.allUsers, outgoingBrowse, receivedPhotosByUserId),
-  );
   const browseSubmitted = outgoingBrowse.length > 0;
 
   const activeIntroUserIds = new Set(
