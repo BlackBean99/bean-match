@@ -180,6 +180,11 @@ export function ReadOnlyBrowseInterestForm({
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
+                        {candidate.hasIntroHistory ? (
+                          <span className="inline-flex items-center rounded-full bg-[#eef2ff] px-3 py-1 text-xs font-medium text-[#5b5fd6]">
+                            기존 소개 이력
+                          </span>
+                        ) : null}
                         {tagItems.map((tag) => (
                           <span
                             key={tag}
