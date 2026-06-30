@@ -84,17 +84,17 @@ export function ReadOnlyBrowsePage({ data }: ReadOnlyBrowsePageProps) {
               <div>
                 <h2 className="text-[1.35rem] font-semibold tracking-[-0.03em] text-zinc-950">내가 받은 관심</h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">
-                  누가 나를 확인했는지 보고, 다시 선택을 수정할 때 참고할 수 있습니다.
+                  소개 받을 수 있는 사람만 보이도록 걸러서 보여줍니다. 이미 진행 중이거나 조건이 맞지 않는 기록은 숨깁니다.
                 </p>
               </div>
               <span className="inline-flex items-center rounded-full bg-[#fff1e6] px-3 py-1.5 text-xs font-semibold text-[#c96a2b]">
-                {data.receivedInterests.length}건 수신
+                {data.receivedInterests.length}명
               </span>
             </div>
 
             {data.receivedInterests.length === 0 ? (
               <p className="mt-4 rounded-[24px] border border-dashed border-[#eddccc] bg-[#fffaf5] px-4 py-5 text-sm text-zinc-500">
-                아직 받은 관심이 없습니다.
+                현재 보여드릴 수 있는 받은 관심이 없습니다.
               </p>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2">

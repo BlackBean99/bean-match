@@ -36,6 +36,7 @@ import {
   deleteMemberAction,
   updateIntroCaseAction,
   updateMemberAction,
+  updateMemberExposureAction,
 } from "@/app/actions";
 
 const statusOrder: UserStatus[] = [
@@ -611,6 +612,20 @@ function MemberCard({
         <Link href={`/users/${user.id}`} className="text-sm font-bold text-zinc-700 hover:text-[#e63a68]">
           자세히
         </Link>
+        {editable && user.status === "INCOMPLETE" ? (
+          <form action={updateMemberExposureAction}>
+            <FormPendingFieldset className="contents">
+              <input type="hidden" name="id" value={user.id} />
+              <input type="hidden" name="status" value="READY" />
+              <input type="hidden" name="openLevel" value="FULL_OPEN" />
+              <FormSubmitButton
+                label="승인"
+                pendingLabel="승인 중..."
+                className="text-sm font-bold text-[#c96a2b] hover:text-[#e63a68]"
+              />
+            </FormPendingFieldset>
+          </form>
+        ) : null}
         {editable ? (
           <details className="relative">
             <summary className="cursor-pointer text-sm font-bold text-[#e63a68]">수정</summary>
@@ -725,6 +740,20 @@ function MemberRow({
               <Link href={`/users/${user.id}`} className="text-xs font-bold text-zinc-600 hover:text-[#e63a68]">
                 자세히
               </Link>
+              {editable && user.status === "INCOMPLETE" ? (
+                <form action={updateMemberExposureAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="id" value={user.id} />
+                    <input type="hidden" name="status" value="READY" />
+                    <input type="hidden" name="openLevel" value="FULL_OPEN" />
+                    <FormSubmitButton
+                      label="승인"
+                      pendingLabel="승인 중..."
+                      className="text-xs font-bold text-[#c96a2b] hover:text-[#e63a68] disabled:text-zinc-300"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
               {editable ? (
                 <details className="relative w-14">
                   <summary className="cursor-pointer text-xs font-bold text-[#e63a68]">수정</summary>

@@ -83,6 +83,17 @@ export type ReadOnlyBrowseCandidate = DashboardUser & {
   hasIntroHistory: boolean;
 };
 
+export type ReadOnlyBrowseReceivedInterest = {
+  id: number;
+  fromUserId: number;
+  fromUserName: string;
+  source: InterestSource;
+  status: InterestStatus;
+  createdAt: string;
+  isMutual: boolean;
+  photos: DashboardUserPhoto[];
+};
+
 export type ReadOnlyBrowsePageData = {
   accessPath: string;
   accessToken: string | null;
@@ -109,17 +120,6 @@ export type ReadOnlyBrowseTokenSummary = {
   isActive: boolean;
   lastUsedAt: string | null;
   revokedAt: string | null;
-};
-
-export type ReadOnlyBrowseReceivedInterest = {
-  id: number;
-  fromUserId: number;
-  fromUserName: string;
-  source: InterestSource;
-  status: InterestStatus;
-  createdAt: string;
-  isMutual: boolean;
-  photos: DashboardUserPhoto[];
 };
 
 export type ReadOnlyBrowseTokenManagerData = {
@@ -360,10 +360,6 @@ export async function getReadOnlyBrowsePageData(
   const outgoingBrowse = await loadReadOnlyBrowseInterests(userId).catch(() => []);
   const incomingBrowse = await loadReceivedReadOnlyBrowseInterests(userId).catch(() => []);
   const browseSelections = outgoingBrowse.map((interest) => toParticipantInterestSelection(interest, memberData.allUsers));
-  const receivedPhotosByUserId = await getPhotosByUserIds(incomingBrowse.map((interest) => BigInt(interest.from_user_id)));
-  const receivedInterests = incomingBrowse.map((interest) =>
-    toReadOnlyReceivedInterest(interest, memberData.allUsers, outgoingBrowse, receivedPhotosByUserId),
-  );
   const browseSubmitted = outgoingBrowse.length > 0;
 
   const activeIntroUserIds = new Set(
@@ -383,12 +379,21 @@ export async function getReadOnlyBrowsePageData(
   const candidateUsers = memberData.allUsers.filter((candidate) =>
     isReadOnlyBrowseCandidate(actor, candidate, activeIntroUserIds),
   );
+  const eligibleCandidateIds = new Set(candidateUsers.map((candidate) => candidate.id));
   const photosByUserId = await getPhotosByUserIds(candidateUsers.map((candidate) => BigInt(candidate.id)));
   const candidates = candidateUsers.map((candidate) => ({
     ...candidate,
     photos: photosByUserId.get(candidate.id) ?? [],
     hasIntroHistory: historicalPairKeys.has(pairKey(actor.id, candidate.id)),
   }));
+  const receivedPhotosByUserId = await getPhotosByUserIds(
+    incomingBrowse.filter((interest) => eligibleCandidateIds.has(interest.from_user_id)).map((interest) =>
+      BigInt(interest.from_user_id),
+    ),
+  );
+  const receivedInterests = incomingBrowse
+    .filter((interest) => eligibleCandidateIds.has(interest.from_user_id))
+    .map((interest) => toReadOnlyReceivedInterest(interest, memberData.allUsers, outgoingBrowse, receivedPhotosByUserId));
 
   return {
     accessPath,
@@ -751,14 +756,7 @@ type ReadOnlyBrowseInterestRow = {
   created_at: string;
 };
 
-type ReadOnlyBrowseReceivedInterestRow = {
-  id: number;
-  from_user_id: number;
-  to_user_id: number;
-  source: InterestSource;
-  status: InterestStatus;
-  created_at: string;
-};
+type ReadOnlyBrowseReceivedInterestRow = ReadOnlyBrowseInterestRow;
 
 async function loadReadOnlyBrowseInterests(userId: bigint) {
   if (hasDatabaseUrl()) {

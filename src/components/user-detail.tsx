@@ -9,6 +9,7 @@ import {
   moveUserPhotoOrderAction,
   setMainUserPhotoAction,
   updateUserPhotoAction,
+  updateMemberExposureAction,
 } from "@/app/actions";
 import { OfferLinkQuickActions } from "@/components/offer-link-quick-actions";
 import { InviteKakaoQuickActions } from "@/components/invite-kakao-quick-actions";
@@ -63,6 +64,20 @@ export function UserDetail({
             </div>
             <div className="flex flex-col items-end gap-3">
               <StatusBadge status={user.status} />
+              {canManage && user.status === "INCOMPLETE" ? (
+                <form action={updateMemberExposureAction}>
+                  <FormPendingFieldset className="contents">
+                    <input type="hidden" name="id" value={user.id} />
+                    <input type="hidden" name="status" value="READY" />
+                    <input type="hidden" name="openLevel" value="FULL_OPEN" />
+                    <FormSubmitButton
+                      label="승인"
+                      pendingLabel="승인 중..."
+                      className="rounded-2xl border border-[#f5d0b7] bg-[#fff5ed] px-4 py-2 text-sm font-bold text-[#c96a2b] hover:border-[#f1b07c]"
+                    />
+                  </FormPendingFieldset>
+                </form>
+              ) : null}
               {canManage ? (
                 <form action={deleteMemberAction}>
                   <FormPendingFieldset className="contents">

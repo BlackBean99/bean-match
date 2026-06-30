@@ -2,18 +2,18 @@ import { AdminShell } from "@/components/admin-shell";
 import { OfferMatchDashboard } from "@/components/offer-match-dashboard";
 import { requireOpsSession } from "@/lib/admin-access-server";
 import { getExposureDashboardData } from "@/lib/auto-exposure-repository";
-import type { SearchParamMap } from "@/lib/filter-utils";
 
 export const dynamic = "force-dynamic";
 
 type MatchesPageProps = {
-  searchParams?: Promise<SearchParamMap>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const session = await requireOpsSession();
   const data = await getExposureDashboardData();
-  const q = readString((await searchParams) ?? {}, "q");
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const searchQuery = readString(resolvedSearchParams.q);
   const canManage = session?.role === "ADMIN";
 
   return (
@@ -25,12 +25,12 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
       viewerName={session.name}
       viewerRole={session.role}
     >
-      <OfferMatchDashboard {...data} canManage={canManage} searchQuery={q} />
+      <OfferMatchDashboard {...data} searchQuery={searchQuery} />
     </AdminShell>
   );
 }
 
-function readString(searchParams: SearchParamMap, key: string) {
-  const value = searchParams[key];
-  return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
+function readString(value: string | string[] | undefined) {
+  const resolvedValue = Array.isArray(value) ? value[0] : value;
+  return resolvedValue?.trim() ?? "";
 }

@@ -3,13 +3,8 @@ import {
   AdminSection,
   AdminStatCard,
   AdminTableSection,
-  adminInputClassName,
-  adminPrimaryButtonClassName,
-  adminSecondaryButtonClassName,
 } from "@/components/admin-ui";
-import { FormPendingFieldset } from "@/components/form-pending-fieldset";
-import { FormSubmitButton } from "@/components/form-submit-button";
-import { deleteIntroCaseAction } from "@/app/actions";
+import type { ReactNode } from "react";
 import {
   introCandidateSourceLabels,
   introCandidateStatusLabels,
@@ -23,10 +18,8 @@ import {
   type DashboardInterest,
   type DashboardIntroCase,
 } from "@/lib/domain";
-import type { ReactNode } from "react";
 
 type OfferMatchDashboardProps = DashboardExposureData & {
-  canManage?: boolean;
   searchQuery?: string;
 };
 
@@ -49,28 +42,22 @@ export function OfferMatchDashboard({
   interests,
   introCandidates,
   introCases,
-  canManage = false,
   loadError,
   searchQuery = "",
 }: OfferMatchDashboardProps) {
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const highlightQuery = searchQuery.trim();
-  const activeInterests = interests.filter((interest) => interest.status === "ACTIVE");
-  const pairRows = buildPairRows(interests, introCandidates);
-  const activePairRows = pairRows.filter((row) => row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE");
-  const filteredPairRows = filterPairRows(pairRows, normalizedQuery);
-  const filteredCandidates = filterIntroCandidates(introCandidates, normalizedQuery);
   const filteredInterests = filterInterests(interests, normalizedQuery);
+  const filteredCandidates = filterIntroCandidates(introCandidates, normalizedQuery);
+  const pairRows = buildPairRows(filteredInterests, filteredCandidates);
+  const filteredPairRows = filterPairRows(pairRows, normalizedQuery);
   const filteredIntroCases = filterIntroCases(introCases, normalizedQuery);
   const filteredUsers = filterUsers(users, normalizedQuery, filteredPairRows, filteredIntroCases);
+  const activeInterests = filteredInterests.filter((interest) => interest.status === "ACTIVE");
+  const activePairRows = filteredPairRows.filter((row) => row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE");
   const mutualPairRows = activePairRows.filter((row) => isMutualPair(row));
   const uniqueActors = new Set(activeInterests.map((interest) => interest.fromUserId)).size;
   const uniqueTargets = new Set(activeInterests.map((interest) => interest.toUserId)).size;
-  const convertedCandidates = introCandidates.filter((candidate) => candidate.status === "CONVERTED_TO_INTRO_CASE").length;
-  const hasSearch = normalizedQuery.length > 0;
-  const searchSummary = hasSearch
-    ? `검색어 "${searchQuery.trim()}" 기준으로 ${filteredPairRows.length}개 페어, ${filteredCandidates.length}개 후보, ${filteredInterests.length}개 관심, ${filteredIntroCases.length}개 소개 기록을 표시합니다.`
-    : "검색어 없이 전체 기록을 표시합니다.";
+  const convertedCandidates = filteredCandidates.filter((candidate) => candidate.status === "CONVERTED_TO_INTRO_CASE").length;
 
   return (
     <div className="grid gap-6">
@@ -79,11 +66,10 @@ export function OfferMatchDashboard({
           <div>
             <p className="text-sm font-bold text-[#e63a68]">Offer interest management</p>
             <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">
-              오퍼 기준으로 양방향 관심과 전환 상태를 한눈에 확인합니다.
+              오퍼 기준으로 일방향 관심과 전환 상태를 한눈에 확인합니다.
             </h2>
             <p className="mt-2 text-sm leading-6 text-zinc-600">
-              각 사용자가 오퍼 사이트에서 최대 3명까지 남긴 관심 기록을 모아, 단방향 관심인지 상호 관심인지,
-              그리고 소개 후보로 전환됐는지를 바로 볼 수 있습니다.
+              각 사용자가 오퍼 사이트에서 남긴 단방향 관심 기록을 모아, 상호 관심과 소개 후보 전환 상태를 바로 볼 수 있습니다.
             </p>
             <p className="mt-3 text-xs font-semibold text-zinc-500">
               관심을 받은 사용자 {uniqueTargets}명 · 소개 전환 완료 {convertedCandidates}건
@@ -99,132 +85,36 @@ export function OfferMatchDashboard({
         </div>
       </AdminMutedSection>
 
-      <AdminSection className="grid gap-4 p-5 sm:p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#e63a68]">Match record search</p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-zinc-950">매치 기록 검색</h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-600">
-              사용자 이름, 메모, 상태, 후보 이유를 함께 찾아보고 특정 소개 기록을 바로 삭제할 수 있습니다.
-            </p>
-          </div>
-          <form action="/matches" method="get" className="flex w-full gap-2 lg:max-w-xl">
+      <AdminSection className="p-4 sm:p-5">
+        <form className="grid gap-3 md:grid-cols-[1fr_auto]" method="get">
+          <Field label="이름 검색">
             <input
               name="q"
               defaultValue={searchQuery}
-              placeholder="이름, 메모, 상태, 이유 검색"
-              className={`${adminInputClassName} flex-1`}
+              placeholder="예: 이원민"
+              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#e63a68] focus:ring-2 focus:ring-[#ffe2ea]"
             />
-            <button type="submit" className={adminPrimaryButtonClassName}>
+          </Field>
+          <div className="flex items-end gap-2">
+            <button type="submit" className="rounded-2xl bg-[#e63a68] px-4 py-3 text-sm font-semibold text-white">
               검색
             </button>
-            {hasSearch ? (
-              <a
-                href="/matches"
-                className={`${adminSecondaryButtonClassName} whitespace-nowrap px-4`}
-              >
-                초기화
-              </a>
-            ) : null}
-          </form>
-        </div>
-        <p className="text-xs font-semibold text-zinc-500">{searchSummary}</p>
+            <a href="/matches" className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-600">
+              초기화
+            </a>
+          </div>
+        </form>
       </AdminSection>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <OfferPairTable pairRows={filteredPairRows} query={highlightQuery} />
-        <OfferCandidateTable introCandidates={filteredCandidates} query={highlightQuery} />
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <OfferInterestTable interests={filteredInterests} query={searchQuery} />
+        <OfferCandidateTable introCandidates={filteredCandidates} query={searchQuery} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <OfferInterestTable interests={filteredInterests} query={highlightQuery} />
-        <OfferUserSummaryTable users={filteredUsers} pairRows={filteredPairRows} query={highlightQuery} />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1fr]">
-        <OfferIntroCaseTable introCases={filteredIntroCases} canManage={canManage} query={highlightQuery} />
+        <OfferUserSummaryTable users={filteredUsers} pairRows={pairRows} query={searchQuery} />
       </section>
     </div>
-  );
-}
-
-function OfferPairTable({ pairRows, query }: { pairRows: OfferPairRow[]; query: string }) {
-  return (
-    <AdminTableSection>
-      <div className="border-b border-[#f1f5f9] px-5 py-4">
-        <h2 className="text-lg font-bold text-zinc-950">양측 관심 페어</h2>
-        <p className="mt-1 text-sm text-zinc-500">A가 B를 봤는지, B가 A를 다시 봤는지를 같은 행에서 확인합니다.</p>
-      </div>
-      <div className="grid gap-3 p-4 md:hidden">
-        {pairRows.length === 0 ? (
-          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-            관심 기록이 없습니다.
-          </p>
-        ) : (
-          pairRows.map((row) => (
-            <article key={row.pairKey} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-500">#{highlightText(row.pairKey, query)}</p>
-                  <p className="mt-1 text-base font-bold text-zinc-950">
-                    {highlightText(row.userAName, query)} <span className="text-zinc-400">↔</span> {highlightText(row.userBName, query)}
-                  </p>
-                </div>
-                <PairBadge row={row} />
-              </div>
-              <div className="mt-4 grid gap-2 text-sm">
-                <PairDirectionLine label={`${row.userAName} → ${row.userBName}`} interest={row.forward} />
-                <PairDirectionLine label={`${row.userBName} → ${row.userAName}`} interest={row.reverse} />
-              </div>
-              <div className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs leading-5 text-zinc-600">
-                <p className="font-semibold text-zinc-700">상태</p>
-                <p className="mt-1">{pairStateLabel(row)}</p>
-                {row.introCandidate ? <p className="mt-1">{introCandidateLabel(row.introCandidate)}</p> : null}
-              </div>
-            </article>
-          ))
-        )}
-      </div>
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[1040px] table-fixed text-left text-sm">
-          <thead className="bg-[#fafafc] text-xs font-bold text-zinc-500">
-            <tr>
-              <th className="w-44 px-3 py-3">페어</th>
-              <th className="w-48 px-3 py-3">A → B</th>
-              <th className="w-48 px-3 py-3">B → A</th>
-              <th className="w-36 px-3 py-3">판정</th>
-              <th className="w-36 px-3 py-3">후보 전환</th>
-              <th className="px-3 py-3">최근 기록</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {pairRows.length === 0 ? (
-              <tr>
-                <td className="px-3 py-6 text-center text-zinc-500" colSpan={6}>
-                  관심 기록이 없습니다.
-                </td>
-              </tr>
-            ) : (
-              pairRows.map((row) => (
-                <tr key={row.pairKey} className="align-top hover:bg-[#fff7fa]">
-                  <td className="px-3 py-3">
-                    <p className="font-semibold text-zinc-950">{highlightText(row.userAName, query)}</p>
-                    <p className="text-xs font-semibold text-zinc-400">↔ {highlightText(row.userBName, query)}</p>
-                  </td>
-                  <td className="px-3 py-3 text-zinc-700">{directionLabel(row.forward)}</td>
-                  <td className="px-3 py-3 text-zinc-700">{directionLabel(row.reverse)}</td>
-                  <td className="px-3 py-3">
-                    <PairBadge row={row} />
-                  </td>
-                  <td className="px-3 py-3 text-zinc-700">{row.introCandidate ? introCandidateLabel(row.introCandidate) : "-"}</td>
-                  <td className="px-3 py-3 text-zinc-500">{formatPairUpdatedAt(row.latestAtIso)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </AdminTableSection>
   );
 }
 
@@ -247,7 +137,8 @@ function OfferCandidateTable({ introCandidates, query }: { introCandidates: Dash
                 <div>
                   <p className="text-sm font-semibold text-zinc-500">#{candidate.id}</p>
                   <p className="mt-1 text-base font-bold text-zinc-950">
-                    {highlightText(candidate.userAName, query)} <span className="text-zinc-400">↔</span> {highlightText(candidate.userBName, query)}
+                    {highlightText(candidate.userAName, query)} <span className="text-zinc-400">↔</span>{" "}
+                    {highlightText(candidate.userBName, query)}
                   </p>
                   <p className="mt-1 text-sm text-zinc-500">{highlightText(candidate.reason, query)}</p>
                 </div>
@@ -269,8 +160,8 @@ function OfferInterestTable({ interests, query }: { interests: DashboardInterest
   return (
     <AdminTableSection>
       <div className="border-b border-[#f1f5f9] px-5 py-4">
-        <h2 className="text-lg font-bold text-zinc-950">관심 기록</h2>
-        <p className="mt-1 text-sm text-zinc-500">각 사용자가 오퍼 사이트에서 남긴 개별 선택 기록입니다.</p>
+        <h2 className="text-lg font-bold text-zinc-950">일방향 관심 기록</h2>
+        <p className="mt-1 text-sm text-zinc-500">A → B, B → A 를 각각 한 줄씩 보여 줍니다.</p>
       </div>
       <div className="grid gap-3 p-4 md:hidden">
         {interests.length === 0 ? (
@@ -429,116 +320,6 @@ function OfferUserSummaryTable({
   );
 }
 
-function OfferIntroCaseTable({
-  introCases,
-  canManage,
-  query,
-}: {
-  introCases: DashboardIntroCase[];
-  canManage: boolean;
-  query: string;
-}) {
-  return (
-    <AdminTableSection>
-      <div className="border-b border-[#f1f5f9] px-5 py-4">
-        <h2 className="text-lg font-bold text-zinc-950">소개 기록</h2>
-        <p className="mt-1 text-sm text-zinc-500">운영자가 검색한 결과를 바로 삭제할 수 있습니다.</p>
-      </div>
-      <div className="grid gap-3 p-4 md:hidden">
-        {introCases.length === 0 ? (
-          <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-            소개 기록이 없습니다.
-          </p>
-        ) : (
-          introCases.map((introCase) => (
-            <article key={introCase.id} className="rounded-[24px] border border-zinc-100 bg-white p-4 shadow-[0_16px_35px_rgba(15,23,42,0.06)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-500">#{introCase.id}</p>
-                  <p className="mt-1 text-base font-bold text-zinc-950">{highlightText(formatIntroParticipants(introCase), query)}</p>
-                  <p className="mt-1 text-sm text-zinc-600">{highlightText(introCase.invitor, query)}</p>
-                </div>
-                <IntroStatusBadge status={introCase.status} />
-              </div>
-              <p className="mt-4 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                {highlightText(introCase.memo || "메모 없음", query)}
-              </p>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="text-xs text-zinc-500">{introCase.updatedAt}</p>
-                {canManage ? (
-                  <form action={deleteIntroCaseAction}>
-                    <FormPendingFieldset className="contents">
-                      <input type="hidden" name="id" value={introCase.id} />
-                      <FormSubmitButton
-                        label="삭제"
-                        pendingLabel="삭제 중..."
-                        className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                      />
-                    </FormPendingFieldset>
-                  </form>
-                ) : null}
-              </div>
-            </article>
-          ))
-        )}
-      </div>
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[980px] table-fixed text-left text-sm">
-          <thead className="bg-[#fafafc] text-xs font-bold text-zinc-500">
-            <tr>
-              <th className="w-16 px-3 py-3">ID</th>
-              <th className="w-44 px-3 py-3">참여자</th>
-              <th className="w-36 px-3 py-3">주선자</th>
-              <th className="w-32 px-3 py-3">상태</th>
-              <th className="px-3 py-3">메모</th>
-              <th className="w-24 px-3 py-3">갱신</th>
-              {canManage ? <th className="w-20 px-3 py-3">관리</th> : null}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {introCases.length === 0 ? (
-              <tr>
-                <td className="px-3 py-6 text-center text-zinc-500" colSpan={canManage ? 7 : 6}>
-                  소개 기록이 없습니다.
-                </td>
-              </tr>
-            ) : (
-              introCases.map((introCase) => (
-                <tr key={introCase.id} className="align-top hover:bg-[#fff7fa]">
-                  <td className="px-3 py-3 font-semibold text-zinc-700">#{introCase.id}</td>
-                  <td className="px-3 py-3 text-zinc-700">{highlightText(formatIntroParticipants(introCase), query)}</td>
-                  <td className="px-3 py-3 text-zinc-700">{highlightText(introCase.invitor, query)}</td>
-                  <td className="px-3 py-3">
-                    <IntroStatusBadge status={introCase.status} />
-                  </td>
-                  <td className="px-3 py-3 text-xs leading-5 text-zinc-500">
-                    <p className="line-clamp-2 break-words">{highlightText(introCase.memo || "-", query)}</p>
-                  </td>
-                  <td className="px-3 py-3 text-zinc-500">{introCase.updatedAt}</td>
-                  {canManage ? (
-                    <td className="px-3 py-3">
-                      <form action={deleteIntroCaseAction}>
-                        <FormPendingFieldset className="contents">
-                          <input type="hidden" name="id" value={introCase.id} />
-                          <FormSubmitButton
-                            label="삭제"
-                            pendingLabel="삭제 중..."
-                            className="text-xs font-bold text-zinc-500 hover:text-[#e63a68] disabled:text-zinc-300"
-                          />
-                        </FormPendingFieldset>
-                      </form>
-                    </td>
-                  ) : null}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </AdminTableSection>
-  );
-}
-
 function buildPairRows(interests: DashboardInterest[], introCandidates: DashboardIntroCandidate[]) {
   const pairMap = new Map<string, OfferPairRow>();
 
@@ -602,46 +383,6 @@ function isMutualPair(row: OfferPairRow) {
   return row.forward?.status === "ACTIVE" && row.reverse?.status === "ACTIVE";
 }
 
-function pairStateLabel(row: OfferPairRow) {
-  if (row.introCandidate?.status === "CONVERTED_TO_INTRO_CASE") return "소개 전환 완료";
-  if (isMutualPair(row)) return "양방향 관심";
-  if (row.forward?.status === "ACTIVE" || row.reverse?.status === "ACTIVE") return "단방향 관심";
-  if (row.forward || row.reverse) return "비활성 기록";
-  return "기록 없음";
-}
-
-function introCandidateLabel(candidate: DashboardIntroCandidate) {
-  return `${introCandidateSourceLabels[candidate.source]} · ${introCandidateStatusLabels[candidate.status]}`;
-}
-
-function directionLabel(interest: DashboardInterest | null) {
-  if (!interest) return "-";
-  return `${interestStatusLabels[interest.status]} · ${interestSourceLabels[interest.source]}`;
-}
-
-function PairDirectionLine({ label, interest }: { label: string; interest: DashboardInterest | null }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-2">
-      <span className="font-semibold text-zinc-700">{label}</span>
-      <span className="text-xs text-zinc-500">{interest ? directionLabel(interest) : "없음"}</span>
-    </div>
-  );
-}
-
-function PairBadge({ row }: { row: OfferPairRow }) {
-  const label = pairStateLabel(row);
-  const className =
-    label === "소개 전환 완료"
-      ? "bg-emerald-50 text-emerald-700"
-      : label === "양방향 관심"
-        ? "bg-[#fff1e6] text-[#c96a2b]"
-        : label === "단방향 관심"
-          ? "bg-[#eff6ff] text-[#2563eb]"
-          : "bg-zinc-100 text-zinc-600";
-
-  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{label}</span>;
-}
-
 function CandidateBadge({ candidate }: { candidate: DashboardIntroCandidate }) {
   const className =
     candidate.status === "APPROVED"
@@ -653,6 +394,15 @@ function CandidateBadge({ candidate }: { candidate: DashboardIntroCandidate }) {
           : "bg-[#fff1e6] text-[#c96a2b]";
 
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{introCandidateStatusLabels[candidate.status]}</span>;
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="grid gap-1 text-xs font-semibold text-zinc-600">
+      {label}
+      {children}
+    </label>
+  );
 }
 
 function InterestBadge({ interest }: { interest: DashboardInterest }) {
@@ -675,18 +425,6 @@ function MetricChip({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-bold text-zinc-950">{value}</p>
     </div>
   );
-}
-
-function formatPairUpdatedAt(value: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function interestPairKey(userAId: number, userBId: number) {
@@ -821,19 +559,4 @@ function matchesQuery(query: string, values: Array<string | number | null | unde
 
 function normalizeSearchValue(value: string | number | null | undefined) {
   return String(value ?? "").toLowerCase();
-}
-
-function formatIntroParticipants(introCase: DashboardIntroCase) {
-  return introCase.participants.length > 0 ? introCase.participants.join(" ↔ ") : "참여자 정보 없음";
-}
-
-function IntroStatusBadge({ status }: { status: DashboardIntroCase["status"] }) {
-  const className =
-    status === "MATCHED" || status === "CONNECTED" || status === "SUCCESS"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "DECLINED" || status === "FAILED" || status === "CANCELLED"
-        ? "bg-zinc-100 text-zinc-600"
-        : "bg-[#fff1e6] text-[#c96a2b]";
-
-  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${className}`}>{introStatusLabels[status]}</span>;
 }
