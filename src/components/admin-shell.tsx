@@ -16,13 +16,14 @@ type AdminShellProps = {
 };
 
 const navItems: Array<{
-  key: "users" | "matches" | "rounds";
+  key: "users" | "matches" | "rounds" | "apply";
   href: string;
   label: string;
   badge?: string;
 }> = [
   { key: "matches", href: "/matches", label: "매칭 풀 관리", badge: "핵심" },
   { key: "rounds", href: "/rounds", label: "자동 노출 운영", badge: "신규" },
+  { key: "apply", href: "/apply", label: "외부 신청", badge: "PUBLIC" },
   { key: "users", href: "/users", label: "회원 관리" },
 ];
 

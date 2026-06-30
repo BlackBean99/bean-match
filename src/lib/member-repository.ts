@@ -48,6 +48,7 @@ type MemberInput = {
   idealTypeDescription: string | null;
   phone: string | null;
   roles: UserRole[];
+  skipInviteTokenCreation?: boolean;
 };
 
 type SupabaseUserRow = {
@@ -353,6 +354,7 @@ async function getMemberDashboardDataFromSupabaseRest(
 }
 
 export async function createMember(input: MemberInput) {
+  const shouldCreateInviteToken = input.skipInviteTokenCreation !== true;
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     const normalizedRoles = normalizeRoles(input.roles);
     const [user] = await supabaseRest<SupabaseUserRow[]>("/users?select=*", {
@@ -362,7 +364,7 @@ export async function createMember(input: MemberInput) {
     });
 
     await upsertSupabaseRoles(user.id, normalizedRoles);
-    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+    if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
       await ensureSupabaseEntryQueueRow(user.id, input.status, input.openLevel, "member:create");
       await createInviteAccessToken(BigInt(user.id), {
         label: `${input.name} 개인 초대 링크`,
@@ -401,7 +403,7 @@ export async function createMember(input: MemberInput) {
       },
     });
 
-    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+    if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
       await tx.entryQueue.create({
         data: {
           userId: user.id,
@@ -414,7 +416,7 @@ export async function createMember(input: MemberInput) {
     return user;
   });
 
-  if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+  if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
     await createInviteAccessToken(user.id, {
       label: `${input.name} 개인 초대 링크`,
       expiresAt: null,

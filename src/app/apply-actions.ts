@@ -69,6 +69,7 @@ export async function submitPublicApplicationAction(
       idealTypeDescription: values.idealTypeDescription.trim() || null,
       phone: values.phone.trim() || null,
       roles: [UserRole.PARTICIPANT],
+      skipInviteTokenCreation: true,
     });
 
     const submittedUserId = typeof submittedUser.id === "bigint" ? submittedUser.id : BigInt(submittedUser.id);

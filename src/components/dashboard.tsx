@@ -112,6 +112,24 @@ export function UsersDashboard({ users, allUsers, canManage = false, databaseCon
       </section>
 
       <AdminSection className="p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Link
+            href="/users?status=INCOMPLETE"
+            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+              filters.status === "INCOMPLETE"
+                ? "bg-[linear-gradient(135deg,#ff4f7a,#ff6a3d)] text-white shadow-[0_16px_30px_rgba(255,79,122,0.24)]"
+                : "border border-[#ececf2] bg-white text-zinc-600 hover:border-[#ffc6d5] hover:text-[#e63a68]"
+            }`}
+          >
+            승인 대기
+          </Link>
+          <Link
+            href="/users"
+            className="rounded-2xl border border-[#ececf2] bg-white px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-[#ffc6d5] hover:text-[#e63a68]"
+          >
+            전체 회원
+          </Link>
+        </div>
         <FilterForm filters={filters} showUserStatus resetHref="/users" />
       </AdminSection>
 
