@@ -2,12 +2,18 @@ import { AdminShell } from "@/components/admin-shell";
 import { OfferMatchDashboard } from "@/components/offer-match-dashboard";
 import { requireOpsSession } from "@/lib/admin-access-server";
 import { getExposureDashboardData } from "@/lib/auto-exposure-repository";
+import type { SearchParamMap } from "@/lib/filter-utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function MatchesPage() {
+type MatchesPageProps = {
+  searchParams?: Promise<SearchParamMap>;
+};
+
+export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const session = await requireOpsSession();
   const data = await getExposureDashboardData();
+  const q = readString((await searchParams) ?? {}, "q");
   const canManage = session?.role === "ADMIN";
 
   return (
@@ -19,7 +25,12 @@ export default async function MatchesPage() {
       viewerName={session.name}
       viewerRole={session.role}
     >
-      <OfferMatchDashboard {...data} />
+      <OfferMatchDashboard {...data} canManage={canManage} searchQuery={q} />
     </AdminShell>
   );
+}
+
+function readString(searchParams: SearchParamMap, key: string) {
+  const value = searchParams[key];
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
 }

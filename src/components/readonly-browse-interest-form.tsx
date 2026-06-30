@@ -216,13 +216,13 @@ export function ReadOnlyBrowseInterestForm({
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 text-zinc-500">
-              선택은 최대 {browseLimit}명까지 저장됩니다. 제출 후에도 다시 수정하고 재제출할 수 있습니다.
+          <p className="text-xs leading-5 text-zinc-500">
+              선택은 최대 {browseLimit}명까지 저장됩니다. 모두 해제한 뒤 저장하면 기존 선택을 비울 수 있고, 제출 후에도 다시 수정하고 재제출할 수 있습니다.
             </p>
             <FormSubmitButton
-              label="선택 제출"
+              label="선택 저장"
               pendingLabel="저장 중..."
-              disabled={!canInteract || browseCandidates.length === 0 || selectedIds.length === 0}
+              disabled={!canInteract || (browseCandidates.length === 0 && selectedIds.length === 0)}
               className="inline-flex h-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#da7a37,#ee9b55)] px-5 text-sm font-semibold text-white shadow-[0_18px_35px_rgba(217,122,50,0.24)] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
             />
           </div>
