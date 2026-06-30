@@ -80,6 +80,7 @@ type ValidationResult =
 
 export type ReadOnlyBrowseCandidate = DashboardUser & {
   photos: DashboardUserPhoto[];
+  hasIntroHistory: boolean;
 };
 
 export type ReadOnlyBrowsePageData = {
@@ -349,7 +350,7 @@ export async function getReadOnlyBrowsePageData(
       .filter((introCase) => activeIntroStatuses.includes(introCase.status))
       .flatMap((introCase) => introCase.participantIds),
   );
-  const existingPairKeys = new Set(
+  const historicalPairKeys = new Set(
     memberData.introCases
       .filter((introCase) => introCase.participantIds.length === 2)
       .map((introCase) => {
@@ -359,12 +360,13 @@ export async function getReadOnlyBrowsePageData(
   );
 
   const candidateUsers = memberData.allUsers.filter((candidate) =>
-    isReadOnlyBrowseCandidate(actor, candidate, activeIntroUserIds, existingPairKeys),
+    isReadOnlyBrowseCandidate(actor, candidate, activeIntroUserIds),
   );
   const photosByUserId = await getPhotosByUserIds(candidateUsers.map((candidate) => BigInt(candidate.id)));
   const candidates = candidateUsers.map((candidate) => ({
     ...candidate,
     photos: photosByUserId.get(candidate.id) ?? [],
+    hasIntroHistory: historicalPairKeys.has(pairKey(actor.id, candidate.id)),
   }));
 
   return {
@@ -549,13 +551,11 @@ function isReadOnlyBrowseCandidate(
   actor: DashboardUser,
   candidate: DashboardUser,
   activeIntroUserIds: Set<number>,
-  existingPairKeys: Set<string>,
 ) {
   if (candidate.id === actor.id) return false;
   if (!isOppositeGender(actor, candidate)) return false;
   if (candidate.status !== "READY") return false;
   if (activeIntroUserIds.has(candidate.id)) return false;
-  if (existingPairKeys.has(pairKey(actor.id, candidate.id))) return false;
   if (!candidate.exposureConsent) return false;
   if (candidate.exposurePaused) return false;
   return candidate.openLevel === "SEMI_OPEN" || candidate.openLevel === "FULL_OPEN";
