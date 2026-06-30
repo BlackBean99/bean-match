@@ -83,6 +83,17 @@ export type ReadOnlyBrowseCandidate = DashboardUser & {
   hasIntroHistory: boolean;
 };
 
+export type ReadOnlyBrowseReceivedInterest = {
+  id: number;
+  fromUserId: number;
+  fromUserName: string;
+  source: InterestSource;
+  status: InterestStatus;
+  createdAt: string;
+  isMutual: boolean;
+  photos: DashboardUserPhoto[];
+};
+
 export type ReadOnlyBrowsePageData = {
   accessPath: string;
   accessToken: string | null;
@@ -91,6 +102,7 @@ export type ReadOnlyBrowsePageData = {
   authorized: boolean;
   candidates: ReadOnlyBrowseCandidate[];
   browseSelections: ParticipantInterestSelection[];
+  receivedInterests: ReadOnlyBrowseReceivedInterest[];
   browseLimit: number;
   browseSubmitted: boolean;
   canSubmitInterests: boolean;
@@ -267,6 +279,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: false,
       candidates: [],
       browseSelections: [],
+      receivedInterests: [],
       browseLimit: MAX_NEW_USER_MARKS,
       browseSubmitted: false,
       canSubmitInterests: false,
@@ -286,6 +299,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: false,
       candidates: [],
       browseSelections: [],
+      receivedInterests: [],
       browseLimit: MAX_NEW_USER_MARKS,
       browseSubmitted: false,
       canSubmitInterests: false,
@@ -314,6 +328,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: true,
       candidates: [],
       browseSelections: [],
+      receivedInterests: [],
       browseLimit: MAX_NEW_USER_MARKS,
       browseSubmitted: false,
       canSubmitInterests: false,
@@ -332,6 +347,7 @@ export async function getReadOnlyBrowsePageData(
       authorized: true,
       candidates: [],
       browseSelections: [],
+      receivedInterests: [],
       browseLimit: MAX_NEW_USER_MARKS,
       browseSubmitted: false,
       canSubmitInterests: false,
@@ -342,6 +358,7 @@ export async function getReadOnlyBrowsePageData(
   }
 
   const outgoingBrowse = await loadReadOnlyBrowseInterests(userId).catch(() => []);
+  const incomingBrowse = await loadReceivedReadOnlyBrowseInterests(userId).catch(() => []);
   const browseSelections = outgoingBrowse.map((interest) => toParticipantInterestSelection(interest, memberData.allUsers));
   const browseSubmitted = outgoingBrowse.length > 0;
 
@@ -362,12 +379,21 @@ export async function getReadOnlyBrowsePageData(
   const candidateUsers = memberData.allUsers.filter((candidate) =>
     isReadOnlyBrowseCandidate(actor, candidate, activeIntroUserIds),
   );
+  const eligibleCandidateIds = new Set(candidateUsers.map((candidate) => candidate.id));
   const photosByUserId = await getPhotosByUserIds(candidateUsers.map((candidate) => BigInt(candidate.id)));
   const candidates = candidateUsers.map((candidate) => ({
     ...candidate,
     photos: photosByUserId.get(candidate.id) ?? [],
     hasIntroHistory: historicalPairKeys.has(pairKey(actor.id, candidate.id)),
   }));
+  const receivedPhotosByUserId = await getPhotosByUserIds(
+    incomingBrowse.filter((interest) => eligibleCandidateIds.has(interest.from_user_id)).map((interest) =>
+      BigInt(interest.from_user_id),
+    ),
+  );
+  const receivedInterests = incomingBrowse
+    .filter((interest) => eligibleCandidateIds.has(interest.from_user_id))
+    .map((interest) => toReadOnlyReceivedInterest(interest, memberData.allUsers, outgoingBrowse, receivedPhotosByUserId));
 
   return {
     accessPath,
@@ -377,6 +403,7 @@ export async function getReadOnlyBrowsePageData(
     authorized: true,
     candidates,
     browseSelections,
+    receivedInterests,
     browseLimit: MAX_NEW_USER_MARKS,
     browseSubmitted,
     canSubmitInterests:
@@ -725,6 +752,8 @@ type ReadOnlyBrowseInterestRow = {
   created_at: string;
 };
 
+type ReadOnlyBrowseReceivedInterestRow = ReadOnlyBrowseInterestRow;
+
 async function loadReadOnlyBrowseInterests(userId: bigint) {
   if (hasDatabaseUrl()) {
     const interests = await prisma.interest.findMany({
@@ -761,6 +790,41 @@ async function loadReadOnlyBrowseInterests(userId: bigint) {
   return interests;
 }
 
+async function loadReceivedReadOnlyBrowseInterests(userId: bigint) {
+  if (hasDatabaseUrl()) {
+    const interests = await prisma.interest.findMany({
+      where: {
+        toUserId: userId,
+        status: "ACTIVE",
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 100,
+      select: {
+        id: true,
+        fromUserId: true,
+        toUserId: true,
+        source: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return interests.map((interest) => ({
+      id: Number(interest.id),
+      from_user_id: Number(interest.fromUserId),
+      to_user_id: Number(interest.toUserId),
+      source: interest.source,
+      status: interest.status,
+      created_at: interest.createdAt.toISOString(),
+    })) satisfies ReadOnlyBrowseReceivedInterestRow[];
+  }
+
+  const interests = await supabaseRest<ReadOnlyBrowseReceivedInterestRow[]>(
+    `/interests?select=id,from_user_id,to_user_id,source,status,created_at&to_user_id=eq.${userId.toString()}&status=eq.ACTIVE&order=created_at.desc,id.desc&limit=100`,
+  );
+  return interests;
+}
+
 function toParticipantInterestSelection(
   interest: ReadOnlyBrowseInterestRow,
   users: DashboardUser[],
@@ -771,6 +835,28 @@ function toParticipantInterestSelection(
     toUserName: userNameById(users, interest.to_user_id),
     source: interest.source,
     createdAt: formatShortDateTime(interest.created_at),
+  };
+}
+
+function toReadOnlyReceivedInterest(
+  interest: ReadOnlyBrowseReceivedInterestRow,
+  users: DashboardUser[],
+  outgoingBrowse: ReadOnlyBrowseInterestRow[],
+  photosByUserId: Map<number, DashboardUserPhoto[]>,
+): ReadOnlyBrowseReceivedInterest {
+  const hasMutualInterest = outgoingBrowse.some(
+    (outgoing) => outgoing.to_user_id === interest.from_user_id && outgoing.status === "ACTIVE",
+  );
+
+  return {
+    id: interest.id,
+    fromUserId: interest.from_user_id,
+    fromUserName: userNameById(users, interest.from_user_id),
+    source: interest.source,
+    status: interest.status,
+    createdAt: formatShortDateTime(interest.created_at),
+    isMutual: hasMutualInterest,
+    photos: photosByUserId.get(interest.from_user_id) ?? [],
   };
 }
 

@@ -5,9 +5,15 @@ import { getExposureDashboardData } from "@/lib/auto-exposure-repository";
 
 export const dynamic = "force-dynamic";
 
-export default async function MatchesPage() {
+type MatchesPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const session = await requireOpsSession();
   const data = await getExposureDashboardData();
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const searchQuery = readString(resolvedSearchParams.q);
   const canManage = session?.role === "ADMIN";
 
   return (
@@ -19,7 +25,12 @@ export default async function MatchesPage() {
       viewerName={session.name}
       viewerRole={session.role}
     >
-      <OfferMatchDashboard {...data} />
+      <OfferMatchDashboard {...data} searchQuery={searchQuery} />
     </AdminShell>
   );
+}
+
+function readString(value: string | string[] | undefined) {
+  const resolvedValue = Array.isArray(value) ? value[0] : value;
+  return resolvedValue?.trim() ?? "";
 }

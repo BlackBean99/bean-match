@@ -39,6 +39,7 @@ export async function isOpsAuthConfiguredAsync() {
 export function isPublicAppPath(pathname: string) {
   return (
     pathname.startsWith("/admin-access") ||
+    pathname.startsWith("/apply") ||
     pathname.startsWith("/offer/") ||
     pathname.startsWith("/readonly/") ||
     pathname.startsWith("/onboarding/access/") ||

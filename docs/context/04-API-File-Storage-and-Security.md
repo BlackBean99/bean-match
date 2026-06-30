@@ -44,6 +44,7 @@
 - `GET /onboarding?invitorId={invitorId}` : 초대 출처를 유지한 자동 노출 참여 진입 URL
 - `GET /pool/{userId}` : 참가자 개인 풀 URL. 신규 가입자는 브라우징 관심을 제출하고, 기존 회원은 새 멤버 알림을 확인한다.
 - `GET /offer/pool/{userId}` : 관리자 발급 토큰으로만 접근 가능한 외부 오퍼 후보 열람 URL
+- `GET /apply` : 외부 공개 신청 URL. 이름, 성별, 전화번호, 몇년생, 키, 직업, 회사, 자기소개, 이상형, 사진을 제출하고 승인 대기 상태로 등록한다.
 - `POST /pool/{userId}/browse-interests` : 신규 가입자가 최대 3명의 관심을 제출한다. 현재 구현은 Server Action을 사용한다.
 - `POST /pool/{userId}/broadcast-interests` : 기존 회원이 새 멤버 알림 카드에 관심을 표시한다. 현재 구현은 Server Action을 사용한다.
 - `GET /rounds` : 관리자 자동 노출 운영 화면
@@ -176,6 +177,7 @@
 4. 후보는 `READY` + (`SEMI_OPEN` 또는 `FULL_OPEN`) + 프로필 노출 동의 상태여야 함
 5. 활성 소개 중인 사용자만 제외한다. 과거 소개 이력이 있는 후보는 현재 상태가 유효하면 카드에 이력 배지와 함께 노출한다.
 6. 연락처와 관리자 메모는 어떤 경우에도 노출하지 않음
+7. 받은 관심 섹션에는 실제로 소개 받을 수 있는 사람만 노출한다.
 
 ### 자동 노출 참여 진입
 1. 사용자가 기존 데이터 ID와 이름을 입력
