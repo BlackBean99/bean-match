@@ -57,6 +57,7 @@ Conventional Commits 사용.
 - 모든 개발 변경은 PR 생성이 완료되어야 작업 종료로 본다.
 - 에이전트는 사용자 요청이 있으면 스스로 PR을 생성할 수 있다.
 - PR 본문은 Summary, Changes, Domain Impact, Validation, Risk, Rollback을 포함한다.
+- 개발 작업은 예외 없이 PR 병행을 기본으로 한다. 핫픽스나 작은 수정도 브랜치와 PR을 먼저 만들고, 이후에만 병합/배포 절차를 진행한다.
 
 ## 5. Auto Merge 금지 조건
 아래 항목이 있으면 사람 승인 전 merge 금지

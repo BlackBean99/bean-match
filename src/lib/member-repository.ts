@@ -525,6 +525,20 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
   };
 }
 
+export async function countUserInvitees(userId: bigint) {
+  if (hasDatabaseUrl()) {
+    return prisma.user.count({
+      where: { invitedByUserId: userId },
+    });
+  }
+
+  if (!hasSupabaseRestConfig()) return 0;
+  const rows = await supabaseRest<{ id: number }[]>(
+    `/users?select=id&invited_by_user_id=eq.${userId.toString()}&limit=1000`,
+  );
+  return rows.length;
+}
+
 export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<UploadedPhotoInput> {
   assertPhotoFile(file);
 
@@ -1467,7 +1481,7 @@ function assertPhotoUrl(url: string) {
 }
 
 function assertPhotoFile(file: File) {
-  if (!photoUploadMimeTypes.has(file.type)) {
+  if (!isAllowedPhotoMimeType(file.type, file.name)) {
     throw new Error("Photo file must be JPEG, PNG, WebP, or GIF.");
   }
 
@@ -1504,6 +1518,13 @@ function mimeTypeForName(name: string) {
   if (lowerName.includes(".webp")) return "image/webp";
   if (lowerName.includes(".gif")) return "image/gif";
   return "application/octet-stream";
+}
+
+function isAllowedPhotoMimeType(mimeType: string, fileName?: string) {
+  if (photoUploadMimeTypes.has(mimeType)) return true;
+
+  const inferredMimeType = fileName ? mimeTypeForName(fileName) : "";
+  return photoUploadMimeTypes.has(inferredMimeType);
 }
 
 function groupByUserId(rows: SupabaseRoleRow[]) {

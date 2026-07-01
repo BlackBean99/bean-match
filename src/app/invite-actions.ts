@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { requireAdminOpsSession } from "@/lib/admin-access-server";
 import { getUserDetail } from "@/lib/member-repository";
 import {
@@ -8,6 +9,7 @@ import {
   validateInviteAccessToken,
   type InviteTokenSummary,
 } from "@/lib/invite-token-repository";
+import { getParticipantSessionCookieName } from "@/lib/participant-session";
 
 export type InviteShareActionResult = {
   accessUrl: string;
@@ -55,7 +57,18 @@ export async function confirmInviteAccessAction(formData: FormData) {
     );
   }
 
-  redirect(`/pool/${validation.userId.toString()}`);
+  const cookieStore = await cookies();
+  cookieStore.set({
+    name: getParticipantSessionCookieName(),
+    value: validation.userId.toString(),
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    ...(validation.expiresAt ? { expires: validation.expiresAt } : {}),
+  });
+
+  redirect("/me");
 }
 
 function buildInviteKakaoMessage(userName: string, accessUrl: string) {

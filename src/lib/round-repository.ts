@@ -11,6 +11,7 @@ import {
   type RoundStatus,
 } from "@/lib/domain";
 import { getMemberDashboardData, getUserDetail } from "@/lib/member-repository";
+import { countUserInvitees } from "@/lib/member-repository";
 import { getSupabaseServerKey, getSupabaseUrl } from "@/lib/runtime-env";
 
 type RoundRow = {
@@ -307,6 +308,7 @@ export async function joinCurrentRoundWithExistingUser(input: RoundEntryInput) {
 export async function getParticipantRoundData(roundId: bigint, userId: bigint): Promise<ParticipantRoundData> {
   const memberData = await getMemberDashboardData();
   const actor = memberData.allUsers.find((user) => user.id === Number(userId)) ?? null;
+  const inviteBonus = await countUserInvitees(userId).catch(() => 0);
 
   if (!hasSupabaseRestConfig()) {
     return {
@@ -314,7 +316,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       round: null,
       candidates: [],
       selectedCount: 0,
-      selectionLimit: 2,
+      selectionLimit: 2 + inviteBonus,
       hasPassed: false,
       isTestMode: false,
       databaseConnected: false,
@@ -339,7 +341,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
         round: round ? toDashboardRound(round, 0, selectionRows, roundPass ? 1 : 0) : null,
         candidates: [],
         selectedCount: 0,
-        selectionLimit: round?.selection_limit ?? 2,
+        selectionLimit: (round?.selection_limit ?? 2) + inviteBonus,
         hasPassed: Boolean(roundPass),
         passedAt: roundPass ? formatDateTime(new Date(roundPass.created_at)) : undefined,
         passReason: roundPass?.reason ?? undefined,
@@ -369,7 +371,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       round: round ? toDashboardRound(round, candidates.length, selectionRows, roundPass ? 1 : 0) : null,
       candidates,
       selectedCount: selectedToUserIds.size,
-      selectionLimit: round?.selection_limit ?? 2,
+      selectionLimit: (round?.selection_limit ?? 2) + inviteBonus,
       hasPassed: Boolean(roundPass),
       passedAt: roundPass ? formatDateTime(new Date(roundPass.created_at)) : undefined,
       passReason: roundPass?.reason ?? undefined,
@@ -383,7 +385,7 @@ export async function getParticipantRoundData(roundId: bigint, userId: bigint): 
       round: null,
       candidates: [],
       selectedCount: 0,
-      selectionLimit: 2,
+      selectionLimit: 2 + inviteBonus,
       hasPassed: false,
       isTestMode: false,
       databaseConnected: false,
