@@ -48,6 +48,7 @@ type MemberInput = {
   idealTypeDescription: string | null;
   phone: string | null;
   roles: UserRole[];
+  skipInviteTokenCreation?: boolean;
 };
 
 type SupabaseUserRow = {
@@ -353,6 +354,7 @@ async function getMemberDashboardDataFromSupabaseRest(
 }
 
 export async function createMember(input: MemberInput) {
+  const shouldCreateInviteToken = input.skipInviteTokenCreation !== true;
   if (!hasDatabaseUrl() && hasSupabaseRestConfig()) {
     const normalizedRoles = normalizeRoles(input.roles);
     const [user] = await supabaseRest<SupabaseUserRow[]>("/users?select=*", {
@@ -362,7 +364,7 @@ export async function createMember(input: MemberInput) {
     });
 
     await upsertSupabaseRoles(user.id, normalizedRoles);
-    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+    if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
       await ensureSupabaseEntryQueueRow(user.id, input.status, input.openLevel, "member:create");
       await createInviteAccessToken(BigInt(user.id), {
         label: `${input.name} 개인 초대 링크`,
@@ -401,7 +403,7 @@ export async function createMember(input: MemberInput) {
       },
     });
 
-    if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+    if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
       await tx.entryQueue.create({
         data: {
           userId: user.id,
@@ -414,7 +416,7 @@ export async function createMember(input: MemberInput) {
     return user;
   });
 
-  if (normalizedRoles.includes("PARTICIPANT" as UserRole)) {
+  if (shouldCreateInviteToken && normalizedRoles.includes("PARTICIPANT" as UserRole)) {
     await createInviteAccessToken(user.id, {
       label: `${input.name} 개인 초대 링크`,
       expiresAt: null,
@@ -521,6 +523,20 @@ export async function getUserDetail(id: bigint): Promise<DashboardUserDetail | n
     lastChangedAt: formatDateTime(new Date(user.updated_at)),
     photos: sortedPhotos.map(({ photo }) => toDashboardPhoto(photo)),
   };
+}
+
+export async function countUserInvitees(userId: bigint) {
+  if (hasDatabaseUrl()) {
+    return prisma.user.count({
+      where: { invitedByUserId: userId },
+    });
+  }
+
+  if (!hasSupabaseRestConfig()) return 0;
+  const rows = await supabaseRest<{ id: number }[]>(
+    `/users?select=id&invited_by_user_id=eq.${userId.toString()}&limit=1000`,
+  );
+  return rows.length;
 }
 
 export async function uploadUserPhotoFile(userId: bigint, file: File): Promise<UploadedPhotoInput> {
@@ -1465,7 +1481,7 @@ function assertPhotoUrl(url: string) {
 }
 
 function assertPhotoFile(file: File) {
-  if (!photoUploadMimeTypes.has(file.type)) {
+  if (!isAllowedPhotoMimeType(file.type, file.name)) {
     throw new Error("Photo file must be JPEG, PNG, WebP, or GIF.");
   }
 
@@ -1502,6 +1518,13 @@ function mimeTypeForName(name: string) {
   if (lowerName.includes(".webp")) return "image/webp";
   if (lowerName.includes(".gif")) return "image/gif";
   return "application/octet-stream";
+}
+
+function isAllowedPhotoMimeType(mimeType: string, fileName?: string) {
+  if (photoUploadMimeTypes.has(mimeType)) return true;
+
+  const inferredMimeType = fileName ? mimeTypeForName(fileName) : "";
+  return photoUploadMimeTypes.has(inferredMimeType);
 }
 
 function groupByUserId(rows: SupabaseRoleRow[]) {

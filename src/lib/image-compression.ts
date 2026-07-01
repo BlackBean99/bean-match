@@ -13,6 +13,7 @@ const defaultOptions: Required<CompressImageOptions> = {
 export async function compressImageFile(file: File, options: CompressImageOptions = {}): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
   if (file.type === "image/gif") return file;
+  if (file.type === "image/png") return file;
 
   const resolved = { ...defaultOptions, ...options };
   const image = await loadImage(file);
